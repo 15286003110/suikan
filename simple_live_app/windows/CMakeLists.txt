@@ -2,6 +2,10 @@
 cmake_minimum_required(VERSION 3.14)
 project(simple_live_app LANGUAGES CXX)
 
+# Suppress MSVC STL1011 error (experimental/coroutine deprecation) on new
+# Visual Studio toolchains (VS2022+). Needed for inappwebview/permission_handler plugins.
+add_compile_definitions(_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)
+
 # The name of the executable created for the application. Change this to change
 # the on-disk name of your application.
 set(BINARY_NAME "simple_live_app")
