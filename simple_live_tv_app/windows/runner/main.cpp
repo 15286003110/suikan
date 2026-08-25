@@ -8,7 +8,7 @@
 int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
                       _In_ wchar_t *command_line, _In_ int show_command) {
   HANDLE primary_instance_mutex =
-      ::CreateMutexW(nullptr, TRUE, L"June6699.SimpleLiveTV.PrimaryInstance");
+      ::CreateMutexW(nullptr, TRUE, L"Suikan.TVPrimaryInstance");
   const bool secondary_instance = primary_instance_mutex != nullptr &&
                                   ::GetLastError() == ERROR_ALREADY_EXISTS;
   bool com_initialized = false;
