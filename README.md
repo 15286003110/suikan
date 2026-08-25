@@ -8,32 +8,44 @@
 
 ## 🎯 本仓库定制（2.0.x）
 
-本仓库基于 June6699 fork 定制维护，使用自定版本号 **`2.0.X`**（编译号 `2.0.X+2000X`，大版本 2.0 锁死，每次发布 X 递增）。
+本仓库基于 June6699 fork 定制维护，使用自定版本号 **`2.0.X`**（编译号 `2.0.X+2000X`，大版本 2.0 锁死，每次发布 X 递增，不跟随上游版本号）。
 
-### 已包含的改动
+### 统一改动（三端共用）
 
-- **抖音分类列表**：使用 [chen-zeong/dtv_mobile](https://github.com/chen-zeong/dtv_mobile) 的分类列表替换原 fork 版本。
+- **版本号**：手机版 / WIN / TV 三端统一使用自定版本号 `2.0.X`（当前 `2.0.2+20002`）。
+- **抖音分类列表**：使用 [chen-zeong/dtv_mobile](https://github.com/chen-zeong/dtv_mobile) 的分类列表替换原 fork 版本（`douyin_site.dart` / `douyin_sign.dart`）。
 - **崩溃修复**：
   - Windows 退出崩溃（`@image#1` / Clipboard_Screenshot 错误）：窗口关闭时全平台调用 `player.stop()`。
   - 直播页返回键崩溃：`PopScope` 回调中调用 `onClose()`，`SystemChrome.*` 增加平台守卫。
-- **版本号**：三端（手机 / WIN / TV）统一使用自定版本号 `2.0.X`，不跟随上游。
 
-### 平台说明
+### 手机版 / Windows（Flutter 3.47.1）
 
-| 平台 | 说明 |
-|---|---|
-| 手机版（Android） | Flutter 3.47.1，arm64，minSdk 24 |
-| Windows | Flutter 3.47.1 |
-| TV 版 | Flutter 3.24.5（兼容 Android 6），arm32 / armeabi-v7a，返回键原生拦截、硬解默认关、小米盒子音量记忆 |
+- dart_quickjs 使用 **git 态**（`xiaoyaocz/dart_quickjs`，sdk `>=3.10.0`）。
+- Windows 退出崩溃 / 返回键崩溃修复（见上）。
 
-### 云端构建
+### TV 版（Flutter 3.24.5，兼容 Android 6 / arm32）
 
-本仓库内置 GitHub Actions 工作流，可云端编译各平台安装包（仓库公开后 Actions 免费不限量）：
+TV 版改动最大，主要针对小米盒子等安卓 6 设备：
 
-- `build-ios-trollstore.yml` → iOS 未签名 IPA（TrollStore 重签安装）
-- `build-tv-arm32.yml` → TV 版 arm32 APK
-- `build-app-arm64.yml` → 手机版 arm64 APK
-- `build-windows.yml` → Windows 版 ZIP
+- **固定 Flutter 3.24.5**；minSdk 使用变量写法 `val minSdkForAndroid6 = 23`，防止迁移器改回 24。
+- **dart_quickjs**：改为 `path: ../vendor/dart_quickjs` + sdk `>=3.1.0`（编译前切 vendor 态、编完切回 git 态），预编译 `libquickjs.so`（arm32）置于 `jniLibs`。
+- **返回键原生拦截**：`MainActivity.kt` 重写 `onKeyDown`/`onBackPressed` → MethodChannel `com.simplelive.tv/back` → main.dart 决策。
+- **硬解默认关**：`player_controller.dart` 按设置设 mpv `hwdec`；`app_settings_controller.dart` 默认 false（盒子硬解兼容性差）。
+- **小米盒子音量记忆**：MethodChannel `com.simplelive.tv/volume` + Hive `kLastVolume` + 轮询保存。
+- **quickjs 三级加载 fallback**：`_loadLib()` 改 `lookupFunction` 写法，兼容盒子环境。
+
+### 云端构建（GitHub Actions）
+
+本仓库内置工作流，可云端编译各平台安装包（仓库公开后 Actions 免费不限量）：
+
+| 工作流 | 产物 | 说明 |
+|---|---|---|
+| `build-ios-trollstore.yml` | `SimpleLive.ipa` | iOS 未签名 IPA（TrollStore 重签安装），Flutter 3.47.1 |
+| `build-tv-arm32.yml` | `SimpleLive_TV_arm32_2.0.X.apk` | TV 版 arm32 / 安卓6，Flutter 3.24.5 |
+| `build-app-arm64.yml` | `SimpleLive_arm64_2.0.X.apk` | 手机版 arm64，Flutter 3.47.1 |
+| `build-windows.yml` | `SimpleLive_WIN_2.0.X.zip` | Windows 版，Flutter 3.47.1 |
+
+所有工作流从 `pubspec.yaml` 动态读取版本号，升版只需修改 `version: 2.0.X+2000X`。
 
 ---
 
