@@ -20,7 +20,7 @@ class ProfileBackupController extends BaseController {
       }
       final content = ProfileBackupService.instance.exportProfileJson();
       final fileName =
-          "SimpleLive_Profile_${DateTime.now().millisecondsSinceEpoch ~/ 1000}.json";
+          "Suikan_Profile_${DateTime.now().millisecondsSinceEpoch ~/ 1000}.json";
       final inlineSave = Platform.isAndroid || Platform.isIOS || kIsWeb;
       final path = await FilePicker.platform.saveFile(
         allowedExtensions: ["json"],

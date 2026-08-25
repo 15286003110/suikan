@@ -1375,7 +1375,7 @@ class FollowService extends GetxService {
         return;
       }
       var jsonFile = File(
-          '$dir/SimpleLive_${DateTime.now().millisecondsSinceEpoch ~/ 1000}.json');
+          '$dir/Suikan_${DateTime.now().millisecondsSinceEpoch ~/ 1000}.json');
       var jsonText = generateJson();
       await jsonFile.writeAsString(jsonText);
       SmartDialog.showToast("已导出关注列表");

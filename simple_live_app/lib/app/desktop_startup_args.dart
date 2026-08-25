@@ -3,16 +3,16 @@ import 'dart:io';
 import 'package:flutter/widgets.dart';
 
 class DesktopStartupArgs {
-  static const secondaryInstanceArg = "--simple-live-secondary-instance";
+  static const secondaryInstanceArg = "--suikan-secondary-instance";
   static const secondaryInstanceEnv = "SIMPLE_LIVE_SECONDARY_INSTANCE";
-  static const openSiteArg = "--simple-live-open-site";
-  static const openRoomArg = "--simple-live-open-room";
-  static const windowLeftArg = "--simple-live-window-left";
-  static const windowTopArg = "--simple-live-window-top";
-  static const windowWidthArg = "--simple-live-window-width";
-  static const windowHeightArg = "--simple-live-window-height";
-  static const collapseChatArg = "--simple-live-collapse-chat";
-  static const framelessTileArg = "--simple-live-frameless-tile";
+  static const openSiteArg = "--suikan-open-site";
+  static const openRoomArg = "--suikan-open-room";
+  static const windowLeftArg = "--suikan-window-left";
+  static const windowTopArg = "--suikan-window-top";
+  static const windowWidthArg = "--suikan-window-width";
+  static const windowHeightArg = "--suikan-window-height";
+  static const collapseChatArg = "--suikan-collapse-chat";
+  static const framelessTileArg = "--suikan-frameless-tile";
 
   static List<String> _args = const [];
 

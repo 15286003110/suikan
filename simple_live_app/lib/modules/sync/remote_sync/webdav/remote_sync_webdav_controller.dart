@@ -43,15 +43,15 @@ class RemoteSyncWebDAVController extends BaseController {
   var lastRecoverTime = "--".obs;
   var lastUploadTime = "--".obs;
 
-  final _userFollowJsonName = 'SimpleLive_follows.json';
-  final _userHistoriesJsonName = 'SimpleLive_histories.json';
-  final _userBlockedWordJsonName = 'SimpleLive_blocked_word.json';
-  final _userBilibiliAccountJsonName = 'SimpleLive_bilibili_account.json';
-  final _userDouyinAccountJsonName = 'SimpleLive_douyin_account.json';
-  final _userSettingsJsonName = 'SimpleLive_Settings.json';
-  final _userTagsJsonName = 'SimpleLive_Tags.json';
-  final _profileJsonName = 'SimpleLive_Profile_v3.json';
-  final _legacyProfileJsonName = 'SimpleLive_Profile_v2.json';
+  final _userFollowJsonName = 'Suikan_follows.json';
+  final _userHistoriesJsonName = 'Suikan_histories.json';
+  final _userBlockedWordJsonName = 'Suikan_blocked_word.json';
+  final _userBilibiliAccountJsonName = 'Suikan_bilibili_account.json';
+  final _userDouyinAccountJsonName = 'Suikan_douyin_account.json';
+  final _userSettingsJsonName = 'Suikan_Settings.json';
+  final _userTagsJsonName = 'Suikan_Tags.json';
+  final _profileJsonName = 'Suikan_Profile_v3.json';
+  final _legacyProfileJsonName = 'Suikan_Profile_v2.json';
 
   @override
   void onInit() {

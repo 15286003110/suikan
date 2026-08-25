@@ -215,7 +215,7 @@ class DanmuShieldController extends BaseController {
         return;
       }
       final file = File(
-        "$dir/SimpleLiveShield_${DateTime.now().millisecondsSinceEpoch ~/ 1000}.json",
+        "$dir/SuikanShield_${DateTime.now().millisecondsSinceEpoch ~/ 1000}.json",
       );
       await file.writeAsString(settingsController.generateShieldPresetJson());
       SmartDialog.showToast("已导出屏蔽预设");

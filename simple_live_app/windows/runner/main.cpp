@@ -22,7 +22,7 @@ std::wstring GpuPreferenceFilePath() {
   }
   std::wstring path(roaming_path);
   CoTaskMemFree(roaming_path);
-  return path + L"\\com.xycz\\simple_live_app\\gpu_preference.txt";
+  return path + L"\\com.suikan\\app\\gpu_preference.txt";
 }
 
 std::string ReadGpuPreference() {

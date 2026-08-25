@@ -77,7 +77,7 @@ class SyncService extends GetxService {
               }
               return;
             }
-          } else if (str == 'Who is SimpleLive?') {
+          } else if (str == 'Who is Suikan?') {
             if (httpRunning.value) {
               sendInfo();
             }
@@ -137,7 +137,7 @@ class SyncService extends GetxService {
   }
 
   Future<String> getDeviceName() async {
-    var name = "SimpleLive-TV";
+    var name = "Suikan-TV";
     if (Platform.isAndroid) {
       final info = await deviceInfo.androidInfo;
       name = info.model;
