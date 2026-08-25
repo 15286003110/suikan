@@ -1,0 +1,75 @@
+name: build-tv-arm32
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-tv-arm32:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: master
+
+      - name: Setup Flutter 3.24.5
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.24.5
+          cache: true
+
+      # AGP 需要 Java 17（ubuntu 默认 11）
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: zulu
+          java-version: "17"
+          cache: gradle
+
+      # 读取用户版本号 2.0.X（来自 pubspec，规则 2.0.X+2000X）
+      - name: Read version
+        id: version
+        run: |
+          ver=$(grep '^version:' simple_live_tv_app/pubspec.yaml | awk '{print $2}' | cut -d+ -f1)
+          echo "APP_VERSION=$ver" >> "$GITHUB_ENV"
+          echo "version=$ver" >> "$GITHUB_OUTPUT"
+          echo "using version: $ver"
+
+      # TV 编译前：把 core 的 dart_quickjs 从 git 态切成 vendor 态（3.24.5 用不了 git 态 native assets）
+      - name: Switch core to vendor mode
+        run: |
+          python3 - <<'PYEOF'
+          import re
+          p = "simple_live_core/pubspec.yaml"
+          s = open(p, encoding="utf-8").read()
+          # 把整个 git 块替换成 path 引用（保留缩进）
+          s = re.sub(
+              r"  dart_quickjs:\n    git:\n      url: [^\n]+",
+              "  dart_quickjs:\n    path: ../vendor/dart_quickjs",
+              s,
+          )
+          # sdk 下限放宽到 3.1.0
+          s = re.sub(r"sdk: '>=3\.[0-9.]+'", "sdk: '>=3.1.0'", s)
+          open(p, "w", encoding="utf-8").write(s)
+          print("=== after switch ===")
+          print(open(p, encoding="utf-8").read().split("dart_quickjs:")[1].split("cookie_jar")[0])
+          PYEOF
+
+      - name: pub get
+        working-directory: simple_live_tv_app
+        run: flutter pub get
+
+      - name: Build arm32 APK
+        working-directory: simple_live_tv_app
+        run: flutter build apk --release --split-per-abi --target-platform android-arm
+
+      - name: Rename APK
+        run: |
+          cd simple_live_tv_app/build/app/outputs/flutter-apk
+          cp app-armeabi-v7a-release.apk "Suikan_TV_arm32_${{ steps.version.outputs.version }}.apk"
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Suikan-TV-arm32
+          path: simple_live_tv_app/build/app/outputs/flutter-apk/Suikan_TV_arm32_*.apk

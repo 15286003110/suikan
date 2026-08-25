@@ -10,6 +10,7 @@
 
 <p align="center">
   把全网直播装进一个 App，想看什么，随手就看。
+  斗鱼 / 虎牙 / 抖音 / B站（直播）/ 快手
 </p>
 
 ---
@@ -23,6 +24,7 @@
 - **手机 / iOS**：随看
 - **Windows**：随看
 - **TV**：随看（兼容 Android 6 / arm32）
+- 支持平台：斗鱼 / 虎牙 / 抖音 / B站（直播）/ 快手
 
 ## 🎯 本仓库定制（2.0.x）
 
@@ -53,18 +55,11 @@ TV 版改动最大，主要针对小米盒子等安卓 6 设备：
 - **小米盒子音量记忆**：MethodChannel + Hive `kLastVolume` + 轮询保存。
 - **quickjs 三级加载 fallback**：`_loadLib()` 改 `lookupFunction` 写法。
 
-### 云端构建（GitHub Actions）
+## 仓库说明
 
-内置工作流，可云端编译各平台安装包（仓库公开后 Actions 免费不限量）：
-
-| 工作流 | 安装包 |
-|---|---|
-| `build-ios-trollstore.yml` | iOS 未签名 IPA（TrollStore 重签安装） |
-| `build-tv-arm32.yml` | TV 版 arm32 / 安卓6 APK |
-| `build-app-arm64.yml` | 手机版 arm64 APK |
-| `build-windows.yml` | Windows 版 ZIP |
-
-所有工作流从 `pubspec.yaml` 动态读取版本号，升版只需改 `version: 2.0.X+2000X`。
+- 【停更】：[原作者仓库 xiaoyaocz/dart_simple_live](https://github.com/xiaoyaocz/dart_simple_live)
+- 【在更】https://github.com/June6699/dart_simple_live
+- 【TDV】https://github.com/chen-zeong/dtv_mobile
 
 ## 支持平台
 

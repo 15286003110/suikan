@@ -40,7 +40,7 @@ class MinePage extends StatelessWidget {
                 "随看",
                 style: TextStyle(height: 1.0),
               ),
-              subtitle: const Text("简简单单看直播"),
+              subtitle: const Text("随开随看 · 想看就看"),
               trailing: const Icon(Icons.chevron_right),
               onTap: () {
                 Get.dialog(AboutDialog(
@@ -50,7 +50,7 @@ class MinePage extends StatelessWidget {
                     height: 48,
                   ),
                   applicationName: "随看",
-                  applicationVersion: "简简单单看直播",
+                  applicationVersion: "随开随看 · 想看就看",
                   applicationLegalese: "Ver ${Utils.packageInfo.version}",
                 ));
               },

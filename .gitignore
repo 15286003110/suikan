@@ -12,7 +12,7 @@ simple_live_tv_app/.vscode/settings.json
 
 # Build, dependency, and release artifacts
 release/
-models/
+/models/
 docs/
 issue_logs/
 experience/

@@ -1,0 +1,47 @@
+name: Build iOS IPA (TrollStore)
+
+on:
+  workflow_dispatch:        # 手动触发，随时点一下就能编
+
+jobs:
+  build-ios:
+    runs-on: macos-latest   # GitHub 提供的云端 macOS，自带 Xcode
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.1'   # 与手机版/手机APK 同一套 SDK
+
+      - name: Install deps
+        working-directory: simple_live_app
+        run: flutter pub get
+
+      - name: Pod install
+        working-directory: simple_live_app/ios
+        run: pod install --repo-update
+
+      # TrollStore 会自己重签名，CI 不必配 Apple 证书。
+      # 用 flutter 官方 --no-codesign 跳过签名（sed 改 pbxproj 不可靠）
+      - name: Build iOS app (release, unsigned)
+        working-directory: simple_live_app
+        run: flutter build ios --release --no-codesign
+
+      # 把编译产物打成 ipa（TrollStore 直接吃未签名 ipa 并重新签名）
+      - name: Package IPA
+        working-directory: simple_live_app
+        run: |
+          mkdir -p build/ios/Payload
+          cp -r build/ios/Release-iphoneos/Runner.app build/ios/Payload/
+          cd build/ios && zip -r Suikan.ipa Payload
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Suikan-iOS
+          path: simple_live_app/build/ios/Suikan.ipa

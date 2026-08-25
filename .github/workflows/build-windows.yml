@@ -1,0 +1,52 @@
+name: build-windows
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: master
+
+      - name: Setup Flutter 3.47.1
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.1
+          cache: true
+
+      - name: Enable Windows Desktop
+        run: flutter config --enable-windows-desktop
+
+      - name: Read version
+        id: version
+        shell: bash
+        run: |
+          ver=$(grep '^version:' simple_live_app/pubspec.yaml | awk '{print $2}' | cut -d+ -f1)
+          echo "APP_VERSION=$ver" >> "$GITHUB_ENV"
+          echo "version=$ver" >> "$GITHUB_OUTPUT"
+          echo "using version: $ver"
+
+      - name: pub get
+        working-directory: simple_live_app
+        run: flutter pub get
+
+      - name: Build Windows release
+        working-directory: simple_live_app
+        run: flutter build windows --release
+
+      - name: Package ZIP
+        shell: bash
+        run: |
+          cd simple_live_app/build/windows/x64/runner/Release
+          powershell -Command "Compress-Archive -Path * -DestinationPath 'Suikan_WIN_${{ steps.version.outputs.version }}.zip' -Force"
+          ls -la Suikan_WIN_${{ steps.version.outputs.version }}.zip
+
+      - name: Upload ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: Suikan-WIN
+          path: simple_live_app/build/windows/x64/runner/Release/Suikan_WIN_*.zip
