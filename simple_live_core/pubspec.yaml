@@ -4,7 +4,7 @@ description: "聚合直播核心库"
 repository: https://github.com/xiaoyaocz/dart_simple_live
 publish_to: "none"
 environment: 
-  sdk: '>=3.10.0'
+  sdk: '>=3.1.0'
 
 dependencies: 
   dio: ^5.5.0+1
@@ -18,8 +18,7 @@ dependencies:
     path: ./packages/tars_dart
   fixnum: ^1.1.0
   dart_quickjs:
-    git:
-      url: https://github.com/xiaoyaocz/dart_quickjs
+    path: ../vendor/dart_quickjs
   cookie_jar: ^4.0.8
   dio_cookie_manager: ^3.3.0
 

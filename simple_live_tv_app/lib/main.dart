@@ -22,6 +22,7 @@ import 'package:simple_live_tv_app/app/sites.dart';
 import 'package:simple_live_tv_app/app/utils.dart';
 import 'package:simple_live_tv_app/models/db/follow_user.dart';
 import 'package:simple_live_tv_app/models/db/history.dart';
+import 'package:simple_live_tv_app/modules/home/home_controller.dart';
 import 'package:simple_live_tv_app/modules/live_room/live_room_controller.dart';
 import 'package:simple_live_tv_app/routes/app_navigation.dart';
 import 'package:simple_live_tv_app/routes/app_pages.dart';
@@ -260,12 +261,50 @@ Future initServices() async {
   Get.put(FollowUserService());
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
+  const MyApp({super.key});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
   static const MethodChannel _desktopShortcutChannel =
       MethodChannel("simple_live_tv/desktop_shortcuts");
   static bool _desktopShortcutHandlerBound = false;
+  static const MethodChannel _backChannel =
+      MethodChannel('com.simplelive.tv/back');
 
-  const MyApp({super.key});
+  @override
+  void initState() {
+    super.initState();
+    _backChannel.setMethodCallHandler(_onBackMethod);
+  }
+
+  @override
+  void dispose() {
+    _backChannel.setMethodCallHandler(null);
+    super.dispose();
+  }
+
+  /// 原生 MainActivity 拦截到 BACK 键后发到这里。
+  /// 优先关闭打开的 dialog/bottomSheet, 在主界面则弹退出确认框, 其他页面直接返回。
+  Future<void> _onBackMethod(MethodCall call) async {
+    if (call.method == 'backPressed') {
+      // 退出确认框/其他 dialog 打开时, 返回键只负责关闭对话框
+      if (HomeController.exitDialogShowing ||
+          Get.isDialogOpen == true ||
+          Get.isBottomSheetOpen == true) {
+        Get.back();
+      } else if (Get.currentRoute == RoutePath.kHome) {
+        try {
+          Get.find<HomeController>().handleBack();
+        } catch (_) {}
+      } else {
+        Get.back();
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {

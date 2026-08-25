@@ -251,7 +251,7 @@ Widget _buildLiveEventFlowOverlay(LiveRoomController controller) {
                     vertical: 10.w,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.58),
+                    color: Colors.black.withOpacity(0.58),
                     borderRadius: BorderRadius.circular(6.w),
                   ),
                   child: Text(

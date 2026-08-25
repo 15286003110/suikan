@@ -98,9 +98,11 @@ tasks.named("preBuild") {
 }
 
 android {
+    // 安卓6 老盒子兼容: 必须用变量间接赋值, 直接写 minSdk = 23 会被 Flutter 迁移器改回
+    val minSdkForAndroid6 = 23
     namespace = "com.xycz.simple_live_tv"
-    compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+    compileSdk = 36
+    ndkVersion = "28.2.13676358"
 
     sourceSets {
         getByName("main") {
@@ -119,7 +121,7 @@ android {
         applicationId = "com.xycz.simple_live_tv"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
+        minSdk = minSdkForAndroid6
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName

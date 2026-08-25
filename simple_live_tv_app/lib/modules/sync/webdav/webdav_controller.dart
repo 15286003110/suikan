@@ -213,7 +213,7 @@ class WebDavController extends BaseController {
     _addJsonFile(archive, _userSettingsJsonName, {
       'data': LocalStorageService.instance.settingsBox.toMap(),
     });
-    return ZipEncoder().encode(archive);
+    return ZipEncoder().encode(archive) ?? [];
   }
 
   void _addJsonFile(Archive archive, String name, Map<String, dynamic> data) {

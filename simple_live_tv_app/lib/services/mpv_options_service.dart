@@ -63,15 +63,19 @@ class MpvOptionsService {
       );
     }
     final options = effectiveOptions();
+    // 硬件解码开关: 关 → 强制软解 (老盒子 S905L GPU 硬解渲染黑屏)
+    final effectiveHwdec = settings.hardwareDecode.value
+        ? options["hwdec"]
+        : "no";
     if (!Platform.isAndroid) {
       return VideoControllerConfiguration(
-        hwdec: options["hwdec"],
+        hwdec: effectiveHwdec,
         enableHardwareAcceleration: settings.hardwareDecode.value,
       );
     }
     return VideoControllerConfiguration(
       vo: options["vo"],
-      hwdec: options["hwdec"],
+      hwdec: effectiveHwdec,
       enableHardwareAcceleration: settings.hardwareDecode.value,
       // Fix TV多开灰屏/Android全屏卡死: 延迟attach避免surface race condition
       androidAttachSurfaceAfterVideoParameters: true,

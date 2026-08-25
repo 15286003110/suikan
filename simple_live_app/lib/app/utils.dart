@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ffi' as ffi;
 import 'dart:io';
 
 import 'package:device_info_plus/device_info_plus.dart';
@@ -18,6 +19,26 @@ typedef TextValidate = bool Function(String text);
 
 class Utils {
   static late PackageInfo packageInfo;
+
+  /// 优雅退出（规避 Windows 退出时 @image#1:Clipboard_Screenshot.png 错误和
+  /// flutter_inappwebview_windows 的 atexit/dcomp 硬崩溃）
+  /// Windows 下 ExitProcess 会走 LdrShutdownProcess 卸载 DLL 触发 FailFast，
+  /// 用 TerminateProcess 直接杀进程（不执行 DLL 卸载/atexit），绕过崩溃。
+  static void closeAppGracefully() {
+    if (Platform.isWindows) {
+      final kernel32 = ffi.DynamicLibrary.open('kernel32.dll');
+      final terminateProcess = kernel32.lookupFunction<
+          ffi.Int32 Function(ffi.IntPtr hProcess, ffi.Uint32 uExitCode),
+          int Function(int hProcess, int uExitCode)>('TerminateProcess');
+      final getCurrentProcess = kernel32.lookupFunction<
+          ffi.IntPtr Function(),
+          int Function()>('GetCurrentProcess');
+      terminateProcess(getCurrentProcess(), 0);
+    } else {
+      exit(0);
+    }
+  }
+
   static DateFormat dateFormat = DateFormat("MM-dd HH:mm");
   static DateFormat dateFormatWithYear = DateFormat("yyyy-MM-dd HH:mm");
   static DateFormat timeFormat = DateFormat("HH:mm:ss");

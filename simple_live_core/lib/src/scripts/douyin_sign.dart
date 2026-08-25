@@ -10658,8 +10658,8 @@ function getMSSDKSignature(msStub, userAgent) {
     String? msToken,
   }) {
     JsRuntime flutterJs = JsRuntime(
-      memoryLimit: 4 * 1024 * 1024,
-      maxStackSize: 64 * 1024,
+      memoryLimit: 32 * 1024 * 1024,
+      maxStackSize: 512 * 1024,
     );
     final uri = Uri.parse(url);
     final queryParameters = Map<String, String>.from(uri.queryParameters);

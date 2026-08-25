@@ -375,45 +375,7 @@ class _DesktopWindowLifecycle with WindowListener {
   }
 
   Future<void> _closeAppGracefully() async {
-    _saveTimer?.cancel();
-    await _closeStep(
-      "保存窗口位置",
-      saveWindowPlacement,
-      timeout: const Duration(milliseconds: 300),
-    );
-    await _closeStep(
-      "关闭播放器",
-      () async {
-        if (Get.isRegistered<LiveRoomController>()) {
-          await Get.find<LiveRoomController>().closePlayerResources();
-        }
-      },
-      timeout: const Duration(milliseconds: 900),
-    );
-    _closeStepSync("关闭同步服务", () {
-      if (Get.isRegistered<SyncService>()) {
-        SyncService.instance.onClose();
-      }
-    });
-    await _closeStep(
-      "关闭日志写入",
-      Log.disposeWriter,
-      timeout: const Duration(milliseconds: 600),
-    );
-
-    windowManager.removeListener(this);
-    if (Platform.isWindows) {
-      await _closeStep(
-        "取消关闭拦截",
-        () => windowManager.setPreventClose(false),
-        timeout: const Duration(milliseconds: 300),
-      );
-    }
-    await _closeStep(
-      "请求窗口关闭",
-      () => windowManager.close(),
-      timeout: const Duration(milliseconds: 800),
-    );
+    Utils.closeAppGracefully();
   }
 
   Future<void> _closeStep(

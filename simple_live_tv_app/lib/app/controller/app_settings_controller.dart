@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:flutter/services.dart';
 import 'package:simple_live_tv_app/services/local_storage_service.dart';
 
 import 'package:get/get.dart';
@@ -10,6 +13,12 @@ class AppSettingsController extends GetxController {
   static const String _userShieldPrefix = "user:";
   static const int kDanmuDedupeModeUser = 0;
   static const int kDanmuDedupeModeStrict = 1;
+
+  /// 【音量记忆】原生音量通道 (MainActivity 里实现), 解决小米盒子4S 音量不持久化
+  static const MethodChannel volumeChannel =
+      MethodChannel('com.simplelive.tv/volume');
+  Timer? volumeTimer;
+  int lastSavedVolume = -1;
   static const int kDanmuDedupeDefaultWindow = 10;
   static const int kDanmuDedupeStrictMinWindow = 5;
   static const int kDanmuDedupeMaxWindow = 100;
@@ -129,7 +138,7 @@ class AppSettingsController extends GetxController {
         .getValue(LocalStorageService.kDanmuBottomMargin, 0.0);
 
     hardwareDecode.value = LocalStorageService.instance
-        .getValue(LocalStorageService.kHardwareDecode, true);
+        .getValue(LocalStorageService.kHardwareDecode, false);
     chatTextSize.value = LocalStorageService.instance
         .getValue(LocalStorageService.kChatTextSize, 14.0);
 
@@ -253,13 +262,63 @@ class AppSettingsController extends GetxController {
     );
 
     super.onInit();
+
+    // 【音量记忆】启动 2 秒后恢复上次音量, 并开始轮询记录系统音量。
+    Future.delayed(const Duration(seconds: 2), () async {
+      await restoreVolume();
+      volumeTimer?.cancel();
+      volumeTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+        saveVolumeLoop();
+      });
+    });
+  }
+
+  /// 读取当前系统音量 (STREAM_MUSIC)
+  Future<int> getSystemVolume() async {
+    try {
+      return await volumeChannel.invokeMethod('getVolume') as int? ?? -1;
+    } catch (_) {
+      return -1;
+    }
+  }
+
+  /// 恢复上次记忆的音量 (app 启动时调用)
+  Future<void> restoreVolume() async {
+    try {
+      var saved =
+          LocalStorageService.instance.getValue<int>(LocalStorageService.kLastVolume, -1);
+      if (saved <= 0) return;
+      var current = await getSystemVolume();
+      if (current >= 0 && current != saved) {
+        await volumeChannel.invokeMethod('setVolume', saved);
+      }
+    } catch (_) {}
+  }
+
+  /// 轮询记录系统音量 (每 3 秒, 变化才保存)
+  Future<void> saveVolumeLoop() async {
+    try {
+      var v = await getSystemVolume();
+      if (v < 0) return;
+      if (v != lastSavedVolume) {
+        lastSavedVolume = v;
+        await LocalStorageService.instance
+            .setValue<int>(LocalStorageService.kLastVolume, v);
+      }
+    } catch (_) {}
+  }
+
+  @override
+  void onClose() {
+    volumeTimer?.cancel();
+    super.onClose();
   }
 
   void setNoFirstRun() {
     LocalStorageService.instance.setValue(LocalStorageService.kFirstRun, false);
   }
 
-  var hardwareDecode = true.obs;
+  var hardwareDecode = false.obs;
   void setHardwareDecode(bool e) {
     hardwareDecode.value = e;
     LocalStorageService.instance

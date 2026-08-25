@@ -440,6 +440,9 @@ class LiveRoomPage extends GetView<LiveRoomController> {
 
   Future<void> _handleBack(BuildContext context) async {
     await controller.cancelAutoPipOnLeave();
+    // 返回前完整关闭播放器,避免 texture 释放后 player 推帧导致崩溃
+    // onClose 是 void async(fire-and-forget), 不能 await
+    controller.onClose();
     if (context.mounted) {
       Navigator.of(context).pop();
     }

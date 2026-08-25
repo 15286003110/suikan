@@ -116,6 +116,9 @@ class LocalStorageService extends GetxService {
   /// 播放器后台自动暂停
   static const String kPlayerAutoPause = "PlayerAutoPause";
 
+  /// 记忆的系统音量 (USB/HDMI 输出共用 STREAM_MUSIC)
+  static const String kLastVolume = "LastVolume";
+
   /// 播放器缓冲区大小
   static const String kPlayerBufferSize = "PlayerBufferSize";
   static const String kPlayerForceHttps = "PlayerForceHttps";

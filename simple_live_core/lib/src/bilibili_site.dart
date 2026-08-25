@@ -332,7 +332,7 @@ class BiliBiliSite implements LiveSite {
 
     const danmuInfoBaseUrl =
         "https://api.live.bilibili.com/xlive/web-room/v1/index/getDanmuInfo";
-    var danmuInfoUrl = "$danmuInfoBaseUrl?id=$realRoomId";
+    var danmuInfoUrl = "$danmuInfoBaseUrl?id=$realRoomId&type=0&web_location=444.8";
     var queryParams = await getWbiSign(danmuInfoUrl);
     Map? danmuData;
     List<String> serverHosts = [];
