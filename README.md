@@ -4,6 +4,39 @@
 >
 > 私有开发主仓会更频繁更新；公开仓库只在阶段性整理后同步。
 
+---
+
+## 🎯 本仓库定制（2.0.x）
+
+本仓库基于 June6699 fork 定制维护，使用自定版本号 **`2.0.X`**（编译号 `2.0.X+2000X`，大版本 2.0 锁死，每次发布 X 递增）。
+
+### 已包含的改动
+
+- **抖音分类列表**：使用 [chen-zeong/dtv_mobile](https://github.com/chen-zeong/dtv_mobile) 的分类列表替换原 fork 版本。
+- **崩溃修复**：
+  - Windows 退出崩溃（`@image#1` / Clipboard_Screenshot 错误）：窗口关闭时全平台调用 `player.stop()`。
+  - 直播页返回键崩溃：`PopScope` 回调中调用 `onClose()`，`SystemChrome.*` 增加平台守卫。
+- **版本号**：三端（手机 / WIN / TV）统一使用自定版本号 `2.0.X`，不跟随上游。
+
+### 平台说明
+
+| 平台 | 说明 |
+|---|---|
+| 手机版（Android） | Flutter 3.47.1，arm64，minSdk 24 |
+| Windows | Flutter 3.47.1 |
+| TV 版 | Flutter 3.24.5（兼容 Android 6），arm32 / armeabi-v7a，返回键原生拦截、硬解默认关、小米盒子音量记忆 |
+
+### 云端构建
+
+本仓库内置 GitHub Actions 工作流，可云端编译各平台安装包（仓库公开后 Actions 免费不限量）：
+
+- `build-ios-trollstore.yml` → iOS 未签名 IPA（TrollStore 重签安装）
+- `build-tv-arm32.yml` → TV 版 arm32 APK
+- `build-app-arm64.yml` → 手机版 arm64 APK
+- `build-windows.yml` → Windows 版 ZIP
+
+---
+
 <p align="center">
     <img width="128" src="/assets/logo.png" alt="Simple Live logo">
 </p>
