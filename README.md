@@ -5,31 +5,20 @@
 <h1 align="center">随看 Suikan</h1>
 
 <p align="center">
-  <b>随开随看 · 想看就看</b>
+  <b>所见即看</b>
 </p>
 
 <p align="center">
-  把全网直播装进一个 App。<br>
-  主流平台热门内容，一个入口全部看到，不用来回切换。<br>
-  简约无打扰，想看什么，随手就看。
+  把全网直播装进一个 App，想看什么，随手就看。
 </p>
 
 ---
 
 ## 平台
 
-| 平台 | 显示名 | 包名 / Bundle ID | Flutter | 产物 |
-|---|---|---|---|---|
-| 手机版（Android） | 随看 | `com.suikan.app` | 3.47.1 | APK（arm64） |
-| Windows | 随看 | — | 3.47.1 | ZIP |
-| TV（Android 6 / arm32） | 随看 | `com.suikan.tvbox` | 3.24.5 | APK（armeabi-v7a） |
-| iOS | 随看 | `com.suikan.app` | 3.47.1 | IPA（TrollStore 安装） |
-
-## 版本号
-
-三端统一使用自定版本号 **`2.0.X`**（编译号 `2.0.X+2000X`，当前 `2.0.2+20002`），不跟随上游版本号。
-
----
+- **手机版**：随看（Android / iOS）
+- **Windows**：随看
+- **TV**：随看（兼容 Android 6 / arm32）
 
 ## 🎯 本仓库定制（2.0.x）
 
@@ -62,16 +51,16 @@ TV 版改动最大，主要针对小米盒子等安卓 6 设备：
 
 ### 云端构建（GitHub Actions）
 
-本仓库内置工作流，可云端编译各平台安装包（仓库公开后 Actions 免费不限量）：
+内置工作流，可云端编译各平台安装包（仓库公开后 Actions 免费不限量）：
 
-| 工作流 | 产物 | 说明 |
-|---|---|---|
-| `build-ios-trollstore.yml` | `SimpleLive.ipa` | iOS 未签名 IPA（TrollStore 重签安装），Flutter 3.47.1 |
-| `build-tv-arm32.yml` | `SimpleLive_TV_arm32_2.0.X.apk` | TV 版 arm32 / 安卓6，Flutter 3.24.5 |
-| `build-app-arm64.yml` | `SimpleLive_arm64_2.0.X.apk` | 手机版 arm64，Flutter 3.47.1 |
-| `build-windows.yml` | `SimpleLive_WIN_2.0.X.zip` | Windows 版，Flutter 3.47.1 |
+| 工作流 | 安装包 |
+|---|---|
+| `build-ios-trollstore.yml` | iOS 未签名 IPA（TrollStore 重签安装） |
+| `build-tv-arm32.yml` | TV 版 arm32 / 安卓6 APK |
+| `build-app-arm64.yml` | 手机版 arm64 APK |
+| `build-windows.yml` | Windows 版 ZIP |
 
-所有工作流从 `pubspec.yaml` 动态读取版本号，升版只需修改 `version: 2.0.X+2000X`。
+所有工作流从 `pubspec.yaml` 动态读取版本号，升版只需改 `version: 2.0.X+2000X`。
 
 ---
 
@@ -81,7 +70,7 @@ TV 版改动最大，主要针对小米盒子等安卓 6 设备：
 - 本仓库基于 [June6699/dart_simple_live](https://github.com/June6699/dart_simple_live) 定制
 - 抖音分类列表参考：[chen-zeong/dtv_mobile](https://github.com/chen-zeong/dtv_mobile)
 
-## APP 支持平台
+## 支持平台
 
 - [x] Android
 - [x] iOS
@@ -90,12 +79,6 @@ TV 版改动最大，主要针对小米盒子等安卓 6 设备：
 - [x] Linux
 - [x] Android TV
 - [x] TV-windows（TV 的 UI 在 Windows 上运行，相较纯 TV，此版本支持多开）
-
-## 环境
-
-- 手机 / WIN：Flutter `3.47.1`
-- TV：Flutter `3.24.5`
-- 云端构建：GitHub Actions（Linux / Windows / macOS runner）
 
 ## 声明
 
