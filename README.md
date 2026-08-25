@@ -5,7 +5,7 @@
 <h1 align="center">随看 Suikan</h1>
 
 <p align="center">
-  <b>所见即看</b>
+  <b>随开随看 · 想看就看</b>
 </p>
 
 <p align="center">
