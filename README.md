@@ -15,7 +15,7 @@
 ---
 
 <p align="center">
-  <img src="assets/banner.png" alt="随看 Suikan" width="100%">
+  <img src="assets/banner.jpg" alt="随看 Suikan" width="100%">
 </p>
 
 ## 平台
