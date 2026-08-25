@@ -1,4 +1,4 @@
 # simple_live_tv_app
 
-Simple Live Android TV APP
+随看 Android TV App
 

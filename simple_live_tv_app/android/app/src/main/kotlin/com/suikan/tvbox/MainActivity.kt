@@ -218,6 +218,6 @@ class MainActivity : FlutterActivity() {
         private const val WINDOWING_MODE_FREEFORM = 5
         private const val CHANNEL_BACK = "com.simplelive.tv/back"
         private const val CHANNEL_VOLUME = "com.simplelive.tv/volume"
-        private const val TAG = "SimpleLiveTV"
+        private const val TAG = "SuikanTV"
     }
 }

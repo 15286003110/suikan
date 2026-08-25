@@ -18,7 +18,7 @@ import UserNotifications
         if call.method == "showLiveStart" {
           let args = call.arguments as? [String: Any]
           let title = args?["title"] as? String ?? "特别关注开播了"
-          let body = args?["body"] as? String ?? "点击回到 Simple Live"
+          let body = args?["body"] as? String ?? "点击回到 随看"
           self.showLiveStartNotification(title: title, body: body)
           result(nil)
         } else {

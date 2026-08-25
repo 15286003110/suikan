@@ -31,7 +31,7 @@ class BackgroundPlaybackService : Service() {
         }
         return builder
             .setSmallIcon(applicationInfo.icon)
-            .setContentTitle("Simple Live")
+            .setContentTitle("随看")
             .setContentText("正在后台播放直播")
             .setOngoing(true)
             .setShowWhen(false)

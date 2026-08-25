@@ -12,7 +12,7 @@ Future<void> main(List<String> args) async {
   final options = _parseArgs(args);
   final dataDir = options['data-dir']?.trim();
   if (dataDir == null || dataDir.isEmpty) {
-    stderr.writeln('Missing --data-dir <Simple Live Hive data directory>.');
+    stderr.writeln('Missing --data-dir <随看 Hive data directory>.');
     exitCode = 64;
     return;
   }

@@ -1,8 +1,8 @@
-display_name: Simple-Live
-package_name: simple-live
+display_name: 随看
+package_name: suikan
 maintainer:
-  name: xiaoyaocz
-  email: xiaoyaocz@52uwp.com
+  name: mobingchong
+  email: mobingchong@example.com
 priority: optional
 section: x11
 installed_size: 24400
@@ -15,9 +15,9 @@ dependencies:
 icon: assets/logo.png
 
 keywords:
-  - Simple Live
+  - 随看
 
-generic_name: Simple-Live
+generic_name: 随看
 
 categories:
   - Media

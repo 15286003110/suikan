@@ -70,7 +70,7 @@ class MainActivity : FlutterActivity() {
                     showLiveStartNotification(
                         notificationId = call.argument<Int>("notificationId") ?: 1002,
                         title = call.argument<String>("title") ?: "特别关注开播了",
-                        body = call.argument<String>("body") ?: "点击回到 Simple Live",
+                        body = call.argument<String>("body") ?: "点击回到 随看",
                     )
                     result.success(null)
                 }

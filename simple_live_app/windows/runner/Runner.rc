@@ -90,12 +90,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "Suikan" "\0"
-            VALUE "FileDescription", "simple_live_app" "\0"
+            VALUE "FileDescription", "Suikan" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "simple_live_app" "\0"
+            VALUE "InternalName", "Suikan" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2025 Suikan. All rights reserved." "\0"
-            VALUE "OriginalFilename", "simple_live_app.exe" "\0"
-            VALUE "ProductName", "simple_live_app" "\0"
+            VALUE "OriginalFilename", "Suikan.exe" "\0"
+            VALUE "ProductName", "随看" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END
