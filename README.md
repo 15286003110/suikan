@@ -26,32 +26,32 @@
 
 ## 🎯 本仓库定制（2.0.x）
 
-本仓库基于开源直播聚合项目定制维护（fork 来源见文末"仓库说明"）。
+本仓库基于开源直播聚合项目定制维护。
 
 ### 统一改动（三端共用）
 
 - **版本号**：手机版 / WIN / TV 三端统一使用自定版本号 `2.0.X`（当前 `2.0.2+20002`）。
 - **品牌改名**：App 名统一为「随看」（任何平台不带 TV 字样），包名 `com.suikan.app`（手机/iOS）/ `com.suikan.tvbox`（TV）。
-- **抖音分类列表**：使用 [chen-zeong/dtv_mobile](https://github.com/chen-zeong/dtv_mobile) 的分类列表替换原 fork 版本（`douyin_site.dart` / `douyin_sign.dart`）。
+- **分类列表**：使用社区维护的短视频分类数据替换原版（分类相关文件）。
 - **崩溃修复**：
-  - Windows 退出崩溃（`@image#1` / Clipboard_Screenshot 错误）：窗口关闭时全平台调用 `player.stop()`。
+  - Windows 退出崩溃：窗口关闭时全平台调用 `player.stop()`。
   - 直播页返回键崩溃：`PopScope` 回调中调用 `onClose()`，`SystemChrome.*` 增加平台守卫。
 
-### 手机版 / Windows（Flutter 3.47.1）
+### 手机版 / Windows
 
-- dart_quickjs 使用 **git 态**（`xiaoyaocz/dart_quickjs`，sdk `>=3.10.0`）。
+- dart_quickjs 使用 **git 态**（sdk `>=3.10.0`）。
 - Windows 退出崩溃 / 返回键崩溃修复（见上）。
 
-### TV 版（Flutter 3.24.5，兼容 Android 6 / arm32）
+### TV 版（兼容 Android 6 / arm32）
 
 TV 版改动最大，主要针对小米盒子等安卓 6 设备：
 
 - **固定 Flutter 3.24.5**；minSdk 使用变量写法 `val minSdkForAndroid6 = 23`，防止迁移器改回 24。
 - **dart_quickjs**：改为 `path: ../vendor/dart_quickjs` + sdk `>=3.1.0`（编译前切 vendor 态、编完切回 git 态），预编译 `libquickjs.so`（arm32）置于 `jniLibs`。
 - **返回键原生拦截**：`MainActivity.kt` 重写 `onKeyDown`/`onBackPressed` → MethodChannel → main.dart 决策。
-- **硬解默认关**：`player_controller.dart` 按设置设 mpv `hwdec`；`app_settings_controller.dart` 默认 false（盒子硬解兼容性差）。
+- **硬解默认关**：`player_controller.dart` 按设置设 mpv `hwdec`；`app_settings_controller.dart` 默认 false。
 - **小米盒子音量记忆**：MethodChannel + Hive `kLastVolume` + 轮询保存。
-- **quickjs 三级加载 fallback**：`_loadLib()` 改 `lookupFunction` 写法，兼容盒子环境。
+- **quickjs 三级加载 fallback**：`_loadLib()` 改 `lookupFunction` 写法。
 
 ### 云端构建（GitHub Actions）
 
@@ -65,14 +65,6 @@ TV 版改动最大，主要针对小米盒子等安卓 6 设备：
 | `build-windows.yml` | Windows 版 ZIP |
 
 所有工作流从 `pubspec.yaml` 动态读取版本号，升版只需改 `version: 2.0.X+2000X`。
-
----
-
-## 仓库说明
-
-- fork 来源：[原作者仓库 xiaoyaocz/dart_simple_live](https://github.com/xiaoyaocz/dart_simple_live)
-- 本仓库基于 [June6699/dart_simple_live](https://github.com/June6699/dart_simple_live) 定制
-- 抖音分类列表参考：[chen-zeong/dtv_mobile](https://github.com/chen-zeong/dtv_mobile)
 
 ## 支持平台
 
