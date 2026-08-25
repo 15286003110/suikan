@@ -69,7 +69,7 @@ class HomeController extends BaseController {
             borderRadius: AppStyle.radius16,
           ),
           title: const Text("退出应用"),
-          content: const Text("确定要退出 Simple Live 吗？"),
+          content: const Text("确定要退出随看吗？"),
           actions: [
             TextButton(
               autofocus: true,

@@ -189,7 +189,7 @@ Future initWindow() async {
   Log.i("桌面窗口初始化");
   WindowOptions windowOptions = const WindowOptions(
     minimumSize: Size(280, 280),
-    title: "Simple Live",
+    title: "随看",
   );
   await windowManager.waitUntilReadyToShow(windowOptions);
 }
@@ -496,7 +496,7 @@ class MyApp extends StatelessWidget {
             seedColor: styleColor, brightness: Brightness.dark);
       }
       return GetMaterialApp(
-        title: "Simple Live",
+        title: "随看",
         theme: AppStyle.lightTheme.copyWith(colorScheme: lightColorScheme),
         darkTheme: AppStyle.darkTheme.copyWith(colorScheme: darkColorScheme),
         themeMode:

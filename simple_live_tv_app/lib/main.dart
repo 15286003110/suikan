@@ -180,7 +180,7 @@ Future<void> initWindow() async {
   await windowManager.ensureInitialized();
   const windowOptions = WindowOptions(
     minimumSize: Size(320, 240),
-    title: "Simple Live TV",
+    title: "随看",
   );
   await windowManager.waitUntilReadyToShow(windowOptions);
 }
@@ -321,7 +321,7 @@ class _MyAppState extends State<MyApp> {
       splitScreenMode: true,
       builder: (context, child) {
         return GetMaterialApp(
-          title: 'Simple Live TV',
+          title: '随看',
           theme: AppStyle.lightTheme,
           initialRoute: AppSettingsController.instance.firstRun
               ? RoutePath.kAgreement

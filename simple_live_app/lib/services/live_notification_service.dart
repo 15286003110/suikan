@@ -39,7 +39,7 @@ class LiveNotificationService {
       await _channel.invokeMethod<void>("showLiveStart", {
         "notificationId": item.id.hashCode & 0x7fffffff,
         "title": "${item.userName} 开播了",
-        "body": "点击回到 Simple Live 查看直播",
+        "body": "点击回到随看查看直播",
         "roomId": item.roomId,
         "siteId": item.siteId,
       });

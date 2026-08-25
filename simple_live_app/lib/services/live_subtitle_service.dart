@@ -456,7 +456,7 @@ class _DesktopLiveSubtitleEngine {
 
     _decoder = Player(
       configuration: const PlayerConfiguration(
-        title: "Simple Live Subtitle Decoder",
+        title: "随看字幕解码器",
         logLevel: MPVLogLevel.error,
       ),
     );

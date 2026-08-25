@@ -37,7 +37,7 @@ class MinePage extends StatelessWidget {
                 height: 56,
               ),
               title: const Text(
-                "Simple Live",
+                "随看",
                 style: TextStyle(height: 1.0),
               ),
               subtitle: const Text("简简单单看直播"),
@@ -49,7 +49,7 @@ class MinePage extends StatelessWidget {
                     width: 48,
                     height: 48,
                   ),
-                  applicationName: "Simple Live",
+                  applicationName: "随看",
                   applicationVersion: "简简单单看直播",
                   applicationLegalese: "Ver ${Utils.packageInfo.version}",
                 ));

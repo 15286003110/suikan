@@ -85,7 +85,7 @@ class ProfileBackupService extends GetxService {
     onProgress?.call(const SyncProgress(stage: "解析配置包"));
     final decoded = jsonDecode(content);
     if (decoded is! Map) {
-      throw const FormatException("不是 Simple Live 配置包");
+      throw const FormatException("不是随看配置包");
     }
     final payload = decoded.cast<String, dynamic>();
     final schemaName = payload["schema"]?.toString() ?? "";
@@ -117,7 +117,7 @@ class ProfileBackupService extends GetxService {
         onProgress: onProgress,
       );
     }
-    throw const FormatException("不是 Simple Live 配置包");
+    throw const FormatException("不是随看配置包");
   }
 
   Future<ProfileImportSummary> importLegacyProfileMap(

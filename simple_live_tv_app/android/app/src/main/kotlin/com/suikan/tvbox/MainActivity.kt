@@ -1,4 +1,4 @@
-package com.xycz.simple_live_tv
+package com.suikan.tvbox
 
 import android.content.Context
 import android.content.res.Configuration
