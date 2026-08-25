@@ -203,7 +203,7 @@ class SyncService extends GetxService {
         lower.contains("address already in use") ||
         lower.contains("failed to create server socket") ||
         lower.contains("only one usage of each socket address")) {
-      return "$port 端口已被占用，请关闭其他 Simple Live / TV-Windows 窗口后重试";
+      return "$port 端口已被占用，请关闭其他随看窗口后重试";
     }
     return "$serviceName启动失败：$text";
   }
@@ -212,8 +212,8 @@ class SyncService extends GetxService {
     return toJsonResponse({
       'status': true,
       'message': 'http server is running...',
-      "version": 'Simple Live TV v${Utils.packageInfo.version}',
-      "app": "Simple Live TV",
+      "version": '随看 v${Utils.packageInfo.version}',
+      "app": "Suikan",
       "type": "tv",
       "platform": Platform.operatingSystem,
     });

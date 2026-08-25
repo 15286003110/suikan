@@ -21,7 +21,7 @@ mixin PlayerMixin {
   /// 播放器实例
   late final player = Player(
     configuration: const PlayerConfiguration(
-      title: "Simple Live Player",
+      title: "随看",
       // bufferSize:
       //     // media-kit #549
       //     AppSettingsController.instance.playerBufferSize.value * 1024 * 1024,

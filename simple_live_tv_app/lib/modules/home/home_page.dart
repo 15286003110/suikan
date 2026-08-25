@@ -31,7 +31,7 @@ class HomePage extends GetView<HomeController> {
             children: [
               AppStyle.hGap48,
               Text(
-                "Simple Live TV",
+                "随看",
                 style: AppStyle.titleStyleWhite,
               ),
               AppStyle.hGap24,

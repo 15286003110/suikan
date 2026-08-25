@@ -551,7 +551,7 @@ class SignalRService {
   }
 
   Map<String, String> _clientInfo() => {
-        "app": "Simple Live",
+        "app": "Suikan",
         "platform": Platform.operatingSystem,
         "version": Utils.packageInfo.version,
       };

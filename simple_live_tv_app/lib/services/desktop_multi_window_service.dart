@@ -61,7 +61,7 @@ class DesktopMultiWindowService {
       _openedProcessIds.add(process.pid);
       await Future<void>.delayed(const Duration(milliseconds: 220));
     }
-    SmartDialog.showToast("已打开 ${rooms.length} 个独立 TV-Windows 直播窗口");
+    SmartDialog.showToast("已打开 ${rooms.length} 个独立直播窗口");
     return true;
   }
 
