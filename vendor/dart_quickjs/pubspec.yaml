@@ -1,0 +1,19 @@
+name: dart_quickjs
+description: QuickJS-ng JavaScript engine bindings for Dart/Flutter.
+version: 1.0.0
+repository: https://github.com/xiaoyaocz/dart_quickjs
+publish_to: none
+
+environment:
+  # 【本地化改造】原为 ^3.10.0 (native assets 要求)。为兼容旧 Flutter (支持安卓6) 放宽。
+  # quickjs_bindings.g.dart 已改为直接加载预编译 libquickjs.so, 不再需要 native assets。
+  sdk: '>=3.1.0'
+
+# Add regular dependencies here.
+dependencies:
+  ffi: ^2.1.0
+  logging: ^1.2.0
+
+dev_dependencies:
+  lints: ^3.0.0
+  test: ^1.24.0
