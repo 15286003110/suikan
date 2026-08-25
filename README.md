@@ -50,9 +50,9 @@ TV 版改动最大，主要针对小米盒子等安卓 6 设备：
 ---
 
 <p align="center">
-    <img width="128" src="/assets/logo.png" alt="Simple Live logo">
+    <img width="128" src="/assets/logo.png" alt="随看 logo">
 </p>
-<h2 align="center">Simple Live</h2>
+<h2 align="center">随看</h2>
 
 <p align="center">
 简简单单的看直播
@@ -69,7 +69,7 @@ TV 版改动最大，主要针对小米盒子等安卓 6 设备：
 
 ## 支持项目
 
-Simple Live 会继续保持开源和免费使用。赞助费用主要用于同步服务、域名和构建测试等维护开销。
+随看 会继续保持开源和免费使用。赞助费用主要用于同步服务、域名和构建测试等维护开销。
 
 更多社区反馈与赞助鸣谢见 [THANKS.md](/THANKS.md)。
 
