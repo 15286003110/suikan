@@ -16,7 +16,7 @@
 
 ## 平台
 
-- **手机版**：随看（Android / iOS）
+- **手机 / iOS**：随看
 - **Windows**：随看
 - **TV**：随看（兼容 Android 6 / arm32）
 
