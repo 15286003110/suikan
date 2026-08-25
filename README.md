@@ -14,6 +14,10 @@
 
 ---
 
+<p align="center">
+  <img src="assets/banner.png" alt="随看 Suikan" width="100%">
+</p>
+
 ## 平台
 
 - **手机 / iOS**：随看
