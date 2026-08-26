@@ -25,23 +25,37 @@ jobs:
         id: version
         shell: bash
         run: |
-          ver=$(grep '^version:' simple_live_app/pubspec.yaml | awk '{print $2}' | cut -d+ -f1)
+          ver=$(grep '^version:' suikan_app/pubspec.yaml | awk '{print $2}' | cut -d+ -f1)
           echo "APP_VERSION=$ver" >> "$GITHUB_ENV"
           echo "version=$ver" >> "$GITHUB_OUTPUT"
           echo "using version: $ver"
 
       - name: pub get
-        working-directory: simple_live_app
+        working-directory: suikan_app
         run: flutter pub get
 
       - name: Build Windows release
-        working-directory: simple_live_app
+        working-directory: suikan_app
         run: flutter build windows --release
+
+      - name: Copy dart_quickjs.dll to Release
+        shell: bash
+        run: |
+          cd suikan_app
+          DQJ=$(find build -name "dart_quickjs.dll" 2>/dev/null | head -1)
+          if [ -n "$DQJ" ]; then
+            cp "$DQJ" build/windows/x64/runner/Release/
+            echo "dart_quickjs.dll 已复制: $(ls -la build/windows/x64/runner/Release/dart_quickjs.dll)"
+          else
+            echo "!! 未找到 dart_quickjs.dll"
+            exit 1
+          fi
 
       - name: Package ZIP
         shell: bash
         run: |
-          cd simple_live_app/build/windows/x64/runner/Release
+          cd suikan_app/build/windows/x64/runner/Release
+          ls dart_quickjs.dll && echo "✓ zip 将包含 dart_quickjs.dll"
           powershell -Command "Compress-Archive -Path * -DestinationPath 'Suikan_WIN_${{ steps.version.outputs.version }}.zip' -Force"
           ls -la Suikan_WIN_${{ steps.version.outputs.version }}.zip
 
@@ -49,4 +63,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Suikan-WIN
-          path: simple_live_app/build/windows/x64/runner/Release/Suikan_WIN_*.zip
+          path: suikan_app/build/windows/x64/runner/Release/Suikan_WIN_*.zip
