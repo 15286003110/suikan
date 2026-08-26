@@ -23,7 +23,7 @@ class LiveRoomPage extends GetView<LiveRoomController> {
           requestExitPlayer();
         }
       },
-      child: KeyboardListener(
+      child: Focus(
         focusNode: controller.focusNode,
         autofocus: true,
         onKeyEvent: onKeyEvent,
@@ -37,9 +37,11 @@ class LiveRoomPage extends GetView<LiveRoomController> {
     );
   }
 
-  void onKeyEvent(KeyEvent key) {
+  /// 返回 KeyEventResult.handled 表示已消费该键, 阻止 Flutter 默认行为与
+  /// 原生 backChannel 再次触发, 解决"按一下返回顶两下"的问题。
+  KeyEventResult onKeyEvent(FocusNode node, KeyEvent key) {
     if (key is KeyUpEvent) {
-      return;
+      return KeyEventResult.ignored;
     }
     Log.logPrint(key);
 
@@ -47,8 +49,13 @@ class LiveRoomPage extends GetView<LiveRoomController> {
         key.logicalKey == LogicalKeyboardKey.backspace ||
         key.logicalKey == LogicalKeyboardKey.goBack ||
         key.logicalKey == LogicalKeyboardKey.browserBack) {
+      // 直播间内弹出菜单(设置/关注用户等 Get.dialog)打开时, 返回键先关闭菜单
+      if (Get.isDialogOpen == true || Get.isBottomSheetOpen == true) {
+        Get.back();
+        return KeyEventResult.handled;
+      }
       requestExitPlayer();
-      return;
+      return KeyEventResult.handled;
     }
     // 点击OK、Enter、Select键时显示/隐藏控制器
     if (key.logicalKey == LogicalKeyboardKey.select ||
@@ -59,24 +66,24 @@ class LiveRoomPage extends GetView<LiveRoomController> {
       } else {
         controller.hideControls();
       }
-      return;
+      return KeyEventResult.handled;
     }
 
     if (controller.handleKeyboardShortcut(key.logicalKey)) {
-      return;
+      return KeyEventResult.handled;
     }
 
     // 点击Menu打开/关闭设置
     if (key.logicalKey == LogicalKeyboardKey.contextMenu ||
         key.logicalKey == LogicalKeyboardKey.arrowRight) {
       showPlayerSettings(controller);
-      return;
+      return KeyEventResult.handled;
     }
 
     // 点击左键显示关注用户
     if (key.logicalKey == LogicalKeyboardKey.arrowLeft) {
       showFollowUser(controller);
-      return;
+      return KeyEventResult.handled;
     }
 
     // // 点击右键关注/取消关注
@@ -93,14 +100,15 @@ class LiveRoomPage extends GetView<LiveRoomController> {
     // 点击上键切换上一个直播
     if (key.logicalKey == LogicalKeyboardKey.arrowUp) {
       controller.prevChannel();
-      return;
+      return KeyEventResult.handled;
     }
 
     // 点击下键切换下一个直播
     if (key.logicalKey == LogicalKeyboardKey.arrowDown) {
       controller.nextChannel();
-      return;
+      return KeyEventResult.handled;
     }
+    return KeyEventResult.ignored;
   }
 
   void requestExitPlayer() {

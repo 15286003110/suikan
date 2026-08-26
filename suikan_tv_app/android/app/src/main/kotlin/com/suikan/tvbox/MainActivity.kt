@@ -101,17 +101,31 @@ class MainActivity : FlutterActivity() {
         emitWindowState()
     }
 
-    override fun onBackPressed() {
-        Log.d(TAG, "onBackPressed, send to Flutter")
+    // 【返回键防重】onKeyDown 与 onBackPressed 都可能触发(不同 ROM),
+    // 且 Flutter 层 KeyboardListener 已消费部分返回键, 这里 400ms 内只向
+    // Flutter 发一次 backPressed, 避免"按一下顶两下"(双击逻辑被双触发).
+    private var lastBackAt = 0L
+
+    private fun notifyBackPressed(source: String) {
+        val now = System.currentTimeMillis()
+        if (now - lastBackAt < 400) {
+            Log.d(TAG, "back[$source] suppressed (debounce)")
+            return
+        }
+        lastBackAt = now
+        Log.d(TAG, "back[$source], send to Flutter")
         backChannel?.invokeMethod("backPressed", null)
+    }
+
+    override fun onBackPressed() {
+        notifyBackPressed("onBackPressed")
         // 不调用 super，阻止 Activity 被 finish。退出由 Flutter 弹确认框后决定。
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
         // 备用拦截：部分 TV/遥控器系统可能走 onKeyDown 而不是 onBackPressed。
         if (keyCode == KeyEvent.KEYCODE_BACK || keyCode == KeyEvent.KEYCODE_ESCAPE) {
-            Log.d(TAG, "onKeyDown BACK, send to Flutter")
-            backChannel?.invokeMethod("backPressed", null)
+            notifyBackPressed("onKeyDown")
             return true
         }
         return super.onKeyDown(keyCode, event)
