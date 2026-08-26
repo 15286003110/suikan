@@ -104,6 +104,11 @@ class LiveRoomPage extends GetView<LiveRoomController> {
   }
 
   void requestExitPlayer() {
+    // 直播间内弹出菜单(设置/关注用户等 Get.dialog)打开时, 返回键先关闭菜单, 不触发退出
+    if (Get.isDialogOpen == true || Get.isBottomSheetOpen == true) {
+      Get.back();
+      return;
+    }
     // 双击返回键退出：第一次只提示，第二次才退出。
     if (controller.doubleClickExit) {
       controller.doubleClickTimer?.cancel();

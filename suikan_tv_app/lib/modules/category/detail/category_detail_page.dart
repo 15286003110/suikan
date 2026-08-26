@@ -30,7 +30,7 @@ class CategoryDetailPage extends GetView<CategoryDetailController> {
                 focusNode: AppFocusNode(),
                 iconData: Icons.arrow_back,
                 text: "返回",
-                autofocus: true,
+                //autofocus: true, // 焦点默认给内容区, 与热门直播保持一致
                 onTap: () {
                   Get.back();
                 },

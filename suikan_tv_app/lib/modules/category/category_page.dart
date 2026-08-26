@@ -28,7 +28,7 @@ class CategoryPage extends GetView<CategoryController> {
                 focusNode: AppFocusNode(),
                 iconData: Icons.arrow_back,
                 text: "返回",
-                autofocus: true,
+                //autofocus: true, // 焦点默认给下方列表, 与热门直播保持一致
                 onTap: () {
                   Get.back();
                 },
@@ -101,6 +101,19 @@ class CategoryPage extends GetView<CategoryController> {
                 controller: controller.scrollController,
                 itemBuilder: (_, i) {
                   var item = controller.list[i];
+                  // 进入页面/切换平台后, 焦点默认落到第一个分类的第一个子类目(下方列表),
+                  // 而不是左上角返回键 (与热门直播行为一致)
+                  if (i == 0) {
+                    Future.delayed(Duration.zero, () {
+                      if (controller.currentPage == 2) {
+                        final subs =
+                            item.showAll.value ? item.childrenExt : item.take15;
+                        if (subs.isNotEmpty) {
+                          subs.first.focusNode.requestFocus();
+                        }
+                      }
+                    });
+                  }
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
