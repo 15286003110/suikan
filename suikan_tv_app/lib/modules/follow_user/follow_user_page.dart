@@ -56,14 +56,31 @@ class _FollowUserPageState extends State<FollowUserPage> {
     return _focusNodes.putIfAbsent(key, AppFocusNode.new);
   }
 
-  _TvFollowLayoutSpec _layoutSpec() {
+  /// 自适应列数: 保证每列宽度能完整显示直播间文字信息的前提下, 尽量多列。
+  /// [availableWidth] = 列表可用宽度(设计稿单位, 1920 基准)。
+  _TvFollowLayoutSpec _layoutSpec(double availableWidth) {
     final style = AppSettingsController.instance.followDisplayStyle.value;
     final showLiveCover =
         AppSettingsController.instance.followShowLiveCover.value;
+    // 各样式"保证文字完整"所需的最小列宽(设计稿 .w):
+    // compact: 名字 24.w 单行 + 平台徽章行, 文字区需约 300.w
+    // defaultList: 标题 28.w 单行 + 副标题 22.w, 文字区需约 330.w
+    // card: 卡片风, 需要更宽观感
+    final double minColumnWidth;
+    if (style == "compact") {
+      minColumnWidth = 540.w;
+    } else if (style == "card") {
+      minColumnWidth = 860.w;
+    } else {
+      minColumnWidth = 590.w;
+    }
+    final count = (availableWidth / minColumnWidth)
+        .floor()
+        .clamp(1, 12); // 屏幕越宽列越多, 但每列不小于 minColumnWidth
     if (style == "compact") {
       return _TvFollowLayoutSpec(
         displayStyle: AnchorCardDisplayStyle.compact,
-        crossAxisCount: 4,
+        crossAxisCount: count,
         mainAxisExtent: showLiveCover ? 178.w : 118.w,
         mainAxisSpacing: showLiveCover ? 20.w : 16.w,
         crossAxisSpacing: 24.w,
@@ -72,7 +89,7 @@ class _FollowUserPageState extends State<FollowUserPage> {
     if (style == "card") {
       return _TvFollowLayoutSpec(
         displayStyle: AnchorCardDisplayStyle.card,
-        crossAxisCount: 2,
+        crossAxisCount: count,
         mainAxisExtent: showLiveCover ? 300.w : 250.w,
         mainAxisSpacing: 24.w,
         crossAxisSpacing: 28.w,
@@ -80,7 +97,7 @@ class _FollowUserPageState extends State<FollowUserPage> {
     }
     return _TvFollowLayoutSpec(
       displayStyle: AnchorCardDisplayStyle.defaultList,
-      crossAxisCount: 3,
+      crossAxisCount: count,
       mainAxisExtent: showLiveCover ? 210.w : 140.w,
       mainAxisSpacing: showLiveCover ? 24.w : 18.w,
       crossAxisSpacing: 28.w,
@@ -92,7 +109,8 @@ class _FollowUserPageState extends State<FollowUserPage> {
     if (currentKey.isEmpty) {
       return;
     }
-    final layout = _layoutSpec();
+    final layout =
+        _layoutSpec(MediaQuery.sizeOf(Get.context!).width - 96.w);
     final index = FollowUserService.instance.list
         .indexWhere((item) => "${item.siteId}_${item.roomId}" == currentKey);
     if (index < 0) {
@@ -190,7 +208,8 @@ class _FollowUserPageState extends State<FollowUserPage> {
               child: Stack(
                 children: [
                   Obx(() {
-                    final layout = _layoutSpec();
+                    final layout =
+                        _layoutSpec(MediaQuery.sizeOf(context).width - 96.w);
                     final items = FollowUserService.instance.list;
                     if (AppSettingsController
                         .instance.followShowLiveCover.value) {
