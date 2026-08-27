@@ -38,6 +38,9 @@ class Sites {
 
   static List<Site> get supportSites {
     return AppSettingsController.instance.siteSort
+        .where(
+          (key) => allSites.containsKey(key) && !key.startsWith('custom_'),
+        )
         .map((key) => allSites[key]!)
         .toList();
   }

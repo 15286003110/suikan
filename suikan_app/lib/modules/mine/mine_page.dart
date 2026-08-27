@@ -10,6 +10,7 @@ import 'package:simple_live_app/app/utils.dart';
 import 'package:simple_live_app/routes/app_navigation.dart';
 import 'package:simple_live_app/routes/route_path.dart';
 import 'package:simple_live_app/services/signalr_service.dart';
+import 'package:simple_live_app/modules/settings/custom_source/custom_source_list_page.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 
 class MinePage extends StatelessWidget {
@@ -122,6 +123,23 @@ class MinePage extends StatelessWidget {
               ),
               onTap: () {
                 Get.toNamed(RoutePath.kTools);
+              },
+            ),
+            Divider(
+              indent: 12,
+              endIndent: 12,
+              color: Colors.grey.withAlpha(25),
+            ),
+            ListTile(
+              leading: const Icon(Icons.playlist_play),
+              title: const Text("自定义直播源"),
+              subtitle: const Text("导入 M3U 直播源，自由观看"),
+              trailing: const Icon(
+                Icons.chevron_right,
+                color: Colors.grey,
+              ),
+              onTap: () {
+                Get.to(() => const CustomSourceListPage());
               },
             ),
             Divider(
