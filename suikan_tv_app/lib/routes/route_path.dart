@@ -9,9 +9,7 @@ class RoutePath {
   /// 数据同步
   static const kSync = "/sync";
 
-  static const kWebDAV = "/sync/webdav";
 
-  static const kWebDAVConfig = "/sync/webdav/config";
 
   /// 搜索房间
   static const kSearchRoom = "/search/room";

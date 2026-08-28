@@ -8,6 +8,7 @@ class LocalStorageService extends GetxService {
   static const String kFirstRun = "FirstRun";
   static const String kPlayerScaleMode = "ScaleMode";
   static const String kSiteSort = "SiteSort";
+  static const String kHiddenSites = "HiddenSites";
   static const String kHomeSort = "HomeSort";
   static const String kLiveRoomTabSort = "LiveRoomTabSort";
   static const String kLiveRoomQuickAccessSort = "LiveRoomQuickAccessSort";
@@ -127,24 +128,14 @@ class LocalStorageService extends GetxService {
   static const String kWebDAVUri = "WebDAVUri";
   static const String kWebDAVUser = "WebDAVUser";
   static const String kWebDAVPassword = "kWebDAVPassword";
+  static const String kWebDAVRemotePath = "kWebDAVRemotePath";
+  static const String kWebDAVLastModified = "kWebDAVLastModified";
+  static const String kBrowseSiteOrder = "kBrowseSiteOrder";
+  static const String kFnOsSort = "kFnOsSort";
   static const String kWebDAVLastUploadTime = "kWebDAVLastUploadTime";
   static const String kWebDAVLastRecoverTime = "kWebDAVLastRecoverTime";
   static const String kSyncServerUrl = "SyncServerUrl";
   static const String kSyncProxyUrl = "SyncProxyUrl";
-  static const String kLiveSubtitleEnable = "LiveSubtitleEnable";
-  static const String kLiveSubtitleModelPath = "LiveSubtitleModelPath";
-  static const String kLiveSubtitleLanguage = "LiveSubtitleLanguage";
-  static const String kLiveSubtitleFontSize = "LiveSubtitleFontSize";
-  static const String kLiveSubtitlePosition = "LiveSubtitlePosition";
-  static const String kLiveSubtitleOffsetX = "LiveSubtitleOffsetX";
-  static const String kLiveSubtitleOffsetY = "LiveSubtitleOffsetY";
-  static const String kLiveSubtitleColor = "LiveSubtitleColor";
-  static const String kLiveSubtitleFontWeight = "LiveSubtitleFontWeight";
-  static const String kLiveSubtitleBackgroundEnable =
-      "LiveSubtitleBackgroundEnable";
-  static const String kLiveSubtitlePositionLocked =
-      "LiveSubtitlePositionLocked";
-  static const String kLiveSubtitleStartupGuard = "LiveSubtitleStartupGuard";
 
   late Box settingsBox;
   late Box<String> shieldBox;

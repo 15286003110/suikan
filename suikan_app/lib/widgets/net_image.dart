@@ -15,6 +15,7 @@ class NetImage extends StatelessWidget {
   final String? imageCacheName;
   final Duration? cacheMaxAge;
   final bool cache;
+  final Map<String, String>? httpHeaders;
   const NetImage(this.picUrl,
       {this.width,
       this.height,
@@ -26,6 +27,7 @@ class NetImage extends StatelessWidget {
       this.imageCacheName,
       this.cacheMaxAge,
       this.cache = true,
+      this.httpHeaders,
       Key? key})
       : super(key: key);
 
@@ -68,6 +70,7 @@ class NetImage extends StatelessWidget {
         clearMemoryCacheWhenDispose: clearMemoryCacheWhenDispose,
         imageCacheName: imageCacheName,
         cacheMaxAge: cacheMaxAge,
+        headers: httpHeaders,
         loadStateChanged: (e) {
           if (e.extendedImageLoadState == LoadState.loading) {
             return const Icon(

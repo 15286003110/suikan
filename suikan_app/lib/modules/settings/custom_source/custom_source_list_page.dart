@@ -18,60 +18,20 @@ class CustomSourceListPage extends StatelessWidget {
   }
 
   Future<void> _showAddDialog(BuildContext context) async {
-    final nameCtl = TextEditingController();
-    final urlCtl = TextEditingController();
     final result = await Get.dialog<bool>(
-      AlertDialog(
-        title: const Text('添加直播源'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameCtl,
-              decoration: const InputDecoration(
-                labelText: '名称（选填）',
-                hintText: '例如：我的IPTV',
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: urlCtl,
-              decoration: const InputDecoration(
-                labelText: 'M3U 地址',
-                hintText: 'http://.../xxx.m3u',
-              ),
-              keyboardType: TextInputType.url,
-              autocorrect: false,
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Get.back(result: false),
-            child: const Text('取消'),
-          ),
-          TextButton(
-            onPressed: () => Get.back(result: true),
-            child: const Text('添加'),
-          ),
-        ],
-      ),
+      const CustomSourceEditDialog(),
     );
-    if (result != true) return;
-    final url = urlCtl.text.trim();
-    if (url.isEmpty) {
-      SmartDialog.showToast('请填写 M3U 地址');
-      return;
-    }
-    final name = nameCtl.text.trim().isEmpty ? url : nameCtl.text.trim();
-    SmartDialog.showLoading(msg: '正在拉取直播源…');
-    try {
-      await CustomSourceService.instance.addSource(name: name, url: url);
-      SmartDialog.dismiss();
+    if (result == true) {
       SmartDialog.showToast('添加成功');
-    } catch (e) {
-      SmartDialog.dismiss();
-      SmartDialog.showToast('拉取失败：$e');
+    }
+  }
+
+  Future<void> _edit(M3uSource src) async {
+    final result = await Get.dialog<bool>(
+      CustomSourceEditDialog(source: src),
+    );
+    if (result == true) {
+      SmartDialog.showToast('已保存');
     }
   }
 
@@ -110,10 +70,40 @@ class CustomSourceListPage extends StatelessWidget {
     }
   }
 
+  Future<void> _refreshAll() async {
+    final list = CustomSourceService.instance.sources;
+    if (list.isEmpty) {
+      SmartDialog.showToast('暂无直播源');
+      return;
+    }
+    SmartDialog.showLoading(msg: '正在刷新全部直播源…');
+    var ok = 0;
+    var fail = 0;
+    for (final src in list) {
+      try {
+        await CustomSourceService.instance.refreshSource(src.id);
+        ok++;
+      } catch (_) {
+        fail++;
+      }
+    }
+    SmartDialog.dismiss();
+    SmartDialog.showToast(fail == 0 ? '已刷新 $ok 个直播源' : '刷新完成：成功 $ok，失败 $fail');
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('自定义直播源')),
+      appBar: AppBar(
+        title: const Text('自定义直播源'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: '刷新全部直播源',
+            onPressed: _refreshAll,
+          ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _showAddDialog(context),
         tooltip: '添加直播源',
@@ -140,12 +130,18 @@ class CustomSourceListPage extends StatelessWidget {
                 leading: const Icon(Icons.playlist_play),
                 title: Text(src.name.isEmpty ? src.url : src.name),
                 subtitle: Text(
-                  '${src.groupCountText}\n更新于 ${_formatTime(src.lastUpdated)}',
+                  '${src.groupCountText}\n更新于 ${_formatTime(src.lastUpdated)}'
+                  '${src.autoRefresh ? ' · 自动刷新' : ''}',
                 ),
                 isThreeLine: true,
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    IconButton(
+                      icon: const Icon(Icons.edit_outlined),
+                      tooltip: '编辑',
+                      onPressed: () => _edit(src),
+                    ),
                     IconButton(
                       icon: const Icon(Icons.refresh),
                       tooltip: '刷新',
@@ -164,6 +160,187 @@ class CustomSourceListPage extends StatelessWidget {
           );
         },
       ),
+    );
+  }
+}
+
+/// 添加/编辑直播源对话框：含名称、M3U 地址与自动刷新规则。
+class CustomSourceEditDialog extends StatefulWidget {
+  final M3uSource? source; // 为 null 表示新增
+  const CustomSourceEditDialog({Key? key, this.source}) : super(key: key);
+
+  @override
+  State<CustomSourceEditDialog> createState() => _CustomSourceEditDialogState();
+}
+
+class _CustomSourceEditDialogState extends State<CustomSourceEditDialog> {
+  final nameCtl = TextEditingController();
+  final urlCtl = TextEditingController();
+  final intervalCtl = TextEditingController(text: '6');
+  final hourCtl = TextEditingController(text: '4');
+
+  bool autoRefresh = false;
+  String refreshMode = kRefreshModeInterval;
+
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final s = widget.source;
+    if (s != null) {
+      nameCtl.text = s.name;
+      urlCtl.text = s.url;
+      autoRefresh = s.autoRefresh;
+      refreshMode = s.refreshMode;
+      intervalCtl.text = s.refreshIntervalHours.toString();
+      hourCtl.text = s.refreshHour.toString();
+    }
+  }
+
+  Future<void> _save() async {
+    final url = urlCtl.text.trim();
+    if (url.isEmpty) {
+      SmartDialog.showToast('请填写 M3U 地址');
+      return;
+    }
+    final name = nameCtl.text.trim().isEmpty ? url : nameCtl.text.trim();
+    final interval = int.tryParse(intervalCtl.text.trim()) ?? 6;
+    final hour = (int.tryParse(hourCtl.text.trim()) ?? 4).clamp(0, 23);
+    if (autoRefresh && refreshMode == kRefreshModeDaily && hour < 0) {
+      SmartDialog.showToast('小时需在 0-23 之间');
+      return;
+    }
+    setState(() => _saving = true);
+    SmartDialog.showLoading(msg: widget.source == null ? '正在拉取直播源…' : '正在保存…');
+    try {
+      if (widget.source == null) {
+        final src = await CustomSourceService.instance
+            .addSource(name: name, url: url);
+        await CustomSourceService.instance.setRefreshRule(
+          src.id,
+          autoRefresh: autoRefresh,
+          refreshMode: refreshMode,
+          refreshIntervalHours: interval,
+          refreshHour: hour,
+        );
+      } else {
+        await CustomSourceService.instance.updateSource(
+          widget.source!.id,
+          name: name,
+          url: url,
+        );
+        await CustomSourceService.instance.setRefreshRule(
+          widget.source!.id,
+          autoRefresh: autoRefresh,
+          refreshMode: refreshMode,
+          refreshIntervalHours: interval,
+          refreshHour: hour,
+        );
+      }
+      SmartDialog.dismiss();
+      Get.back(result: true);
+    } catch (e) {
+      SmartDialog.dismiss();
+      SmartDialog.showToast('保存失败：$e');
+      setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return AlertDialog(
+      title: Text(widget.source == null ? '添加直播源' : '编辑直播源'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(
+              controller: nameCtl,
+              decoration: const InputDecoration(
+                labelText: '名称（选填）',
+                hintText: '例如：我的IPTV',
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: urlCtl,
+              decoration: const InputDecoration(
+                labelText: 'M3U 地址',
+                hintText: 'http://.../xxx.m3u',
+              ),
+              keyboardType: TextInputType.url,
+              autocorrect: false,
+            ),
+            const SizedBox(height: 16),
+            const Divider(height: 1),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '自动刷新',
+                    style: theme.textTheme.titleSmall,
+                  ),
+                ),
+                Switch(
+                  value: autoRefresh,
+                  onChanged: (v) => setState(() => autoRefresh = v),
+                ),
+              ],
+            ),
+            if (autoRefresh) ...[
+              const SizedBox(height: 8),
+              SegmentedButton<String>(
+                segments: const [
+                  ButtonSegment(
+                    value: kRefreshModeInterval,
+                    label: Text('每隔 N 小时'),
+                  ),
+                  ButtonSegment(
+                    value: kRefreshModeDaily,
+                    label: Text('每天指定时间'),
+                  ),
+                ],
+                selected: {refreshMode},
+                onSelectionChanged: (s) =>
+                    setState(() => refreshMode = s.first),
+              ),
+              const SizedBox(height: 12),
+              if (refreshMode == kRefreshModeInterval)
+                TextField(
+                  controller: intervalCtl,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: '刷新间隔（小时）',
+                    hintText: '例如 6',
+                  ),
+                )
+              else
+                TextField(
+                  controller: hourCtl,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: '每天刷新时间（0-23 点）',
+                    hintText: '例如 4',
+                  ),
+                ),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _saving ? null : () => Get.back(result: false),
+          child: const Text('取消'),
+        ),
+        TextButton(
+          onPressed: _saving ? null : _save,
+          child: const Text('保存'),
+        ),
+      ],
     );
   }
 }

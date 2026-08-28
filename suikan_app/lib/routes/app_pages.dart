@@ -14,12 +14,7 @@ import 'package:simple_live_app/modules/multi_room/multi_room_page.dart';
 import 'package:simple_live_app/modules/settings/follow_settings_page.dart';
 import 'package:simple_live_app/modules/sync/profile_backup/profile_backup_controller.dart';
 import 'package:simple_live_app/modules/sync/profile_backup/profile_backup_page.dart';
-import 'package:simple_live_app/modules/sync/remote_sync/webdav/remote_sync_webdav_config_page.dart';
-import 'package:simple_live_app/modules/sync/remote_sync/webdav/remote_sync_webdav_controller.dart';
-import 'package:simple_live_app/modules/sync/remote_sync/webdav/remote_sync_webdav_page.dart';
 import 'package:simple_live_app/modules/sync/sync_page.dart';
-import 'package:simple_live_app/modules/sync/remote_sync/room/remote_sync_room_controller.dart';
-import 'package:simple_live_app/modules/sync/remote_sync/room/remote_sync_room_page.dart';
 import 'package:simple_live_app/modules/search/search_controller.dart';
 import 'package:simple_live_app/modules/search/search_page.dart';
 import 'package:simple_live_app/modules/sync/local_sync/device/sync_device_controller.dart';
@@ -135,10 +130,13 @@ class AppPages {
         final site = args is Map<String, dynamic> ? args["site"] : args;
         final initialCollapsed = args is Map<String, dynamic> &&
             args["initialDesktopSidePanelCollapsed"] == true;
+        final isVod =
+            args is Map<String, dynamic> && args["isVod"] == true;
         return LiveRoomController(
           pSite: site,
           pRoomId: Get.parameters["roomId"] ?? "",
           initialDesktopSidePanelCollapsed: initialCollapsed,
+          isVod: isVod,
         );
       }),
     ),
@@ -293,31 +291,6 @@ class AppPages {
           ),
         ),
       ],
-    ),
-    //远程同步-房间
-    GetPage(
-      name: RoutePath.kRemoteSyncRoom,
-      page: () => const RemoteSyncRoomPage(),
-      bindings: [
-        BindingsBuilder.put(
-          () => RemoteSyncRoomController(Get.arguments ?? ""),
-        ),
-      ],
-    ),
-    //远程同步-WebDAV
-    GetPage(
-      name: RoutePath.kRemoteSyncWebDav,
-      page: () => const RemoteSyncWebDAVPage(),
-      bindings: [
-        BindingsBuilder.put(
-          () => RemoteSyncWebDAVController(),
-        ),
-      ],
-    ),
-    //远程同步-WebDAVConfig
-    GetPage(
-      name: RoutePath.kRemoteSyncWebDavConfig,
-      page: () => const RemoteSyncWebDAVConfigPage(),
     ),
     //其他设置
     GetPage(

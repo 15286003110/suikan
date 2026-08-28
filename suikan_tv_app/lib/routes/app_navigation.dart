@@ -13,7 +13,9 @@ import 'package:simple_live_tv_app/services/bilibili_account_service.dart';
 class AppNavigator {
   /// 跳转至直播间
   static void toLiveRoomDetail(
-      {required Site site, required String roomId}) async {
+      {required Site site,
+      required String roomId,
+      bool isVod = false}) async {
     if (site.id == Constant.kBiliBili &&
         !BiliBiliAccountService.instance.logined.value &&
         AppSettingsController.instance.bilibiliLoginTip.value) {
@@ -26,6 +28,7 @@ class AppNavigator {
 
     Get.toNamed(RoutePath.kLiveRoomDetail, arguments: site, parameters: {
       "roomId": roomId,
+      "isVod": isVod.toString(),
     });
   }
 

@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
+import 'package:hive/hive.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:remixicon/remixicon.dart';
 import 'package:simple_live_app/app/app_style.dart';
@@ -20,11 +21,18 @@ typedef TextValidate = bool Function(String text);
 class Utils {
   static late PackageInfo packageInfo;
 
-  /// 优雅退出（规避 Windows 退出时 @image#1:Clipboard_Screenshot.png 错误和
-  /// flutter_inappwebview_windows 的 atexit/dcomp 硬崩溃）
+  /// 优雅退出（规避 Windows 退出时 flutter_inappwebview_windows 的 atexit/dcomp 硬崩溃）
   /// Windows 下 ExitProcess 会走 LdrShutdownProcess 卸载 DLL 触发 FailFast，
   /// 用 TerminateProcess 直接杀进程（不执行 DLL 卸载/atexit），绕过崩溃。
-  static void closeAppGracefully() {
+  /// ⚠️ 2026-08-28 修复：TerminateProcess 之前必须先刷盘并关闭 Hive，
+  ///    否则观看记录等箱文件会留下撕裂写入 → 下次启动读损坏文件卡死（历史两次事故根因）。
+  static Future<void> closeAppGracefully() async {
+    try {
+      await Log.flushWriter();
+    } catch (_) {}
+    try {
+      await Hive.close();
+    } catch (_) {}
     if (Platform.isWindows) {
       final kernel32 = ffi.DynamicLibrary.open('kernel32.dll');
       final terminateProcess = kernel32.lookupFunction<

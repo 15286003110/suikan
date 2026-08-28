@@ -60,6 +60,7 @@ class AppNavigator {
     required Site site,
     required String roomId,
     bool initialDesktopSidePanelCollapsed = false,
+    bool isVod = false,
   }) async {
     final roomKey = "${site.id}_$roomId";
     final lastOpenAt = _lastLiveRoomOpenAt[roomKey];
@@ -100,6 +101,7 @@ class AppNavigator {
       arguments: {
         "site": site,
         "initialDesktopSidePanelCollapsed": initialDesktopSidePanelCollapsed,
+        "isVod": isVod,
       },
       parameters: {
         "roomId": roomId,

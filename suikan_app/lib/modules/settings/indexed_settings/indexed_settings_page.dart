@@ -49,7 +49,44 @@ class IndexedSettingsPage extends GetView<IndexedSettingsController> {
           Padding(
             padding: AppStyle.edgeInsetsA12.copyWith(top: 24),
             child: Text(
-              "平台排序 (长按拖动排序，重启后生效)",
+              "隐藏平台 (关闭后首页/分类不再显示，立即生效)",
+              style: Get.textTheme.titleSmall,
+            ),
+          ),
+          SettingsCard(
+            child: Obx(
+              () => Column(
+                children: Sites.allSites.values
+                    .map((site) {
+                  final hidden = controller.hiddenSites.contains(site.id);
+                  return SwitchListTile(
+                    key: ValueKey(site.id),
+                    visualDensity: VisualDensity.compact,
+                    secondary: Image.asset(
+                      site.logo,
+                      width: 24,
+                      height: 24,
+                    ),
+                    title: Text(site.name),
+                    value: !hidden,
+                    onChanged: (show) {
+                      final ok = controller.toggleHiddenSite(
+                        site.id,
+                        !show,
+                      );
+                      if (!ok) {
+                        Get.snackbar("提示", "至少需要保留一个平台显示");
+                      }
+                    },
+                  );
+                }).toList(),
+              ),
+            ),
+          ),
+          Padding(
+            padding: AppStyle.edgeInsetsA12.copyWith(top: 24),
+            child: Text(
+              "平台排序 (长按拖动排序，立即生效；含自定义直播源与影视库)",
               style: Get.textTheme.titleSmall,
             ),
           ),
@@ -59,22 +96,39 @@ class IndexedSettingsPage extends GetView<IndexedSettingsController> {
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 onReorder: controller.updateSiteSort,
-                children: controller.siteSort.map(
-                  (key) {
-                    var e = Sites.allSites[key]!;
+                children: controller.effectiveBrowseSiteOrder.map((key) {
+                  final site = Sites.allSites[key];
+                  if (site == null) {
+                    // 自定义源 / 影视库站点
+                    final name = key.startsWith('custom_')
+                        ? '自定义直播源'
+                        : key.startsWith('fnos_')
+                            ? '飞牛影视'
+                            : key;
                     return ListTile(
-                      key: ValueKey(e.id),
+                      key: ValueKey(key),
                       visualDensity: VisualDensity.compact,
-                      title: Text(e.name),
+                      title: Text(name),
                       leading: Image.asset(
-                        e.logo,
+                        'assets/images/logo.png',
                         width: 24,
                         height: 24,
                       ),
                       trailing: const Icon(Icons.drag_handle),
                     );
-                  },
-                ).toList(),
+                  }
+                  return ListTile(
+                    key: ValueKey(site.id),
+                    visualDensity: VisualDensity.compact,
+                    title: Text(site.name),
+                    leading: Image.asset(
+                      site.logo,
+                      width: 24,
+                      height: 24,
+                    ),
+                    trailing: const Icon(Icons.drag_handle),
+                  );
+                }).toList(),
               ),
             ),
           ),

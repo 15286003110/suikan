@@ -30,7 +30,8 @@ class ProfileBackupPage extends GetView<ProfileBackupController> {
                 ListTile(
                   leading: const Icon(Remix.download_2_line),
                   title: const Text("导出配置包"),
-                  subtitle: const Text("包含设置、关注、历史、屏蔽词、屏蔽用户和预设"),
+                  subtitle: const Text(
+                      "包含设置、关注、历史、屏蔽、自定义直播源与影视库、账号"),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: controller.exportProfile,
                 ),
@@ -38,7 +39,7 @@ class ProfileBackupPage extends GetView<ProfileBackupController> {
                 ListTile(
                   leading: const Icon(Remix.upload_2_line),
                   title: const Text("导入配置包"),
-                  subtitle: const Text("支持合并或覆盖，不导入 WebDAV 密码"),
+                  subtitle: const Text("支持合并或覆盖导入"),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: controller.importProfile,
                 ),

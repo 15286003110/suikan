@@ -5,7 +5,9 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Intent
+import android.content.Context
 import android.content.res.Configuration
+import android.net.wifi.WifiManager
 import android.os.Build
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -14,6 +16,7 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : FlutterActivity() {
     private var appWindowChannel: MethodChannel? = null
     private var lastWindowState: Map<String, Any>? = null
+    private var multicastLock: WifiManager.MulticastLock? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -72,6 +75,25 @@ class MainActivity : FlutterActivity() {
                         title = call.argument<String>("title") ?: "特别关注开播了",
                         body = call.argument<String>("body") ?: "点击回到 随看",
                     )
+                    result.success(null)
+                }
+
+                else -> result.notImplemented()
+            }
+        }
+
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "simple_live/dlna",
+        ).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "acquireMulticastLock" -> {
+                    acquireMulticastLock()
+                    result.success(null)
+                }
+
+                "releaseMulticastLock" -> {
+                    releaseMulticastLock()
                     result.success(null)
                 }
 
@@ -177,6 +199,30 @@ class MainActivity : FlutterActivity() {
             return constrainedOnBothAxes
         }
         return false
+    }
+
+    private fun acquireMulticastLock() {
+        try {
+            val wifi =
+                applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
+            if (wifi != null) {
+                multicastLock = wifi.createMulticastLock("suikan_dlna").also {
+                    it.setReferenceCounted(false)
+                    it.acquire()
+                }
+            }
+        } catch (_: Throwable) {
+            // 忽略：缺少权限或系统不支持时不影响主流程
+        }
+    }
+
+    private fun releaseMulticastLock() {
+        try {
+            multicastLock?.release()
+        } catch (_: Throwable) {
+            // 忽略
+        }
+        multicastLock = null
     }
 
     private fun startService() {

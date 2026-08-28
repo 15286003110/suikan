@@ -9,8 +9,8 @@ import 'package:simple_live_app/app/platform_utils.dart';
 import 'package:simple_live_app/app/utils.dart';
 import 'package:simple_live_app/routes/app_navigation.dart';
 import 'package:simple_live_app/routes/route_path.dart';
-import 'package:simple_live_app/services/signalr_service.dart';
 import 'package:simple_live_app/modules/settings/custom_source/custom_source_list_page.dart';
+import 'package:simple_live_app/modules/settings/fnos/fn_os_list_page.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 
 class MinePage extends StatelessWidget {
@@ -147,6 +147,23 @@ class MinePage extends StatelessWidget {
               endIndent: 12,
               color: Colors.grey.withAlpha(25),
             ),
+            ListTile(
+              leading: const Icon(Icons.movie_outlined),
+              title: const Text("NAS影视库"),
+              subtitle: const Text("添加飞牛影视，浏览并播放 NAS 里的视频"),
+              trailing: const Icon(
+                Icons.chevron_right,
+                color: Colors.grey,
+              ),
+              onTap: () {
+                Get.to(() => const FnOsListPage());
+              },
+            ),
+            Divider(
+              indent: 12,
+              endIndent: 12,
+              color: Colors.grey.withAlpha(25),
+            ),
             _buildCard(
               context,
               children: [
@@ -250,22 +267,6 @@ class MinePage extends StatelessWidget {
                     Get.toNamed(RoutePath.kSettingsOther);
                   },
                 ),
-                if (kDebugMode)
-                  ListTile(
-                    leading: const Icon(Remix.apps_line),
-                    title: const Text("测试"),
-                    trailing: const Icon(
-                      Icons.chevron_right,
-                      color: Colors.grey,
-                    ),
-                    onTap: () async {
-                      SignalRService signalRService = SignalRService();
-                      await signalRService.connect();
-                      //Get.toNamed(RoutePath.kTest);
-                      var room = await signalRService.createRoom();
-                      Log.logPrint(room);
-                    },
-                  ),
               ],
             ),
             Divider(

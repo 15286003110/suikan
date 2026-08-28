@@ -14,7 +14,6 @@ import 'package:simple_live_app/app/controller/base_controller.dart';
 import 'package:simple_live_app/app/log.dart';
 import 'package:path/path.dart' as p;
 import 'package:simple_live_app/app/utils.dart';
-import 'package:simple_live_app/services/live_subtitle_service.dart';
 import 'package:simple_live_app/services/local_storage_service.dart';
 import 'package:simple_live_app/services/mpv_options_service.dart';
 import 'package:simple_live_app/services/profile_backup_service.dart';
@@ -250,7 +249,6 @@ class OtherSettingsController extends BaseController {
         LocalStorageService.instance.settingsBox.clear();
         LocalStorageService.instance.shieldBox.clear();
         AppSettingsController.instance.reloadFromStorage();
-        LiveSubtitleService.instance.stop();
         SmartDialog.showToast("重置成功,重启生效");
       }
     });

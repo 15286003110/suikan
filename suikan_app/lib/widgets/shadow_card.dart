@@ -6,10 +6,12 @@ class ShadowCard extends StatelessWidget {
   final Widget child;
   final double radius;
   final Function()? onTap;
+  final Function()? onLongPress;
   const ShadowCard({
     required this.child,
     this.radius = 8.0,
     this.onTap,
+    this.onLongPress,
     Key? key,
   }) : super(key: key);
 
@@ -33,6 +35,7 @@ class ShadowCard extends StatelessWidget {
         child: InkWell(
           borderRadius: BorderRadius.circular(radius),
           onTap: onTap,
+          onLongPress: onLongPress,
           child: Container(
             decoration: BoxDecoration(
               borderRadius: AppStyle.radius8,

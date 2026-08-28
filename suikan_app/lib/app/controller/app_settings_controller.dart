@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:simple_live_app/app/constant.dart';
+import 'package:simple_live_app/app/custom_source/custom_source_service.dart';
+import 'package:simple_live_app/app/fnos/fn_os_service.dart';
 import 'package:simple_live_app/app/log.dart';
 import 'package:simple_live_app/app/sites.dart';
 import 'package:simple_live_app/models/danmu_shield_preset.dart';
@@ -276,36 +278,6 @@ class AppSettingsController extends GetxController {
     importedMpvConfPath.value = LocalStorageService.instance
         .getValue(LocalStorageService.kImportedMpvConfPath, "");
 
-    LocalStorageService.instance
-        .setValue(LocalStorageService.kLiveSubtitleEnable, false);
-    LocalStorageService.instance
-        .setValue(LocalStorageService.kLiveSubtitleStartupGuard, false);
-    liveSubtitleEnable.value = false;
-    liveSubtitleModelPath.value = LocalStorageService.instance
-        .getValue(LocalStorageService.kLiveSubtitleModelPath, "");
-    liveSubtitleLanguage.value = LocalStorageService.instance
-        .getValue(LocalStorageService.kLiveSubtitleLanguage, "auto");
-    liveSubtitleFontSize.value = LocalStorageService.instance
-        .getValue(LocalStorageService.kLiveSubtitleFontSize, 18.0);
-    liveSubtitlePosition.value = LocalStorageService.instance
-        .getValue(LocalStorageService.kLiveSubtitlePosition, 1);
-    liveSubtitleOffsetX.value = LocalStorageService.instance
-        .getValue(LocalStorageService.kLiveSubtitleOffsetX, 0.5);
-    liveSubtitleOffsetY.value = LocalStorageService.instance
-        .getValue(LocalStorageService.kLiveSubtitleOffsetY, 0.82);
-    liveSubtitleColor.value = LocalStorageService.instance
-        .getValue(LocalStorageService.kLiveSubtitleColor, 0xffffffff);
-    liveSubtitleFontWeight.value = LocalStorageService.instance
-        .getValue(LocalStorageService.kLiveSubtitleFontWeight, 6);
-    liveSubtitleBackgroundEnable.value = LocalStorageService.instance.getValue(
-      LocalStorageService.kLiveSubtitleBackgroundEnable,
-      true,
-    );
-    liveSubtitlePositionLocked.value = LocalStorageService.instance.getValue(
-      LocalStorageService.kLiveSubtitlePositionLocked,
-      false,
-    );
-
     videoOutputDriver.value = LocalStorageService.instance.getValue(
       LocalStorageService.kVideoOutputDriver,
       Platform.isAndroid ? "gpu" : "libmpv",
@@ -407,7 +379,9 @@ class AppSettingsController extends GetxController {
     );
 
     initSiteSort();
+    initHiddenSites();
     initHomeSort();
+    initBrowseSiteOrder();
     initLiveRoomTabSort();
     initLiveRoomQuickAccessSettings();
     initLiveRoomShortcutSettings();
@@ -449,6 +423,115 @@ class AppSettingsController extends GetxController {
     }
 
     siteSort.value = sort;
+  }
+
+  /// 首页/分类完整平台顺序（内置平台 + 自定义源 + 飞牛影视）。
+  /// 与 `siteSort`（仅内置平台）分开持久化，保证设置页排序与首页/分类一致。
+  RxList<String> browseSiteOrder = RxList<String>();
+
+  void initBrowseSiteOrder() {
+    final stored = LocalStorageService.instance
+        .getValue(LocalStorageService.kBrowseSiteOrder, "")
+        .toString()
+        .split(",")
+        .where((e) => e.isNotEmpty)
+        .toList();
+    final result = <String>[];
+    for (final e in stored) {
+      if (!result.contains(e)) result.add(e);
+    }
+    // 补内置平台（按 siteSort）
+    for (final e in siteSort) {
+      if (!result.contains(e) && Sites.allSites.containsKey(e)) result.add(e);
+    }
+    // 补用户添加源（自定义 + 飞牛，按 addedAt）
+    final custom = CustomSourceService.instance.sources
+        .map((s) => ('custom_${s.id}', s.addedAt ?? s.lastUpdated ?? 0))
+        .toList()
+      ..sort((a, b) => a.$2.compareTo(b.$2));
+    for (final e in custom) {
+      if (!result.contains(e.$1)) result.add(e.$1);
+    }
+    final fnos = FnOsService.instance.servers
+        .map((s) => ('fnos_${s.id}', s.addedAt))
+        .toList()
+      ..sort((a, b) => a.$2.compareTo(b.$2));
+    for (final e in fnos) {
+      if (!result.contains(e.$1)) result.add(e.$1);
+    }
+    browseSiteOrder.value = result;
+    LocalStorageService.instance.setValue(
+      LocalStorageService.kBrowseSiteOrder,
+      browseSiteOrder.join(","),
+    );
+  }
+
+  void setBrowseSiteOrder(List<String> e) {
+    browseSiteOrder.value = e;
+    LocalStorageService.instance.setValue(
+      LocalStorageService.kBrowseSiteOrder,
+      browseSiteOrder.join(","),
+    );
+  }
+
+  /// 有效平台顺序 = 已持久化顺序（剔除已删除的源）+ 运行期新增的源（自动追加末尾）。
+  /// 保证「主页设置 → 平台排序」与首页/分类始终一致，且新增源无需重启即可排序。
+  List<String> get effectiveBrowseSiteOrder {
+    final result = <String>[];
+    for (final id in browseSiteOrder) {
+      if (_browseIdResolves(id) && !result.contains(id)) result.add(id);
+    }
+    for (final s in CustomSourceService.instance.sources) {
+      final id = 'custom_${s.id}';
+      if (!result.contains(id)) result.add(id);
+    }
+    for (final s in FnOsService.instance.servers) {
+      final id = 'fnos_${s.id}';
+      if (!result.contains(id)) result.add(id);
+    }
+    return result;
+  }
+
+  bool _browseIdResolves(String id) {
+    if (id.startsWith('custom_')) {
+      final bare = id.substring('custom_'.length);
+      return CustomSourceService.instance.sources.any((s) => s.id == bare);
+    }
+    if (id.startsWith('fnos_')) {
+      final bare = id.substring('fnos_'.length);
+      return FnOsService.instance.servers.any((s) => s.id == bare);
+    }
+    return Sites.allSites.containsKey(id);
+  }
+
+  RxList<String> hiddenSites = RxList<String>();
+  void initHiddenSites() {
+    var hidden = LocalStorageService.instance
+        .getValue(LocalStorageService.kHiddenSites, "")
+        .toString()
+        .split(",")
+        .where((e) => e.isNotEmpty && Sites.allSites.containsKey(e))
+        .toList();
+    hiddenSites.value = hidden;
+  }
+
+  void setHiddenSites(List<String> e) {
+    hiddenSites.value = e;
+    LocalStorageService.instance.setValue(
+      LocalStorageService.kHiddenSites,
+      hiddenSites.join(","),
+    );
+  }
+
+  /// 切换平台隐藏状态。hidden=true 表示从首页/分类隐藏该平台。
+  void toggleHiddenSite(String id, bool hidden) {
+    final current = [...hiddenSites];
+    if (hidden) {
+      if (!current.contains(id)) current.add(id);
+    } else {
+      current.remove(id);
+    }
+    setHiddenSites(current);
   }
 
   void initHomeSort() {
@@ -2381,99 +2464,6 @@ class AppSettingsController extends GetxController {
     customPlayerOutput.value = e;
     LocalStorageService.instance
         .setValue(LocalStorageService.kCustomPlayerOutput, e);
-  }
-
-  var liveSubtitleEnable = false.obs;
-  void setLiveSubtitleEnable(bool e) {
-    liveSubtitleEnable.value = e;
-    LocalStorageService.instance
-        .setValue(LocalStorageService.kLiveSubtitleEnable, e);
-  }
-
-  var liveSubtitleModelPath = "".obs;
-  void setLiveSubtitleModelPath(String e) {
-    liveSubtitleModelPath.value = e.trim();
-    LocalStorageService.instance.setValue(
-      LocalStorageService.kLiveSubtitleModelPath,
-      liveSubtitleModelPath.value,
-    );
-  }
-
-  var liveSubtitleLanguage = "auto".obs;
-  void setLiveSubtitleLanguage(String e) {
-    liveSubtitleLanguage.value = e.trim().isEmpty ? "auto" : e.trim();
-    LocalStorageService.instance.setValue(
-      LocalStorageService.kLiveSubtitleLanguage,
-      liveSubtitleLanguage.value,
-    );
-  }
-
-  var liveSubtitleFontSize = 18.0.obs;
-  void setLiveSubtitleFontSize(double e) {
-    final value = e.clamp(12.0, 36.0).toDouble();
-    liveSubtitleFontSize.value = value;
-    LocalStorageService.instance
-        .setValue(LocalStorageService.kLiveSubtitleFontSize, value);
-  }
-
-  var liveSubtitlePosition = 1.obs;
-  void setLiveSubtitlePosition(int e) {
-    final value = e.clamp(0, 2).toInt();
-    liveSubtitlePosition.value = value;
-    LocalStorageService.instance
-        .setValue(LocalStorageService.kLiveSubtitlePosition, value);
-  }
-
-  var liveSubtitleOffsetX = 0.5.obs;
-  var liveSubtitleOffsetY = 0.82.obs;
-  void setLiveSubtitleOffset({
-    double? x,
-    double? y,
-  }) {
-    if (x != null) {
-      final value = x.clamp(0.05, 0.95).toDouble();
-      liveSubtitleOffsetX.value = value;
-      LocalStorageService.instance
-          .setValue(LocalStorageService.kLiveSubtitleOffsetX, value);
-    }
-    if (y != null) {
-      final value = y.clamp(0.08, 0.92).toDouble();
-      liveSubtitleOffsetY.value = value;
-      LocalStorageService.instance
-          .setValue(LocalStorageService.kLiveSubtitleOffsetY, value);
-    }
-  }
-
-  var liveSubtitleColor = 0xffffffff.obs;
-  void setLiveSubtitleColor(int e) {
-    liveSubtitleColor.value = e;
-    LocalStorageService.instance
-        .setValue(LocalStorageService.kLiveSubtitleColor, e);
-  }
-
-  var liveSubtitleFontWeight = 6.obs;
-  void setLiveSubtitleFontWeight(int e) {
-    final value = e.clamp(1, 9).toInt();
-    liveSubtitleFontWeight.value = value;
-    LocalStorageService.instance
-        .setValue(LocalStorageService.kLiveSubtitleFontWeight, value);
-  }
-
-  FontWeight get liveSubtitleResolvedFontWeight =>
-      FontWeight.values[liveSubtitleFontWeight.value.clamp(1, 9).toInt() - 1];
-
-  var liveSubtitleBackgroundEnable = true.obs;
-  void setLiveSubtitleBackgroundEnable(bool e) {
-    liveSubtitleBackgroundEnable.value = e;
-    LocalStorageService.instance
-        .setValue(LocalStorageService.kLiveSubtitleBackgroundEnable, e);
-  }
-
-  var liveSubtitlePositionLocked = false.obs;
-  void setLiveSubtitlePositionLocked(bool e) {
-    liveSubtitlePositionLocked.value = e;
-    LocalStorageService.instance
-        .setValue(LocalStorageService.kLiveSubtitlePositionLocked, e);
   }
 
   var videoOutputDriver = "".obs;

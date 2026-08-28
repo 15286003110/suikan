@@ -14,8 +14,11 @@ import 'package:share_plus/share_plus.dart';
 import 'package:simple_live_app/app/app_style.dart';
 import 'package:simple_live_app/app/constant.dart';
 import 'package:simple_live_app/app/controller/app_settings_controller.dart';
+import 'package:simple_live_app/app/custom_source/custom_m3u_site.dart';
+import 'package:simple_live_app/app/custom_source/custom_source_service.dart';
 import 'package:simple_live_app/app/desktop_startup_args.dart';
 import 'package:simple_live_app/app/event_bus.dart';
+import 'package:simple_live_app/app/fnos/fn_os_service.dart';
 import 'package:simple_live_app/app/log.dart';
 import 'package:simple_live_app/app/sites.dart';
 import 'package:simple_live_app/app/utils.dart';
@@ -30,7 +33,7 @@ import 'package:simple_live_app/routes/route_path.dart';
 import 'package:simple_live_app/services/current_room_service.dart';
 import 'package:simple_live_app/services/db_service.dart';
 import 'package:simple_live_app/services/follow_service.dart';
-import 'package:simple_live_app/services/live_subtitle_service.dart';
+import 'package:simple_live_app/services/local_storage_service.dart';
 import 'package:simple_live_app/services/mpv_options_service.dart';
 import 'package:simple_live_app/widgets/filter_button.dart';
 import 'package:simple_live_app/widgets/desktop_refresh_button.dart';
@@ -51,11 +54,14 @@ class LiveRoomController extends PlayerController
   final Site pSite;
   final String pRoomId;
   final bool initialDesktopSidePanelCollapsed;
+  /// 是否为点播（如飞牛影视电影/电视剧），启用进度条/倍速等 VOD 控制。
+  final bool isVod;
   late LiveDanmaku liveDanmaku;
   LiveRoomController({
     required this.pSite,
     required this.pRoomId,
     this.initialDesktopSidePanelCollapsed = false,
+    this.isVod = false,
   }) {
     rxSite = pSite.obs;
     rxRoomId = pRoomId.obs;
@@ -91,6 +97,18 @@ class LiveRoomController extends PlayerController
   var online = 0.obs;
   var followed = false.obs;
   var liveStatus = false.obs;
+
+  /// 点播播放速率（倍速），默认 1.0。
+  final RxDouble playbackRate = 1.0.obs;
+
+  void setPlaybackRate(double rate) {
+    playbackRate.value = rate;
+    try {
+      player.setRate(rate);
+    } catch (_) {
+      // 部分平台 media_kit 不支持 setRate 时静默忽略。
+    }
+  }
   RxList<LiveSuperChatMessage> superChats = RxList<LiveSuperChatMessage>();
   RxList<LiveContributionRankItem> contributionRanks =
       RxList<LiveContributionRankItem>();
@@ -149,11 +167,21 @@ class LiveRoomController extends PlayerController
   /// 播放线路列表
   RxList<String> playUrls = RxList<String>();
 
+  /// 自定义源线路显示名（与频道名相同/为空时显示「线路 n」）；非自定义源为 null。
+  List<String>? _customLineNames;
+
   Map<String, String>? playHeaders;
 
   /// 当前播放线路索引
   var currentLineIndex = -1;
   var currentLineInfo = "".obs;
+
+  /// 当前实际播放直链（投屏用）
+  String? get currentPlayUrl =>
+      (currentLineIndex >= 0 && currentLineIndex < playUrls.length)
+          ? playUrls[currentLineIndex]
+          : null;
+  Map<String, String>? get currentPlayHeaders => playHeaders;
 
   /// 自动退出倒计时，单位秒
   var countdown = 60.obs;
@@ -245,7 +273,32 @@ class LiveRoomController extends PlayerController
     super.onInit();
     _positionSubscription = player.stream.position.listen((event) {
       _lastKnownPlayerPosition = event;
+      _maybeReportFnOsProgress(event);
     });
+  }
+
+  /// fnOS 影视播放进度上报节流（秒），用于「继续观看」。
+  int _lastFnOsReportSec = 0;
+
+  /// fnOS 影视（fnos_ 站点 + VOD）播放时，每 30 秒上报一次进度到服务器。
+  void _maybeReportFnOsProgress(Duration position) {
+    if (!isVod) return;
+    final sid = site.id;
+    if (!sid.startsWith('fnos_')) return;
+    final server = FnOsService.instance.serverForSiteId(sid);
+    if (server == null) return;
+    final nowSec = position.inSeconds;
+    if (nowSec - _lastFnOsReportSec < 30) return;
+    _lastFnOsReportSec = nowSec;
+    final total = player.state.duration.inSeconds;
+    unawaited(
+      FnOsService.instance.recordPlayStatus(
+        server,
+        roomId,
+        ts: nowSec,
+        duration: total > 0 ? total : 0,
+      ),
+    );
   }
 
   void scrollListener() {
@@ -1353,7 +1406,28 @@ class LiveRoomController extends PlayerController
       await player.stop();
     }
     await liveDanmaku.stop();
-    LiveSubtitleService.instance.stop();
+    // fnOS 影视退出时上报最终进度（含看完标记）。
+    if (isVod) {
+      final sid = site.id;
+      if (sid.startsWith('fnos_')) {
+        final server = FnOsService.instance.serverForSiteId(sid);
+        if (server != null) {
+          final pos = _lastKnownPlayerPosition.inSeconds;
+          final total = player.state.duration.inSeconds;
+          unawaited(
+            FnOsService.instance.recordPlayStatus(
+              server,
+              roomId,
+              ts: pos,
+              duration: total > 0 ? total : 0,
+            ),
+          );
+          if (total > 0 && pos >= total * 0.9) {
+            unawaited(FnOsService.instance.setWatched(server, roomId));
+          }
+        }
+      }
+    }
     super.onClose();
   }
 
@@ -1563,7 +1637,9 @@ class LiveRoomController extends PlayerController
       }
       initDanmau();
       liveDanmaku.start(detail.value?.danmakuData);
-      startLiveDurationTimer();
+      if (!isVod) {
+        startLiveDurationTimer();
+      }
     } catch (e, stackTrace) {
       Log.logPrint(e);
       //SmartDialog.showToast(e.toString());
@@ -1697,7 +1773,60 @@ class LiveRoomController extends PlayerController
       currentLineIndex = playUrls.length - 1;
     }
     currentLineInfo.value = "线路${currentLineIndex + 1}";
+    // 自定义源：把 playUrls 扩展为该频道全部线路，使播放器内可切换线路。
+    _applyCustomSourceLines();
     return true;
+  }
+
+  /// 自定义源多线路支持：按 roomId（播放地址）反查同名频道组，
+  /// 将 playUrls 扩展为全部线路，并定位当前线路索引；
+  /// 同时记录「上次线路」持久化，与浏览页点击频道的记忆互通。
+  void _applyCustomSourceLines() {
+    _customLineNames = null;
+    if (site.liveSite is! CustomM3uSite) {
+      return;
+    }
+    final svc = CustomSourceService.instance;
+    final lines = svc.linesForUrl(roomId);
+    if (lines == null || lines.isEmpty) {
+      return;
+    }
+    final urls = lines.map((e) => e.url).toList();
+    playUrls.value = urls;
+    final idx = urls.indexOf(roomId);
+    if (idx >= 0) {
+      currentLineIndex = idx;
+    } else if (currentLineIndex >= urls.length) {
+      currentLineIndex = urls.length - 1;
+    }
+    if (currentLineIndex < 0) {
+      currentLineIndex = 0;
+    }
+    currentLineInfo.value = "线路${currentLineIndex + 1}";
+    final baseName = lines.first.name.trim();
+    _customLineNames = lines
+        .map((l) {
+          final n = l.name.trim();
+          return (n.isEmpty || n == baseName) ? '' : n;
+        })
+        .toList();
+    _recordCustomSourceLastLine(currentLineIndex);
+  }
+
+  /// 记录自定义源「上次线路」（键与浏览页一致：CustomSourceLastLine_<裸id>_<频道名>）。
+  void _recordCustomSourceLastLine(int index) {
+    if (index < 0 || index >= playUrls.length) return;
+    final svc = CustomSourceService.instance;
+    final url = playUrls[index];
+    final srcId = svc.sourceIdForUrl(url);
+    final ch = svc.channelForUrl(url);
+    if (srcId == null || ch == null) return;
+    final displayName = ch.name.trim().isEmpty ? url : ch.name.trim();
+    if (displayName == url) return; // 无名称频道无合并组，无需记录
+    LocalStorageService.instance.setValue(
+      'CustomSourceLastLine_${srcId}_$displayName',
+      url,
+    );
   }
 
   Future<void> getPlayUrl() async {
@@ -1718,6 +1847,8 @@ class LiveRoomController extends PlayerController
 
   Future<void> changePlayLine(int index) async {
     currentLineIndex = index;
+    // 自定义源：切换后记录为「上次线路」，浏览页下次点击沿用。
+    _recordCustomSourceLastLine(index);
     // 切线时同样重置重试次数
     mediaErrorRetryCount = 0;
     await setPlayer();
@@ -1820,12 +1951,6 @@ class LiveRoomController extends PlayerController
       "播放器打开完成：${site.id}/$roomId ${openStopwatch.elapsedMilliseconds}ms "
       "line=${currentLineIndex + 1}/${playUrls.length} "
       "size=${player.state.width}x${player.state.height}",
-    );
-    unawaited(
-      LiveSubtitleService.instance.syncPreviewFromSettings(
-        mediaUrl: finalUrl,
-        httpHeaders: playHeaders,
-      ),
     );
     Log.d("播放链接\n$finalUrl");
   }
@@ -2329,9 +2454,15 @@ class LiveRoomController extends PlayerController
         child: ListView.builder(
           itemCount: playUrls.length,
           itemBuilder: (_, i) {
+            final customName = (_customLineNames != null &&
+                    i < _customLineNames!.length)
+                ? _customLineNames![i]
+                : '';
             return RadioListTile(
               value: i,
-              title: Text("线路${i + 1}"),
+              title: Text(
+                customName.isEmpty ? "线路${i + 1}" : customName,
+              ),
               secondary: Text(
                 playUrls[i].contains(".flv") ? "FLV" : "HLS",
               ),

@@ -7,8 +7,6 @@ import 'package:qr_code_scanner_plus/qr_code_scanner_plus.dart';
 import 'package:simple_live_app/app/controller/base_controller.dart';
 import 'package:simple_live_app/app/log.dart';
 import 'package:simple_live_app/app/utils.dart';
-import 'package:simple_live_app/routes/route_path.dart';
-import 'package:simple_live_app/services/signalr_service.dart';
 
 class SyncScanQRControlelr extends BaseController {
   final GlobalKey qrKey = GlobalKey(debugLabel: 'QR');
@@ -34,21 +32,13 @@ class SyncScanQRControlelr extends BaseController {
         return;
       }
 
-      // 如果是远程同步房间号
-      if (code.trim().length == SignalRService.kRoomIdLength) {
-        Get.offAndToNamed(
-          RoutePath.kRemoteSyncRoom,
-          arguments: code.trim().toUpperCase(),
-        );
-        return;
+      // 扫码结果：局域网同步服务地址（远程房间已移除）
+      var addressList = code.split(";");
+      if (addressList.length >= 2) {
+        //弹窗选择
+        showPickerAddress(addressList);
       } else {
-        var addressList = code.split(";");
-        if (addressList.length >= 2) {
-          //弹窗选择
-          showPickerAddress(addressList);
-        } else {
-          Get.back(result: code);
-        }
+        Get.back(result: code);
       }
     });
   }

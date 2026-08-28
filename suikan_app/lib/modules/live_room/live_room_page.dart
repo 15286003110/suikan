@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/get.dart';
@@ -15,7 +14,7 @@ import 'package:simple_live_app/app/utils.dart';
 import 'package:simple_live_app/modules/live_room/live_room_controller.dart';
 import 'package:simple_live_app/modules/live_room/player/player_controls.dart';
 import 'package:simple_live_app/modules/live_room/widgets/live_contribution_rank_panel.dart';
-import 'package:simple_live_app/services/live_subtitle_service.dart';
+import 'package:simple_live_app/app/dlna/dlna_cast_service.dart';
 import 'package:simple_live_app/widgets/keep_alive_wrapper.dart';
 import 'package:simple_live_app/widgets/net_image.dart';
 import 'package:simple_live_app/widgets/settings/settings_action.dart';
@@ -26,7 +25,6 @@ import 'package:simple_live_app/widgets/settings/settings_switch.dart';
 import 'package:simple_live_app/widgets/status/app_empty_widget.dart';
 import 'package:simple_live_app/widgets/superchat_card.dart';
 import 'package:simple_live_core/simple_live_core.dart';
-import 'package:url_launcher/url_launcher_string.dart';
 
 class LiveRoomPage extends GetView<LiveRoomController> {
   static const double _desktopSidePanelWidth = 300.0;
@@ -1432,16 +1430,6 @@ class LiveRoomPage extends GetView<LiveRoomController> {
             ],
           ),
         ),
-        if (LiveSubtitleService.instance.uiEnabled) ...[
-          Padding(
-            padding: AppStyle.edgeInsetsA12,
-            child: Text(
-              "实时字幕",
-              style: Get.textTheme.titleSmall,
-            ),
-          ),
-          buildSubtitleSettingsCard(),
-        ],
         Padding(
           padding: AppStyle.edgeInsetsA12,
           child: Text(
@@ -1569,16 +1557,21 @@ class LiveRoomPage extends GetView<LiveRoomController> {
                 controller.showAutoExitSheet();
               },
             ),
-            if (LiveSubtitleService.instance.uiEnabled)
-              ListTile(
-                leading: const Icon(Icons.subtitles_outlined),
-                title: const Text("实时字幕"),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () {
-                  Get.back();
-                  showSubtitleSettingsSheet();
+            Obx(() {
+              final allow =
+                  AppSettingsController.instance.allowBackgroundPlayback.value;
+              return SwitchListTile(
+                secondary: const Icon(Icons.headphones_outlined),
+                title: const Text("后台播放"),
+                subtitle: Text(Platform.isAndroid
+                    ? "退出到桌面后继续播放（可被系统省电策略关闭）"
+                    : "窗口最小化/隐藏后继续播放"),
+                value: allow,
+                onChanged: (v) {
+                  AppSettingsController.instance.setAllowBackgroundPlayback(v);
                 },
-              ),
+              );
+            }),
             ListTile(
               leading: const Icon(Icons.history_outlined),
               title: const Text("观看历史"),
@@ -1637,299 +1630,39 @@ class LiveRoomPage extends GetView<LiveRoomController> {
                 controller.showDebugInfo();
               },
             ),
+            ListTile(
+              leading: const Icon(Icons.cast),
+              title: const Text("投屏到设备"),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () {
+                Get.back();
+                showCastSheet();
+              },
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget buildSubtitleSettingsCard() {
-    if (!LiveSubtitleService.instance.uiEnabled) {
-      return const SizedBox.shrink();
-    }
-    final settings = AppSettingsController.instance;
-    return SettingsCard(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Obx(
-            () => SettingsSwitch(
-              title: "启用实时字幕",
-              subtitle:
-                  "需要先选择本机模型路径，${LiveSubtitleService.instance.platformStatusLabel}",
-              value: settings.liveSubtitleEnable.value,
-              onChanged: (e) async {
-                if (e) {
-                  if (!LiveSubtitleService.instance.canStartRuntime) {
-                    SmartDialog.showToast("当前平台暂不支持实时字幕识别");
-                    return;
-                  }
-                  final hasModel = await LiveSubtitleService.instance
-                      .validateModelPath(settings.liveSubtitleModelPath.value);
-                  if (!hasModel) {
-                    SmartDialog.showToast("请先选择有效的字幕模型路径");
-                    return;
-                  }
-                }
-                settings.setLiveSubtitleEnable(e);
-                await LiveSubtitleService.instance.syncPreviewFromSettings();
-              },
-            ),
-          ),
-          AppStyle.divider,
-          Obx(
-            () {
-              final modelPath = settings.liveSubtitleModelPath.value;
-              final label = modelPath.isEmpty ? "未选择" : p.basename(modelPath);
-              return SettingsAction(
-                title: "模型关键文件",
-                subtitle:
-                    LiveSubtitleService.instance.modelPathSubtitle(modelPath),
-                value: label,
-                onTap: pickSubtitleModelPath,
-              );
-            },
-          ),
-          AppStyle.divider,
-          SettingsAction(
-            title: "模型推荐下载",
-            subtitle: "按设备性能选择高级 / 中级 / 甜点级模型",
-            onTap: showSubtitleModelRecommendations,
-          ),
-          AppStyle.divider,
-          Obx(
-            () => SettingsMenu<String>(
-              title: "字幕语言",
-              value: settings.liveSubtitleLanguage.value,
-              valueMap: const {
-                "auto": "自动",
-                "zh": "中文",
-                "en": "英语",
-                "ja": "日语",
-                "ko": "韩语",
-              },
-              onChanged: (e) async {
-                settings.setLiveSubtitleLanguage(e);
-                await LiveSubtitleService.instance.syncPreviewFromSettings();
-              },
-            ),
-          ),
-          AppStyle.divider,
-          Obx(
-            () => SettingsNumber(
-              title: "字幕字号",
-              value: settings.liveSubtitleFontSize.value.toInt(),
-              min: 12,
-              max: 36,
-              unit: "px",
-              onChanged: (e) {
-                settings.setLiveSubtitleFontSize(e.toDouble());
-              },
-            ),
-          ),
-          AppStyle.divider,
-          Obx(
-            () => SettingsNumber(
-              title: "水平位置",
-              value: (settings.liveSubtitleOffsetX.value * 100).round(),
-              min: 5,
-              max: 95,
-              unit: "%",
-              onChanged: (e) {
-                settings.setLiveSubtitleOffset(x: e / 100);
-              },
-            ),
-          ),
-          AppStyle.divider,
-          Obx(
-            () => SettingsNumber(
-              title: "垂直位置",
-              value: (settings.liveSubtitleOffsetY.value * 100).round(),
-              min: 8,
-              max: 92,
-              unit: "%",
-              onChanged: (e) {
-                settings.setLiveSubtitleOffset(y: e / 100);
-              },
-            ),
-          ),
-          AppStyle.divider,
-          Obx(
-            () => SettingsMenu<int>(
-              title: "字幕颜色",
-              value: settings.liveSubtitleColor.value,
-              valueMap: const {
-                0xffffffff: "白色",
-                0xffffeb3b: "黄色",
-                0xff80cbc4: "青绿色",
-                0xffffb3c7: "粉色",
-                0xff111111: "黑色",
-              },
-              onChanged: (e) {
-                settings.setLiveSubtitleColor(e);
-              },
-            ),
-          ),
-          AppStyle.divider,
-          Obx(
-            () => SettingsMenu<int>(
-              title: "字幕粗细",
-              value: settings.liveSubtitleFontWeight.value,
-              valueMap: const {
-                4: "正常",
-                5: "中等",
-                6: "半粗",
-                7: "加粗",
-                8: "很粗",
-              },
-              onChanged: (e) {
-                settings.setLiveSubtitleFontWeight(e);
-              },
-            ),
-          ),
-          AppStyle.divider,
-          Obx(
-            () => SettingsSwitch(
-              title: "字幕背景",
-              value: settings.liveSubtitleBackgroundEnable.value,
-              onChanged: (e) {
-                settings.setLiveSubtitleBackgroundEnable(e);
-              },
-            ),
-          ),
-          AppStyle.divider,
-          Obx(
-            () => SettingsSwitch(
-              title: "锁定字幕位置",
-              subtitle: "锁定后播放页只显示字幕，鼠标悬停时显示解锁按钮",
-              value: settings.liveSubtitlePositionLocked.value,
-              onChanged: (e) {
-                settings.setLiveSubtitlePositionLocked(e);
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void showSubtitleSettingsSheet() {
-    if (!LiveSubtitleService.instance.uiEnabled) {
+  void showCastSheet() {
+    final url = controller.currentPlayUrl;
+    if (url == null || url.isEmpty) {
+      SmartDialog.showToast("暂无可投屏的播放地址");
       return;
     }
     showModalBottomSheet(
       context: Get.context!,
-      constraints: const BoxConstraints(maxWidth: 600),
       isScrollControlled: true,
-      showDragHandle: true,
       useSafeArea: true,
-      builder: (context) => Utils.bottomSheetSafeArea(
-        child: ListView(
-          shrinkWrap: true,
-          padding: AppStyle.edgeInsetsA12.copyWith(
-            bottom: AppStyle.bottomBarHeight,
-          ),
-          children: [
-            Padding(
-              padding: AppStyle.edgeInsetsH12.copyWith(bottom: 8),
-              child: Text(
-                "实时字幕",
-                style: Get.textTheme.titleMedium,
-              ),
-            ),
-            buildSubtitleSettingsCard(),
-          ],
-        ),
+      builder: (context) => _CastSheet(
+        url: url,
+        headers: controller.currentPlayHeaders,
+        title: controller.detail.value?.title ?? "随看直播",
       ),
     );
   }
 
-  Future<void> pickSubtitleModelPath() async {
-    if (!LiveSubtitleService.instance.uiEnabled) {
-      return;
-    }
-    String? selectedPath;
-    try {
-      final result = await FilePicker.platform.pickFiles(
-        dialogTitle: "选择字幕模型关键 onnx 文件",
-        type: FileType.custom,
-        allowedExtensions: const ["onnx"],
-      );
-      selectedPath = result?.files.single.path;
-    } catch (_) {
-      selectedPath = await FilePicker.platform.getDirectoryPath(
-        dialogTitle: "选择字幕模型文件夹",
-      );
-    }
-    if (selectedPath == null || selectedPath.isEmpty) {
-      return;
-    }
-    final info = await LiveSubtitleService.instance.inspectModelPath(
-      selectedPath,
-    );
-    if (info == null) {
-      SmartDialog.showToast("未识别模型，请选择推荐模型的关键 onnx 文件");
-      return;
-    }
-    if (!info.isValid) {
-      SmartDialog.showToast("模型缺少：${info.missingFileNames.join("、")}");
-      return;
-    }
-    AppSettingsController.instance.setLiveSubtitleModelPath(info.keyFilePath);
-    await LiveSubtitleService.instance.syncPreviewFromSettings();
-  }
-
-  void showSubtitleModelRecommendations() {
-    if (!LiveSubtitleService.instance.uiEnabled) {
-      return;
-    }
-    Get.dialog(
-      AlertDialog(
-        title: const Text("字幕模型推荐"),
-        content: const SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Padding(
-                padding: EdgeInsets.only(bottom: 8),
-                child: Text(
-                  "选一个档位，下载该档位列出的全部文件，放到同一个文件夹；App 里选择关键 onnx 文件。其他 .weights、非 int8 onnx 和 test_wavs 不用下载。蓝奏云/百度网盘镜像链接看 README。",
-                  style: TextStyle(fontSize: 12, color: Colors.grey),
-                ),
-              ),
-              _SubtitleModelTile(
-                title: "高级（高性能桌面）",
-                subtitle:
-                    "下载：large-v3-encoder.int8.onnx、large-v3-decoder.int8.onnx、large-v3-tokens.txt。App 里选 encoder 这个 onnx。",
-                url:
-                    "https://huggingface.co/csukuangfj/sherpa-onnx-whisper-large-v3",
-              ),
-              _SubtitleModelTile(
-                title: "中级（中文直播优先）",
-                subtitle:
-                    "下载：model.int8.onnx、tokens.txt、config.yaml、am.mvn。App 里选 model.int8.onnx。",
-                url:
-                    "https://huggingface.co/csukuangfj/sherpa-onnx-paraformer-zh-2023-09-14",
-              ),
-              _SubtitleModelTile(
-                title: "甜点级（先试这个）",
-                subtitle:
-                    "下载：encoder-epoch-99-avg-1.int8.onnx、decoder-epoch-99-avg-1.int8.onnx、joiner-epoch-99-avg-1.int8.onnx、tokens.txt、bpe.model、bpe.vocab。App 里选 encoder 这个 onnx。",
-                url:
-                    "https://huggingface.co/csukuangfj/sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20",
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Get.back(),
-            child: const Text("关闭"),
-          ),
-        ],
-      ),
-    );
-  }
 
   String parseDuration(int sec) {
     // 转为时分秒
@@ -1946,30 +1679,163 @@ class LiveRoomPage extends GetView<LiveRoomController> {
   }
 }
 
-class _SubtitleModelTile extends StatelessWidget {
-  final String title;
-  final String subtitle;
+class _CastSheet extends StatefulWidget {
   final String url;
+  final Map<String, String>? headers;
+  final String title;
 
-  const _SubtitleModelTile({
-    required this.title,
-    required this.subtitle,
+  const _CastSheet({
     required this.url,
+    this.headers,
+    required this.title,
   });
 
   @override
+  State<_CastSheet> createState() => _CastSheetState();
+}
+
+class _CastSheetState extends State<_CastSheet> {
+  List<DlnaDevice> devices = [];
+  bool loading = true;
+  DlnaDevice? castingDevice;
+  String? error;
+
+  @override
+  void initState() {
+    super.initState();
+    _discover();
+  }
+
+  Future<void> _discover() async {
+    setState(() {
+      loading = true;
+      error = null;
+    });
+    try {
+      await DlnaCastService.instance.acquireMulticastLock();
+      final list = await DlnaCastService.instance.discover();
+      if (mounted) {
+        setState(() {
+          devices = list;
+          loading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          error = e.toString();
+          loading = false;
+        });
+      }
+    } finally {
+      await DlnaCastService.instance.releaseMulticastLock();
+    }
+  }
+
+  Future<void> _cast(DlnaDevice d) async {
+    SmartDialog.showLoading(msg: "正在投屏…");
+    try {
+      await DlnaCastService.instance.cast(
+        d,
+        widget.url,
+        headers: widget.headers,
+        title: widget.title,
+      );
+      SmartDialog.dismiss();
+      if (mounted) setState(() => castingDevice = d);
+      SmartDialog.showToast("已投屏到 ${d.name}");
+    } catch (e) {
+      SmartDialog.dismiss();
+      SmartDialog.showToast("投屏失败：$e");
+    }
+  }
+
+  Future<void> _stop() async {
+    final d = castingDevice;
+    if (d == null) return;
+    try {
+      await DlnaCastService.instance.stop(d);
+      SmartDialog.showToast("已停止投屏");
+    } catch (e) {
+      SmartDialog.showToast("停止失败：$e");
+    } finally {
+      if (mounted) setState(() => castingDevice = null);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-      title: Text(title),
-      subtitle: Text(subtitle),
-      trailing: const Icon(Icons.open_in_new),
-      onTap: () {
-        launchUrlString(url, mode: LaunchMode.externalApplication);
-      },
+    return Utils.bottomSheetSafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ListTile(
+            leading: const Icon(Icons.cast),
+            title: const Text("投屏到设备"),
+            subtitle: castingDevice != null
+                ? Text("正在投屏到 ${castingDevice!.name}")
+                : null,
+            trailing: IconButton(
+              icon: const Icon(Icons.refresh),
+              tooltip: "重新搜索",
+              onPressed: _discover,
+            ),
+          ),
+          const Divider(height: 1),
+          if (castingDevice != null)
+            ListTile(
+              leading: const Icon(Icons.stop_circle_outlined),
+              title: const Text("停止投屏"),
+              onTap: _stop,
+            ),
+          if (loading)
+            const Padding(
+              padding: EdgeInsets.all(24),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else if (error != null)
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text("搜索失败：$error", style: const TextStyle(color: Colors.grey)),
+            )
+          else if (devices.isEmpty)
+            const Padding(
+              padding: EdgeInsets.all(24),
+              child: Center(
+                child: Text(
+                  "未发现可用设备\n请确保手机/电脑与电视在同一局域网，且电视已开启投屏接收",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.grey),
+                ),
+              ),
+            )
+          else
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              padding: const EdgeInsets.only(bottom: 12),
+              itemCount: devices.length,
+              separatorBuilder: (_, __) => const Divider(height: 1),
+              itemBuilder: (_, i) {
+                final d = devices[i];
+                final isCasting = castingDevice == d;
+                return ListTile(
+                  leading: const Icon(Icons.tv),
+                  title: Text(d.name),
+                  subtitle: d.location != null ? Text(d.location!) : null,
+                  trailing: isCasting
+                      ? const Chip(label: Text("投屏中"))
+                      : const Icon(Icons.chevron_right),
+                  onTap: isCasting ? null : () => _cast(d),
+                );
+              },
+            ),
+        ],
+      ),
     );
   }
 }
+
 
 class _InteractiveChatText extends StatelessWidget {
   static final RegExp _emojiTokenPattern = RegExp(r'\[[^\[\]]{1,16}\]');

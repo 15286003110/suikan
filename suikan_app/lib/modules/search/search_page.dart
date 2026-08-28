@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:simple_live_app/app/app_style.dart';
 import 'package:simple_live_app/app/sites.dart';
+import 'package:simple_live_app/modules/search/local_content_search_view.dart';
 import 'package:simple_live_app/modules/search/search_controller.dart';
 import 'package:simple_live_app/modules/search/search_list_view.dart';
 
@@ -65,23 +66,34 @@ class SearchPage extends GetView<AppSearchController> {
           controller: controller.tabController,
           padding: EdgeInsets.zero,
           tabAlignment: TabAlignment.center,
-          tabs: Sites.supportSites
-              .map(
-                (e) => Tab(
-                  //text: e.name,
-                  child: Row(
-                    children: [
-                      Image.asset(
-                        e.logo,
-                        width: 24,
-                      ),
-                      AppStyle.hGap8,
-                      Text(e.name),
-                    ],
+          tabs: [
+            const Tab(
+              child: Row(
+                children: [
+                  Icon(Icons.search, size: 20),
+                  SizedBox(width: 8),
+                  Text('本地内容'),
+                ],
+              ),
+            ),
+            ...controller.searchSites
+                .map(
+                  (e) => Tab(
+                    //text: e.name,
+                    child: Row(
+                      children: [
+                        Image.asset(
+                          e.logo,
+                          width: 24,
+                        ),
+                        AppStyle.hGap8,
+                        Text(e.name),
+                      ],
+                    ),
                   ),
-                ),
-              )
-              .toList(),
+                )
+                .toList(),
+          ],
           labelPadding: AppStyle.edgeInsetsH20,
           isScrollable: true,
           indicatorSize: TabBarIndicatorSize.label,
@@ -90,17 +102,14 @@ class SearchPage extends GetView<AppSearchController> {
       body: TabBarView(
         physics: const NeverScrollableScrollPhysics(),
         controller: controller.tabController,
-        children: Sites.supportSites
-            .map((e) => SearchListView(
-                      e.id,
-                    )
-                // (e) => e.id == Constant.kDouyin
-                //     ? const DouyinSearchView()
-                //     : SearchListView(
-                //         e.id,
-                //       ),
-                )
-            .toList(),
+        children: [
+          const LocalContentSearchView(),
+          ...controller.searchSites
+              .map((e) => SearchListView(
+                        e.id,
+                      ))
+              .toList(),
+        ],
       ),
     );
   }

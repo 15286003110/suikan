@@ -16,7 +16,6 @@ import 'package:simple_live_tv_app/services/douyin_account_service.dart';
 import 'package:simple_live_tv_app/services/follow_user_service.dart';
 import 'package:simple_live_tv_app/services/kuaishou_account_service.dart';
 import 'package:simple_live_tv_app/services/mpv_options_service.dart';
-import 'package:simple_live_tv_app/services/signalr_service.dart';
 import 'package:simple_live_tv_app/widgets/app_scaffold.dart';
 import 'package:simple_live_tv_app/widgets/button/highlight_button.dart';
 import 'package:simple_live_tv_app/widgets/button/highlight_list_tile.dart';
@@ -118,6 +117,18 @@ class SettingsPage extends GetView<SettingsController> {
                   },
                 ),
               ),
+              AppStyle.hGap32,
+              Obx(
+                () => HighlightButton(
+                  focusNode: AppFocusNode(),
+                  iconData: Icons.video_library_outlined,
+                  selected: controller.tabIndex.value == 5,
+                  text: "内容源",
+                  onTap: () {
+                    controller.tabController.animateTo(5);
+                  },
+                ),
+              ),
             ],
           ),
           Expanded(
@@ -131,6 +142,7 @@ class SettingsPage extends GetView<SettingsController> {
                 buildFollowSettings(context),
                 buildAccountSettings(),
                 buildAbout(),
+                buildContentSource(),
               ],
             ),
           )),
@@ -879,20 +891,29 @@ class SettingsPage extends GetView<SettingsController> {
             subtitle: "v${Utils.packageInfo.version}",
             onTap: () => {},
           ),
-          AppStyle.vGap24,
+        ],
+      ),
+    );
+  }
+
+  /// 内容源：自定义直播源 + NAS 影视库
+  Widget buildContentSource() {
+    return GetBuilder<SettingsController>(
+      builder: (controller) => ListView(
+        padding: AppStyle.edgeInsetsA48,
+        children: [
           HighlightListTile(
-            focusNode: AppFocusNode(),
-            title: "同步服务",
-            subtitle:
-                "${SignalRService.configuredServerLabel}\n${SignalRService.configuredUrl}",
-            onTap: controller.editSyncServerUrl,
+            focusNode: controller.contentSourceFocusNode,
+            title: "自定义直播源",
+            subtitle: "添加 M3U 直播源，分组浏览观看",
+            onTap: controller.toCustomSource,
           ),
           AppStyle.vGap24,
           HighlightListTile(
             focusNode: AppFocusNode(),
-            title: "同步代理",
-            subtitle: SignalRService.proxyDisplayName,
-            onTap: controller.editSyncProxyUrl,
+            title: "NAS 影视库",
+            subtitle: "连接飞牛影视（fnOS）媒体服务器",
+            onTap: controller.toFnOs,
           ),
         ],
       ),

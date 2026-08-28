@@ -13,7 +13,6 @@ import 'package:simple_live_app/app/controller/app_settings_controller.dart';
 import 'package:simple_live_app/app/utils.dart';
 import 'package:simple_live_app/modules/live_room/live_room_controller.dart';
 import 'package:simple_live_app/modules/settings/danmu_settings_page.dart';
-import 'package:simple_live_app/services/live_subtitle_service.dart';
 import 'package:simple_live_app/widgets/superchat_card.dart';
 import 'package:simple_live_core/simple_live_core.dart';
 import 'package:window_manager/window_manager.dart';
@@ -65,16 +64,22 @@ Widget buildFullControls(
           controller,
           enableQuickAccessLongPress: true,
         ),
-        _buildLiveSubtitleOverlay(videoState.context, controller),
         _buildFullTopBar(
           controller,
           padding: padding,
         ),
-        _buildFullBottomBar(
-          controller,
-          padding: padding,
-          volumeButtonKey: volumeButtonKey,
-        ),
+        controller.isVod
+            ? _buildVodBottomBar(
+                controller,
+                fullScreen: true,
+                padding: padding,
+                volumeButtonKey: volumeButtonKey,
+              )
+            : _buildFullBottomBar(
+                controller,
+                padding: padding,
+                volumeButtonKey: volumeButtonKey,
+              ),
         _buildSideLockButton(
           controller,
           padding: padding,
@@ -139,12 +144,20 @@ Widget buildControls(
         _buildPlayerSuperChatOverlay(controller),
         _buildBufferingIndicator(videoState),
         _buildGestureLayer(controller),
-        _buildLiveSubtitleOverlay(videoState.context, controller),
-        _buildNormalBottomBar(
-          controller,
-          isPortrait: isPortrait,
-          volumeButtonKey: volumeButtonKey,
-        ),
+        controller.isVod
+            ? _buildVodBottomBar(
+                controller,
+                fullScreen: false,
+                padding: EdgeInsets.only(
+                  bottom: MediaQuery.of(videoState.context).padding.bottom,
+                ),
+                volumeButtonKey: volumeButtonKey,
+              )
+            : _buildNormalBottomBar(
+                controller,
+                isPortrait: isPortrait,
+                volumeButtonKey: volumeButtonKey,
+              ),
         _buildGestureTip(controller),
       ],
     ),
@@ -186,158 +199,6 @@ Widget _buildPlayerSuperChatOverlay(LiveRoomController controller) {
   });
 }
 
-Widget _buildLiveSubtitleOverlay(
-  BuildContext _,
-  LiveRoomController controller,
-) =>
-    _LiveSubtitleOverlay(controller: controller);
-
-class _LiveSubtitleOverlay extends StatefulWidget {
-  final LiveRoomController controller;
-
-  const _LiveSubtitleOverlay({
-    required this.controller,
-  });
-
-  @override
-  State<_LiveSubtitleOverlay> createState() => _LiveSubtitleOverlayState();
-}
-
-class _LiveSubtitleOverlayState extends State<_LiveSubtitleOverlay> {
-  bool _hovering = false;
-
-  @override
-  Widget build(BuildContext context) {
-    if (!LiveSubtitleService.instance.uiEnabled) {
-      return const SizedBox.shrink();
-    }
-    return Obx(() {
-      final controller = widget.controller;
-      final settings = AppSettingsController.instance;
-      if (!settings.liveSubtitleEnable.value ||
-          settings.liveSubtitleModelPath.value.trim().isEmpty ||
-          LiveSubtitleService.instance.subtitleText.value.trim().isEmpty) {
-        return const SizedBox.shrink();
-      }
-
-      final mediaQuery = MediaQuery.of(context);
-      final padding = controller.fullScreenState.value
-          ? _fullScreenControlPadding(context)
-          : mediaQuery.padding;
-      final alignment = Alignment(
-        settings.liveSubtitleOffsetX.value * 2 - 1,
-        settings.liveSubtitleOffsetY.value * 2 - 1,
-      );
-      final positionedPadding = EdgeInsets.only(
-        left: padding.left + 24,
-        right: padding.right + 24,
-        top: padding.top + 24,
-        bottom: padding.bottom + 24,
-      );
-      final subtitleColor = Color(settings.liveSubtitleColor.value);
-      final locked = settings.liveSubtitlePositionLocked.value;
-      final showUnlockButton = locked && _hovering;
-
-      return Positioned.fill(
-        child: Padding(
-          padding: positionedPadding,
-          child: Align(
-            alignment: alignment,
-            child: MouseRegion(
-              onEnter: (_) => setState(() => _hovering = true),
-              onExit: (_) => setState(() => _hovering = false),
-              child: GestureDetector(
-                behavior: HitTestBehavior.deferToChild,
-                onLongPress: locked
-                    ? () {
-                        settings.setLiveSubtitlePositionLocked(false);
-                        SmartDialog.showToast("字幕位置已解锁");
-                      }
-                    : null,
-                onPanUpdate: locked
-                    ? null
-                    : (details) {
-                        final size = mediaQuery.size;
-                        if (size.width <= 0 || size.height <= 0) {
-                          return;
-                        }
-                        settings.setLiveSubtitleOffset(
-                          x: settings.liveSubtitleOffsetX.value +
-                              details.delta.dx / size.width,
-                          y: settings.liveSubtitleOffsetY.value +
-                              details.delta.dy / size.height,
-                        );
-                      },
-                child: Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 720),
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: settings.liveSubtitleBackgroundEnable.value
-                              ? Colors.black.withAlpha(140)
-                              : Colors.transparent,
-                          borderRadius: AppStyle.radius8,
-                        ),
-                        child: Padding(
-                          padding: AppStyle.edgeInsetsA8,
-                          child: Text(
-                            LiveSubtitleService.instance.subtitleText.value,
-                            textAlign: TextAlign.center,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: subtitleColor,
-                              fontSize: settings.liveSubtitleFontSize.value,
-                              fontWeight:
-                                  settings.liveSubtitleResolvedFontWeight,
-                              shadows: const [
-                                Shadow(
-                                  color: Colors.black,
-                                  blurRadius: 4,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    if (showUnlockButton)
-                      Positioned(
-                        right: -12,
-                        top: -12,
-                        child: Material(
-                          color: Colors.black54,
-                          borderRadius: BorderRadius.circular(18),
-                          child: InkWell(
-                            borderRadius: BorderRadius.circular(18),
-                            onTap: () {
-                              settings.setLiveSubtitlePositionLocked(false);
-                              SmartDialog.showToast("字幕位置已解锁");
-                            },
-                            child: const SizedBox(
-                              width: 32,
-                              height: 32,
-                              child: Icon(
-                                Icons.lock_open_outlined,
-                                color: Colors.white,
-                                size: 18,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      );
-    });
-  }
-}
 
 Widget _buildBufferingIndicator(VideoState videoState) {
   return Center(
@@ -1046,6 +907,257 @@ void showPlayerSettings(LiveRoomController controller) {
             ),
           ],
         ),
+      ),
+    ),
+  );
+}
+
+/// 点播（如飞牛影视）底部控制条：进度条 + 播放/暂停 + 倍速 + 音量 + 全屏。
+Widget _buildVodBottomBar(
+  LiveRoomController controller, {
+  required bool fullScreen,
+  required EdgeInsets padding,
+  required GlobalKey volumeButtonKey,
+}) {
+  return Obx(() {
+    final visible = controller.showControlsState.value &&
+        !controller.lockControlsState.value;
+    return AnimatedPositioned(
+      left: 0,
+      right: 0,
+      bottom: visible ? 0 : -(108 + padding.bottom),
+      duration: const Duration(milliseconds: 200),
+      child: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Colors.transparent,
+              Colors.black87,
+            ],
+          ),
+        ),
+        padding: EdgeInsets.only(
+          left: padding.left + 12,
+          right: padding.right + 12,
+          bottom: padding.bottom,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _VodProgressBar(controller: controller),
+            Row(
+              children: [
+                TextButton(
+                  onPressed: () => showPlaybackSpeedSheet(controller),
+                  child: Obx(
+                    () => Text(
+                      '${controller.playbackRate.value.toStringAsFixed(2)}x',
+                      style: const TextStyle(color: Colors.white, fontSize: 14),
+                    ),
+                  ),
+                ),
+                const Expanded(child: SizedBox()),
+                if (!Platform.isAndroid && !Platform.isIOS)
+                  IconButton(
+                    key: volumeButtonKey,
+                    onPressed: () {
+                      final ctx = volumeButtonKey.currentContext;
+                      if (ctx == null) return;
+                      controller.showVolumeSlider(ctx, keepAlive: true);
+                    },
+                    icon: Icon(
+                      controller.mutedState.value
+                          ? Icons.volume_off
+                          : Icons.volume_down,
+                      size: 24,
+                      color: Colors.white,
+                    ),
+                  ),
+                IconButton(
+                  onPressed: controller.toggleMute,
+                  icon: Icon(
+                    controller.mutedState.value
+                        ? Icons.volume_off
+                        : Icons.volume_up,
+                    size: 24,
+                    color: Colors.white,
+                  ),
+                ),
+                IconButton(
+                  onPressed: fullScreen
+                      ? controller.exitFull
+                      : controller.enterFullScreen,
+                  icon: Icon(
+                    fullScreen ? Icons.fullscreen_exit : Icons.fullscreen,
+                    color: Colors.white,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  });
+}
+
+/// 点播进度条：播放/暂停 + 可拖动进度 + 当前/总时长。
+class _VodProgressBar extends StatefulWidget {
+  final LiveRoomController controller;
+  const _VodProgressBar({required this.controller});
+
+  @override
+  State<_VodProgressBar> createState() => _VodProgressBarState();
+}
+
+class _VodProgressBarState extends State<_VodProgressBar> {
+  bool _dragging = false;
+  double _dragValue = 0;
+
+  String _fmt(Duration d) {
+    final h = d.inHours;
+    final m = d.inMinutes.remainder(60);
+    final s = d.inSeconds.remainder(60);
+    final mm = m.toString().padLeft(2, '0');
+    final ss = s.toString().padLeft(2, '0');
+    return h > 0 ? '${h.toString().padLeft(2, '0')}:$mm:$ss' : '$mm:$ss';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = widget.controller;
+    final player = c.player;
+    return StreamBuilder<Duration>(
+      stream: player.stream.position,
+      builder: (_, posSnap) {
+        return StreamBuilder<Duration>(
+          stream: player.stream.duration,
+          builder: (_, durSnap) {
+            final position = posSnap.data ?? Duration.zero;
+            final duration = durSnap.data ?? Duration.zero;
+            final totalSec =
+                duration.inSeconds > 0 ? duration.inSeconds.toDouble() : 1.0;
+            final currentSec = _dragging
+                ? _dragValue
+                : position.inSeconds.toDouble();
+            return Row(
+              children: [
+                StreamBuilder<bool>(
+                  stream: player.stream.playing,
+                  builder: (_, playingSnap) {
+                    final playing = playingSnap.data ?? false;
+                    return IconButton(
+                      icon: Icon(
+                        playing ? Icons.pause : Icons.play_arrow,
+                        color: Colors.white,
+                        size: 22,
+                      ),
+                      onPressed: () {
+                        if (player.state.playing) {
+                          player.pause();
+                        } else {
+                          player.play();
+                        }
+                      },
+                    );
+                  },
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  _fmt(position),
+                  style: const TextStyle(color: Colors.white, fontSize: 12),
+                ),
+                Expanded(
+                  child: SliderTheme(
+                    data: SliderTheme.of(context).copyWith(
+                      activeTrackColor: Colors.white,
+                      inactiveTrackColor: Colors.white38,
+                      thumbColor: Colors.white,
+                      overlayColor: Colors.white24,
+                      trackHeight: 2,
+                      thumbShape: const RoundSliderThumbShape(
+                        enabledThumbRadius: 6,
+                      ),
+                    ),
+                    child: Slider(
+                      value: currentSec.clamp(0, totalSec),
+                      max: totalSec,
+                      onChanged: (v) {
+                        setState(() {
+                          _dragging = true;
+                          _dragValue = v;
+                        });
+                      },
+                      onChangeEnd: (v) {
+                        _dragging = false;
+                        player.seek(Duration(seconds: v.toInt()));
+                      },
+                    ),
+                  ),
+                ),
+                Text(
+                  _fmt(duration),
+                  style: const TextStyle(color: Colors.white, fontSize: 12),
+                ),
+                const SizedBox(width: 4),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+/// 倍速选择：移动端用底部弹层，桌面端用右侧对话框。
+void showPlaybackSpeedSheet(LiveRoomController controller) {
+  final speeds = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
+  if (controller.useBottomSheetPlayerMenus) {
+    Get.bottomSheet(
+      SafeArea(
+        child: Obx(
+          () => Column(
+            mainAxisSize: MainAxisSize.min,
+            children: speeds
+                .map(
+                  (s) => ListTile(
+                    selected: (controller.playbackRate.value - s).abs() < 0.001,
+                    title: Text('${s.toStringAsFixed(2)}x'),
+                    onTap: () {
+                      controller.setPlaybackRate(s);
+                      Get.back();
+                    },
+                  ),
+                )
+                .toList(),
+          ),
+        ),
+      ),
+    );
+    return;
+  }
+  Utils.showRightDialog(
+    title: '播放速度',
+    width: 240,
+    useSystem: true,
+    child: Obx(
+      () => ListView(
+        padding: AppStyle.edgeInsetsA12,
+        children: speeds
+            .map(
+              (s) => RadioListTile<double>(
+                title: Text('${s.toStringAsFixed(2)}x'),
+                value: s,
+                groupValue: controller.playbackRate.value,
+                onChanged: (v) {
+                  if (v != null) controller.setPlaybackRate(v);
+                  Utils.hideRightDialog();
+                },
+              ),
+            )
+            .toList(),
       ),
     ),
   );

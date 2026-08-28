@@ -17,6 +17,7 @@ import 'package:simple_live_tv_app/services/bilibili_account_service.dart';
 import 'package:simple_live_tv_app/services/bulk_data_import_service.dart';
 import 'package:simple_live_tv_app/services/douyin_account_service.dart';
 import 'package:simple_live_tv_app/services/kuaishou_account_service.dart';
+import 'package:simple_live_tv_app/services/profile_backup_service.dart';
 import 'package:simple_live_tv_app/widgets/sync_progress_dialog.dart';
 import 'package:udp/udp.dart';
 import 'package:uuid/uuid.dart';
@@ -168,7 +169,8 @@ class SyncService extends GetxService {
         ..post('/sync/blocked_word', _syncBlockedWordRequest)
         ..post('/sync/account/bilibili', _syncBiliAccountRequest)
         ..post('/sync/account/douyin', _syncDouyinAccountRequest)
-        ..post('/sync/account/kuaishou', _syncKuaishouAccountRequest);
+        ..post('/sync/account/kuaishou', _syncKuaishouAccountRequest)
+        ..post('/sync/profile', _syncProfileRequest);
 
       server = await shelf_io.serve(
         serverRouter,
@@ -499,6 +501,33 @@ class SyncService extends GetxService {
       return toJsonResponse({'status': true, 'message': 'success'});
     } catch (e) {
       return toJsonResponse({'status': false, 'message': e.toString()});
+    }
+  }
+
+  /// 接收完整配置包（设置/关注/历史/屏蔽词/自定义源/影视库/账号）。
+  Future<shelf.Response> _syncProfileRequest(shelf.Request request) async {
+    try {
+      final overlay =
+          int.parse(request.requestedUri.queryParameters['overlay'] ?? '0');
+      final body = await request.readAsString();
+      SyncProgressDialog.show(const SyncProgress(stage: "接收配置包"));
+      final summary = await ProfileBackupService.instance.importProfileJson(
+        body,
+        overwrite: overlay == 1,
+        onProgress: SyncProgressDialog.update,
+      );
+      SmartDialog.showToast('已同步配置包');
+      SyncProgressDialog.dismiss();
+      return toJsonResponse({
+        'status': true,
+        'message': summary.message,
+      });
+    } catch (e) {
+      SyncProgressDialog.dismiss();
+      return toJsonResponse({
+        'status': false,
+        'message': e.toString(),
+      });
     }
   }
 

@@ -58,6 +58,6 @@ class Site {
     required this.liveSite,
     required this.logo,
     required this.name,
-    required this.index,
+    this.index = 0,
   });
 }

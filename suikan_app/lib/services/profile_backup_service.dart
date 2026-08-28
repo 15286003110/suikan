@@ -4,7 +4,9 @@ import 'dart:io';
 import 'package:get/get.dart';
 import 'package:simple_live_app/app/constant.dart';
 import 'package:simple_live_app/app/controller/app_settings_controller.dart';
+import 'package:simple_live_app/app/custom_source/custom_source_service.dart';
 import 'package:simple_live_app/app/event_bus.dart';
+import 'package:simple_live_app/app/fnos/fn_os_service.dart';
 import 'package:simple_live_app/app/utils.dart';
 import 'package:simple_live_app/services/bulk_data_import_service.dart';
 import 'package:simple_live_app/services/bilibili_account_service.dart';
@@ -12,7 +14,6 @@ import 'package:simple_live_app/services/db_service.dart';
 import 'package:simple_live_app/services/douyin_account_service.dart';
 import 'package:simple_live_app/services/follow_service.dart';
 import 'package:simple_live_app/services/kuaishou_account_service.dart';
-import 'package:simple_live_app/services/live_subtitle_service.dart';
 import 'package:simple_live_app/services/local_storage_service.dart';
 import 'package:simple_live_core/simple_live_core.dart';
 
@@ -47,6 +48,8 @@ class ProfileBackupService extends GetxService {
         .toList();
     final histories =
         DBService.instance.getHistores().map((item) => item.toJson()).toList();
+    final customSources = _exportCustomSources();
+    final fnosServers = _exportFnOsServers();
     return {
       "schema": schema,
       "schemaVersion": schemaVersion,
@@ -60,6 +63,8 @@ class ProfileBackupService extends GetxService {
       "followUsers": followUsers,
       "followUserTags": followUserTags,
       "histories": histories,
+      "customSources": customSources,
+      "fnosServers": fnosServers,
       "summary": {
         "settingCount": settingsPayload.length,
         "keywordShieldCount": (shieldPayload["keywords"] as List).length,
@@ -68,8 +73,40 @@ class ProfileBackupService extends GetxService {
         "followTagCount": followUserTags.length,
         "historyCount": histories.length,
         "accountCount": (_exportAccounts()["items"] as List).length,
+        "customSourceCount": customSources.length,
+        "fnosServerCount": fnosServers.length,
       },
     };
+  }
+
+  /// 导出自定义直播源（M3uSource 的 JSON 字符串）。
+  List<Map<String, dynamic>> _exportCustomSources() {
+    final box = DBService.instance.customSourceBox;
+    final result = <Map<String, dynamic>>[];
+    for (final key in box.keys) {
+      final raw = box.get(key);
+      if (raw == null) continue;
+      try {
+        final map = json.decode(raw) as Map<String, dynamic>;
+        result.add(map);
+      } catch (_) {}
+    }
+    return result;
+  }
+
+  /// 导出飞牛影视服务器（含地址/用户名/密码，用于换机/备份恢复）。
+  List<Map<String, dynamic>> _exportFnOsServers() {
+    final box = DBService.instance.fnOsBox;
+    final result = <Map<String, dynamic>>[];
+    for (final key in box.keys) {
+      final raw = box.get(key);
+      if (raw == null) continue;
+      try {
+        final map = json.decode(raw) as Map<String, dynamic>;
+        result.add(map);
+      } catch (_) {}
+    }
+    return result;
   }
 
   String exportProfileJson() {
@@ -142,9 +179,6 @@ class ProfileBackupService extends GetxService {
 
     if (options.settings || options.shields || options.shieldPresets) {
       AppSettingsController.instance.reloadFromStorage();
-    }
-    if (options.settings) {
-      await LiveSubtitleService.instance.syncPreviewFromSettings();
     }
     EventBus.instance.emit(Constant.kUpdateFollow, 0);
     EventBus.instance.emit(Constant.kUpdateHistory, 0);
@@ -310,11 +344,12 @@ class ProfileBackupService extends GetxService {
           onProgress);
     }
 
+    // 自定义直播源与飞牛影视服务器（支持所有平台，独立于上面的开关）。
+    await _importCustomSources(payload["customSources"], overwrite, summary);
+    await _importFnOsServers(payload["fnosServers"], overwrite, summary);
+
     if (options.settings || options.shields || options.shieldPresets) {
       AppSettingsController.instance.reloadFromStorage();
-    }
-    if (options.settings) {
-      await LiveSubtitleService.instance.syncPreviewFromSettings();
     }
     if (options.follows) {
       await FollowService.instance.loadData(updateStatus: false);
@@ -604,6 +639,61 @@ class ProfileBackupService extends GetxService {
     summary.skipped += result.skipped;
   }
 
+  Future<void> _importCustomSources(
+    dynamic raw,
+    bool overwrite,
+    ProfileImportSummary summary,
+  ) async {
+    if (raw is! List || raw.isEmpty) return;
+    final box = DBService.instance.customSourceBox;
+    await DBService.runExclusive(() async {
+      if (overwrite) {
+        await box.clear();
+      }
+      for (final item in raw) {
+        if (item is! Map) continue;
+        final id = (item["id"] as String?) ?? '';
+        if (id.isEmpty) continue;
+        if (!overwrite && box.containsKey(id)) {
+          summary.skipped++;
+          continue;
+        }
+        await box.put(id, json.encode(item));
+        summary.customSources++;
+      }
+    });
+    // 重新加载服务并通知首页/分类重建标签。
+    await CustomSourceService.instance.init();
+    EventBus.instance.emit(EventBus.kCustomSourcesChanged, null);
+  }
+
+  Future<void> _importFnOsServers(
+    dynamic raw,
+    bool overwrite,
+    ProfileImportSummary summary,
+  ) async {
+    if (raw is! List || raw.isEmpty) return;
+    final box = DBService.instance.fnOsBox;
+    await DBService.runExclusive(() async {
+      if (overwrite) {
+        await box.clear();
+      }
+      for (final item in raw) {
+        if (item is! Map) continue;
+        final id = (item["id"] as String?) ?? '';
+        if (id.isEmpty) continue;
+        if (!overwrite && box.containsKey(id)) {
+          summary.skipped++;
+          continue;
+        }
+        await box.put(id, json.encode(item));
+        summary.fnosServers++;
+      }
+    });
+    await FnOsService.instance.init();
+    EventBus.instance.emit(EventBus.kCustomSourcesChanged, null);
+  }
+
   dynamic _readPayloadList(Map<String, dynamic> payload, List<String> keys) {
     for (final key in keys) {
       final value = payload[key];
@@ -696,12 +786,17 @@ class ProfileImportSummary {
   int followUsers = 0;
   int followTags = 0;
   int histories = 0;
+  int customSources = 0;
+  int fnosServers = 0;
   int skipped = 0;
 
   String get message {
     final base =
         "设置 $settings 项，屏蔽 $shields 项，预设 $shieldPresets 个，关注 $followUsers 个，标签 $followTags 个，历史 $histories 条";
-    return skipped > 0 ? "$base，跳过异常 $skipped 条" : base;
+    final extra = customSources > 0 || fnosServers > 0
+        ? "，直播源 $customSources 个，影视库 $fnosServers 个"
+        : "";
+    return skipped > 0 ? "$base$extra，跳过异常 $skipped 条" : "$base$extra";
   }
 }
 

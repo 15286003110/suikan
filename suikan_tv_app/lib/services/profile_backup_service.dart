@@ -5,7 +5,9 @@ import 'package:get/get.dart';
 import 'package:simple_live_core/simple_live_core.dart';
 import 'package:simple_live_tv_app/app/constant.dart';
 import 'package:simple_live_tv_app/app/controller/app_settings_controller.dart';
+import 'package:simple_live_tv_app/app/custom_source/custom_source_service.dart';
 import 'package:simple_live_tv_app/app/event_bus.dart';
+import 'package:simple_live_tv_app/app/fnos/fn_os_service.dart';
 import 'package:simple_live_tv_app/app/utils.dart';
 import 'package:simple_live_tv_app/services/bilibili_account_service.dart';
 import 'package:simple_live_tv_app/services/bulk_data_import_service.dart';
@@ -39,6 +41,8 @@ class ProfileBackupService extends GetxService {
         .toList();
     final histories =
         DBService.instance.getHistores().map((item) => item.toJson()).toList();
+    final customSources = _exportCustomSources();
+    final fnosServers = _exportFnOsServers();
     return {
       "schema": schema,
       "schemaVersion": schemaVersion,
@@ -52,6 +56,8 @@ class ProfileBackupService extends GetxService {
       "followUsers": followUsers,
       "followUserTags": const [],
       "histories": histories,
+      "customSources": customSources,
+      "fnosServers": fnosServers,
       "summary": {
         "settingCount": settingsPayload.length,
         "keywordShieldCount": (shieldPayload["keywords"] as List).length,
@@ -60,8 +66,38 @@ class ProfileBackupService extends GetxService {
         "followTagCount": 0,
         "historyCount": histories.length,
         "accountCount": (_exportAccounts()["items"] as List).length,
+        "customSourceCount": customSources.length,
+        "fnosServerCount": fnosServers.length,
       },
     };
+  }
+
+  List<Map<String, dynamic>> _exportCustomSources() {
+    final box = DBService.instance.customSourceBox;
+    final result = <Map<String, dynamic>>[];
+    for (final key in box.keys) {
+      final raw = box.get(key);
+      if (raw == null) continue;
+      try {
+        final map = json.decode(raw) as Map<String, dynamic>;
+        result.add(map);
+      } catch (_) {}
+    }
+    return result;
+  }
+
+  List<Map<String, dynamic>> _exportFnOsServers() {
+    final box = DBService.instance.fnOsBox;
+    final result = <Map<String, dynamic>>[];
+    for (final key in box.keys) {
+      final raw = box.get(key);
+      if (raw == null) continue;
+      try {
+        final map = json.decode(raw) as Map<String, dynamic>;
+        result.add(map);
+      } catch (_) {}
+    }
+    return result;
   }
 
   String exportProfileJson() {
@@ -149,12 +185,71 @@ class ProfileBackupService extends GetxService {
       );
     }
 
+    // 自定义直播源与飞牛影视服务器（独立于上面的开关，所有平台都收）。
+    await _importCustomSources(payload["customSources"], overwrite, summary);
+    await _importFnOsServers(payload["fnosServers"], overwrite, summary);
+
     if (options.settings || options.shields) {
       AppSettingsController.instance.onInit();
     }
     EventBus.instance.emit(Constant.kUpdateFollow, 0);
     EventBus.instance.emit(Constant.kUpdateHistory, 0);
     return summary;
+  }
+
+  Future<void> _importCustomSources(
+    dynamic raw,
+    bool overwrite,
+    ProfileImportSummary summary,
+  ) async {
+    if (raw is! List || raw.isEmpty) return;
+    final box = DBService.instance.customSourceBox;
+    await DBService.runExclusive(() async {
+      if (overwrite) {
+        await box.clear();
+      }
+      for (final item in raw) {
+        if (item is! Map) continue;
+        final id = (item["id"] as String?) ?? '';
+        if (id.isEmpty) continue;
+        if (!overwrite && box.containsKey(id)) {
+          summary.skipped++;
+          continue;
+        }
+        await box.put(id, json.encode(item));
+        summary.customSources++;
+      }
+    });
+    // 重新加载服务并通知首页/分类重建标签。
+    await CustomSourceService.instance.init();
+    EventBus.instance.emit(EventBus.kCustomSourcesChanged, null);
+  }
+
+  Future<void> _importFnOsServers(
+    dynamic raw,
+    bool overwrite,
+    ProfileImportSummary summary,
+  ) async {
+    if (raw is! List || raw.isEmpty) return;
+    final box = DBService.instance.fnOsBox;
+    await DBService.runExclusive(() async {
+      if (overwrite) {
+        await box.clear();
+      }
+      for (final item in raw) {
+        if (item is! Map) continue;
+        final id = (item["id"] as String?) ?? '';
+        if (id.isEmpty) continue;
+        if (!overwrite && box.containsKey(id)) {
+          summary.skipped++;
+          continue;
+        }
+        await box.put(id, json.encode(item));
+        summary.fnosServers++;
+      }
+    });
+    await FnOsService.instance.init();
+    EventBus.instance.emit(EventBus.kCustomSourcesChanged, null);
   }
 
   Future<ProfileImportSummary> importLegacyProfileMap(
@@ -541,10 +636,16 @@ class ProfileImportSummary {
   int followUsers = 0;
   int histories = 0;
   int skipped = 0;
+  int customSources = 0;
+  int fnosServers = 0;
 
   String get message {
     final base =
         "设置 $settings 项，屏蔽 $shields 项，关注 $followUsers 个，历史 $histories 条";
-    return skipped > 0 ? "$base，跳过异常 $skipped 条" : base;
+    final extra = customSources > 0 || fnosServers > 0
+        ? "，直播源 $customSources 个，影视库 $fnosServers 个"
+        : "";
+    final skip = skipped > 0 ? "，跳过异常 $skipped 条" : "";
+    return "$base$extra$skip";
   }
 }

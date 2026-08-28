@@ -1,5 +1,5 @@
 name: simple_live_app
-version: 2.1.0+20010
+version: 2.1.18+20028
 publish_to: none
 description: "随看 App"
 environment:
@@ -11,6 +11,7 @@ dependencies:
   dart_quickjs:
     git:
       url: https://github.com/xiaoyaocz/dart_quickjs
+  ffi: ^2.2.0 # 单实例锁提示框（MessageBoxW）
   # 图标
   cupertino_icons: ^1.0.8
   remixicon: ^1.4.1 #Remix图标
@@ -28,8 +29,6 @@ dependencies:
   collection: any
   udp: ^5.0.3 #UDP
   uuid: ^4.5.2 #UUID
-  webdav_client: ^1.2.2 # WebDAV
-  archive: ^4.0.7 #文件压缩
   crypto: ^3.0.7
 
   #Widget
@@ -81,7 +80,6 @@ dependencies:
     sdk: flutter
   flutter_localizations:
     sdk: flutter
-  sherpa_onnx: 1.13.4
 
 dev_dependencies:
   flutter_lints: ^2.0.0
@@ -92,7 +90,6 @@ dev_dependencies:
     sdk: flutter
 
 dependency_overrides:
-  sherpa_onnx_ios: 1.13.4
   canvas_danmaku:
     path: ../third_party/canvas_danmaku
 

@@ -1,5 +1,8 @@
 import 'dart:async';
+import 'dart:ffi' hide Size;
 import 'dart:io';
+
+import 'package:ffi/ffi.dart';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -32,11 +35,11 @@ import 'package:simple_live_app/services/douyin_account_service.dart';
 import 'package:simple_live_app/services/db_service.dart';
 import 'package:simple_live_app/services/follow_service.dart';
 import 'package:simple_live_app/services/kuaishou_account_service.dart';
-import 'package:simple_live_app/services/live_subtitle_service.dart';
 import 'package:simple_live_app/services/local_storage_service.dart';
 import 'package:simple_live_app/services/profile_backup_service.dart';
 import 'package:simple_live_app/services/sync_service.dart';
 import 'package:simple_live_app/app/custom_source/custom_source_service.dart';
+import 'package:simple_live_app/app/fnos/fn_os_service.dart';
 import 'package:simple_live_app/widgets/status/app_loadding_widget.dart';
 import 'package:simple_live_core/simple_live_core.dart';
 import 'package:window_manager/window_manager.dart';
@@ -47,12 +50,20 @@ import 'package:dynamic_color/dynamic_color.dart';
 void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
   DesktopStartupArgs.initialize(args);
+  // 单实例锁：双开进程会交错写坏同一 Hive 数据文件（2026-08-28 实测事故根因），
+  // 检测到已有实例运行直接提示退出。secondary 实例使用独立数据目录，放行。
+  if (!isSecondaryDesktopInstance(args) &&
+      !await tryAcquireSingleInstanceLock()) {
+    showAlreadyRunningMessage();
+    exit(0);
+  }
   await migrateData();
   await initWindow();
   MediaKit.ensureInitialized();
-  await Hive.initFlutter(await resolveHivePath(args));
+  final hivePath = await resolveHivePath(args);
+  await Hive.initFlutter(hivePath);
   //初始化服务
-  await initServices();
+  await initServices(hivePath);
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
   //设置状态栏为透明
   SystemUiOverlayStyle systemUiOverlayStyle = const SystemUiOverlayStyle(
@@ -75,6 +86,61 @@ Future<String?> resolveHivePath(List<String> args) async {
   }
   final instanceDir = await prepareSecondaryHiveDirectory(appSupportDir);
   return instanceDir.path;
+}
+
+/// 单实例锁句柄：进程存活期间持有（仅持有不读取），退出时由 OS 自动释放。
+// ignore: unused_element
+RandomAccessFile? _singleInstanceLockRaf;
+
+/// 单实例锁（防止双开进程同时写同一 Hive 数据文件导致交错损坏）。
+/// 返回 false 表示已有实例在运行，本实例应退出。
+/// 仅 Windows 启用；锁文件放系统临时目录（所有版本共享同一把锁）。
+Future<bool> tryAcquireSingleInstanceLock() async {
+  if (!Platform.isWindows) return true;
+  try {
+    final lockPath = p.join(
+      Directory.systemTemp.path,
+      'suikan_single_instance.lock',
+    );
+    final raf = await File(lockPath).open(mode: FileMode.write);
+    // advisory 排他锁（OS 级）：已有实例持有时，这里会阻塞直到超时。
+    await raf
+        .lock(FileLock.exclusive)
+        .timeout(const Duration(milliseconds: 800));
+    _singleInstanceLockRaf = raf;
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+/// Windows 弹提示框（FFI）：告知用户程序已在运行。
+void showAlreadyRunningMessage() {
+  try {
+    final user32 = DynamicLibrary.open('user32.dll');
+    final messageBoxW = user32.lookupFunction<
+        Int32 Function(IntPtr, Pointer<Uint16>, Pointer<Uint16>, Uint32),
+        int Function(int, Pointer<Uint16>, Pointer<Uint16>, int)>('MessageBoxW');
+    final text = _toUtf16Ptr('随看已经在运行，请勿重复打开。\n\n（同时打开两个窗口会损坏本地数据）');
+    final title = _toUtf16Ptr('随看');
+    messageBoxW(0, text, title, 0x40); // MB_ICONINFORMATION
+    malloc.free(text);
+    malloc.free(title);
+  } catch (_) {
+    // 弹窗失败不阻塞退出。
+  }
+}
+
+/// 字符串转 UTF-16 指针（以 NUL 结尾），供 Win32 API 使用。
+Pointer<Uint16> _toUtf16Ptr(String s) {
+  final units = s.codeUnits;
+  final raw = malloc.allocate<Uint16>(units.length + 1);
+  final list = raw.cast<Uint16>().asTypedList(units.length + 1);
+  for (var i = 0; i < units.length; i++) {
+    list[i] = units[i];
+  }
+  list[units.length] = 0;
+  return raw;
 }
 
 bool isSecondaryDesktopInstance(List<String> args) {
@@ -376,7 +442,7 @@ class _DesktopWindowLifecycle with WindowListener {
   }
 
   Future<void> _closeAppGracefully() async {
-    Utils.closeAppGracefully();
+    await Utils.closeAppGracefully();
   }
 
   Future<void> _closeStep(
@@ -402,7 +468,7 @@ class _DesktopWindowLifecycle with WindowListener {
   }
 }
 
-Future initServices() async {
+Future initServices([String? hivePath]) async {
   Hive.registerAdapter(FollowUserAdapter());
   Hive.registerAdapter(HistoryAdapter());
   Hive.registerAdapter(FollowUserTagAdapter());
@@ -412,8 +478,9 @@ Future initServices() async {
   //本地存储
   Log.d("Init LocalStorage Service");
   await Get.put(LocalStorageService()).init();
-  await Get.put(DBService()).init();
+  await Get.put(DBService()).init(hivePath: hivePath);
   Get.put(CustomSourceService()).init();
+  Get.put(FnOsService()).init();
   Get.put(CurrentRoomService());
   //初始化设置控制器
   Get.put(AppSettingsController());
@@ -425,7 +492,6 @@ Future initServices() async {
   Get.put(KuaishouAccountService());
 
   Get.put(FollowService());
-  Get.put(LiveSubtitleService());
   Get.put(ProfileBackupService());
 
   if (DesktopStartupArgs.isSecondaryDesktopInstance) {

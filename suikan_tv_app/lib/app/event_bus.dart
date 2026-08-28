@@ -4,6 +4,10 @@ import 'package:simple_live_tv_app/app/log.dart';
 
 /// 全局事件
 class EventBus {
+  /// 自定义直播源新增/删除/刷新（首页/分类标签需要实时刷新）
+  static const String kCustomSourcesChanged = "CustomSourcesChanged";
+  /// 平台显示/排序等主页设置变更（首页/分类标签需要实时刷新）
+  static const String kSiteSettingsChanged = "SiteSettingsChanged";
   static EventBus? _instance;
 
   static EventBus get instance {

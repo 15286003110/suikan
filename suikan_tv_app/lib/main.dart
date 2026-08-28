@@ -17,6 +17,8 @@ import 'package:simple_live_core/simple_live_core.dart';
 import 'package:simple_live_tv_app/app/desktop_startup_args.dart';
 import 'package:simple_live_tv_app/app/app_style.dart';
 import 'package:simple_live_tv_app/app/controller/app_settings_controller.dart';
+import 'package:simple_live_tv_app/app/custom_source/custom_source_service.dart';
+import 'package:simple_live_tv_app/app/fnos/fn_os_service.dart';
 import 'package:simple_live_tv_app/app/log.dart';
 import 'package:simple_live_tv_app/app/sites.dart';
 import 'package:simple_live_tv_app/app/utils.dart';
@@ -54,7 +56,7 @@ void main(List<String> args) async {
   await writeDesktopStartupLog("hive init path=$hivePath");
   await Hive.initFlutter(hivePath);
   //初始化服务
-  await initServices();
+  await initServices(hivePath);
   if (!isDesktop) {
     // 强制横屏
     SystemChrome.setPreferredOrientations([
@@ -211,7 +213,7 @@ Future<void> setupDesktopWindowLifecycle() async {
   await writeDesktopStartupLog("window shown and focused");
 }
 
-Future initServices() async {
+Future initServices([String? hivePath]) async {
   //日志信息
   CoreLog.enableLog = !kReleaseMode;
   CoreLog.requestLogType = RequestLogType.short;
@@ -242,7 +244,7 @@ Future initServices() async {
   //本地存储
   Log.d("Init LocalStorage Service");
   await Get.put(LocalStorageService()).init();
-  await Get.put(DBService()).init();
+  await Get.put(DBService()).init(hivePath: hivePath);
   Get.put(CurrentRoomService());
   //初始化设置控制器
   Get.put(AppSettingsController());
@@ -251,6 +253,9 @@ Future initServices() async {
   Get.put(DouyinAccountService());
   Get.put(KuaishouAccountService());
   Get.put(ProfileBackupService());
+
+  Get.put(CustomSourceService()).init();
+  Get.put(FnOsService()).init();
 
   if (DesktopStartupArgs.isSecondaryDesktopInstance) {
     Log.i("Skip SyncService for TV-Windows secondary player instance");
