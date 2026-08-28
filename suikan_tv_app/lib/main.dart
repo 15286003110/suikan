@@ -66,6 +66,25 @@ void main(List<String> args) async {
     // 全屏
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []);
   }
+  // 全局异常兜底：未捕获异常显示可读错误页，避免 release 模式下整页空白。
+  FlutterError.onError = (details) {
+    Log.e('FlutterError: ${details.exception}', details.stack ?? StackTrace.current);
+  };
+  ErrorWidget.builder = (details) {
+    final msg = details.exception.toString();
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: SelectableText(
+            '出错了（已记录日志）:\n\n$msg',
+            style: const TextStyle(color: Colors.white, fontSize: 14),
+          ),
+        ),
+      ),
+    );
+  };
   runApp(const MyApp());
   unawaited(setupDesktopWindowLifecycle());
 }
@@ -254,8 +273,8 @@ Future initServices([String? hivePath]) async {
   Get.put(KuaishouAccountService());
   Get.put(ProfileBackupService());
 
-  Get.put(CustomSourceService()).init();
-  Get.put(FnOsService()).init();
+  await Get.put(CustomSourceService()).init();
+  await Get.put(FnOsService()).init();
 
   if (DesktopStartupArgs.isSecondaryDesktopInstance) {
     Log.i("Skip SyncService for TV-Windows secondary player instance");

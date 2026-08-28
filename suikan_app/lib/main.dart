@@ -62,8 +62,32 @@ void main(List<String> args) async {
   MediaKit.ensureInitialized();
   final hivePath = await resolveHivePath(args);
   await Hive.initFlutter(hivePath);
-  //初始化服务
-  await initServices(hivePath);
+  //初始化服务（任一服务异常都只记录，不阻断启动，避免“只有空白页面”）
+  try {
+    await initServices(hivePath);
+  } catch (e, stack) {
+    Log.e('初始化服务失败（已尽量继续启动）: $e', stack);
+  }
+  // 全局异常兜底：release 模式下未捕获的 widget 异常默认渲染为空白页，
+  // 这里改为显示可读错误，避免“只有空白页面”且无从排查。
+  FlutterError.onError = (details) {
+    Log.e('FlutterError: ${details.exception}', details.stack ?? StackTrace.current);
+  };
+  ErrorWidget.builder = (details) {
+    final msg = details.exception.toString();
+    return Scaffold(
+      backgroundColor: Colors.white,
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: SelectableText(
+            '随看启动出现问题：\n$msg\n\n${details.stack}',
+            style: const TextStyle(fontSize: 12, color: Colors.black87),
+          ),
+        ),
+      ),
+    );
+  };
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
   //设置状态栏为透明
   SystemUiOverlayStyle systemUiOverlayStyle = const SystemUiOverlayStyle(
@@ -479,8 +503,11 @@ Future initServices([String? hivePath]) async {
   Log.d("Init LocalStorage Service");
   await Get.put(LocalStorageService()).init();
   await Get.put(DBService()).init(hivePath: hivePath);
-  Get.put(CustomSourceService()).init();
-  Get.put(FnOsService()).init();
+  // 自定义源 / 飞牛影视库必须在 runApp 之前完成注册：
+  // 否则首页/分类按 Sites.browseSites 构建标签时站点尚未就绪，
+  // 且 IndexedController 启动自动恢复“上次直播间”会找不到 custom_/fnos_ 站点。
+  await Get.put(CustomSourceService()).init();
+  await Get.put(FnOsService()).init();
   Get.put(CurrentRoomService());
   //初始化设置控制器
   Get.put(AppSettingsController());

@@ -54,9 +54,17 @@ class CategoryController extends GetxController
   }
 
   void _rebuildTabs() {
-    tabController.dispose();
+    // 先创建新控制器再释放旧的，避免视图在重建期间引用到已 dispose 的控制器
+    // （release 模式下会表现为整页空白）。
+    final old = tabController;
     tabController =
         TabController(length: Sites.browseSites.length, vsync: this);
+    try {
+      old.dispose();
+    } catch (_) {}
+    if (tabController.length > 0) {
+      tabController.index = 0;
+    }
     _registerSiteControllers();
     tabVersion.value++;
   }

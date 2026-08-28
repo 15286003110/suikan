@@ -5,6 +5,7 @@ import 'package:simple_live_app/app/constant.dart';
 import 'package:simple_live_app/app/controller/app_settings_controller.dart';
 import 'package:simple_live_app/app/desktop_startup_args.dart';
 import 'package:simple_live_app/app/event_bus.dart';
+import 'package:simple_live_app/app/log.dart';
 import 'package:simple_live_app/app/sites.dart';
 import 'package:simple_live_app/app/utils.dart';
 import 'package:simple_live_app/modules/category/category_controller.dart';
@@ -77,22 +78,35 @@ class IndexedController extends GetxController {
   }
 
   void restorePendingLiveRoom() async {
-    final settingsController = Get.find<AppSettingsController>();
-    final startupRoom = DesktopStartupArgs.startupRoom;
-    final lastRoom =
-        startupRoom ?? await settingsController.consumePendingLastLiveRoom();
-    if (lastRoom == null) {
-      return;
+    try {
+      final settingsController = Get.find<AppSettingsController>();
+      final startupRoom = DesktopStartupArgs.startupRoom;
+      final lastRoom =
+          startupRoom ?? await settingsController.consumePendingLastLiveRoom();
+      if (lastRoom == null) {
+        return;
+      }
+      final siteId = lastRoom["siteId"];
+      final roomId = lastRoom["roomId"];
+      if (siteId == null || roomId == null || roomId.isEmpty) {
+        return;
+      }
+      // 站点可能尚未注册（极端时序）：等一帧再确认，仍无则跳过，不阻断启动。
+      await Future.delayed(Duration.zero);
+      final site = Sites.allSites[siteId];
+      if (site == null) {
+        Log.w('自动恢复直播间跳过：站点未注册 $siteId');
+        return;
+      }
+      AppNavigator.toLiveRoomDetail(
+        site: site,
+        roomId: roomId,
+        initialDesktopSidePanelCollapsed:
+            DesktopStartupArgs.startupCollapseChat,
+      );
+    } catch (e, stack) {
+      // 自动恢复是锦上添花，任何异常都不应让 App 变空白页。
+      Log.e('自动恢复直播间异常（已跳过）: $e', stack);
     }
-    final site = Sites.allSites[lastRoom["siteId"]];
-    final roomId = lastRoom["roomId"];
-    if (site == null || roomId == null || roomId.isEmpty) {
-      return;
-    }
-    AppNavigator.toLiveRoomDetail(
-      site: site,
-      roomId: roomId,
-      initialDesktopSidePanelCollapsed: DesktopStartupArgs.startupCollapseChat,
-    );
   }
 }
