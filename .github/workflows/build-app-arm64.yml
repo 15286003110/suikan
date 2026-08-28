@@ -28,26 +28,26 @@ jobs:
       - name: Read version
         id: version
         run: |
-          ver=$(grep '^version:' simple_live_app/pubspec.yaml | awk '{print $2}' | cut -d+ -f1)
+          ver=$(grep '^version:' suikan_app/pubspec.yaml | awk '{print $2}' | cut -d+ -f1)
           echo "APP_VERSION=$ver" >> "$GITHUB_ENV"
           echo "version=$ver" >> "$GITHUB_OUTPUT"
           echo "using version: $ver"
 
       - name: pub get
-        working-directory: simple_live_app
+        working-directory: suikan_app
         run: flutter pub get
 
       - name: Build arm64 APK
-        working-directory: simple_live_app
+        working-directory: suikan_app
         run: flutter build apk --release --split-per-abi --target-platform android-arm64
 
       - name: Rename APK
         run: |
-          cd simple_live_app/build/app/outputs/flutter-apk
+          cd suikan_app/build/app/outputs/flutter-apk
           cp app-arm64-v8a-release.apk "Suikan_arm64_${{ steps.version.outputs.version }}.apk"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: Suikan-app-arm64
-          path: simple_live_app/build/app/outputs/flutter-apk/Suikan_arm64_*.apk
+          path: suikan_app/build/app/outputs/flutter-apk/Suikan_arm64_*.apk
