@@ -213,6 +213,21 @@ class LiveRoomController extends PlayerController
       // 纯音频模式下视同允许后台：前台/锁屏都持续只放声音
       AppSettingsController.instance.audioOnlyBackground.value;
 
+  /// 退到后台后是否已自动降级为纯音频（停掉视频轨），回前台需恢复画面。
+  bool _backgroundAudioOnly = false;
+  Timer? _backgroundDowngradeTimer;
+
+  /// 视频轨当前是否被强制停用（mpv vid=no）——恢复画面时直播需要重开流才出画面。
+  bool _videoTrackDisabled = false;
+
+  /// 纯音频期间自动降到「最低清晰度」之前的清晰度序号，-1 表示没降过、无需还原。
+  /// 只有多档清晰度的源才降（自定义 M3U 只有 1 档，降了没意义还会白重开一次流）。
+  int _qualityBeforeAudioOnly = -1;
+
+  /// 纯音频期间是否已切换为站点提供的「真·纯音频流」（目前仅 B 站支持）。
+  /// 该流本身不含视频轨，比降清晰度省得多；退出纯音频时必须切回正常流才有画面。
+  bool _usingAudioOnlyStream = false;
+
   /// 直播间加载是否失败
   var loadError = false.obs;
   Object? error;
@@ -276,18 +291,24 @@ class LiveRoomController extends PlayerController
     loadData();
     _startLiveEventFlowTimer();
 
-    // 纯音频模式：页面占位层遮画面（直播/点播通用，即时恢复）。
-    // 仅 VOD（影视点播）额外停用视频轨道（mpv vid=no）省解码——直播流切轨会卡顿，不切。
+    // 纯音频模式：占位层遮画面 + 停用视频轨 + 降到最低清晰度，三者一起做：
+    // 停轨省解码/渲染，降清晰度省流量（视频数据照样下载，只是码率大幅下降）。
     ever(
       AppSettingsController.instance.audioOnlyBackground,
       (bool v) {
-        if (isVod) {
-          unawaited(setAudioOnlyMode(v));
+        if (v) {
+          // 手动开启：立刻停轨 + 降清晰度。用户主动开启、对中断有预期，
+          // 不受网络类型限制；只有「后台自动降级」才挑移动网络降档。
+          unawaited(_enterAudioOnly(reason: "手动开启纯音频"));
+        } else {
+          _backgroundAudioOnly = false;
+          // 关闭：轨和清晰度都要还原，否则 vid=no 或低清会一直留着。
+          unawaited(_restoreVideoTrack());
         }
       },
     );
-    if (AppSettingsController.instance.audioOnlyBackground.value && isVod) {
-      unawaited(setAudioOnlyMode(true));
+    if (AppSettingsController.instance.audioOnlyBackground.value) {
+      unawaited(_enterAudioOnly(reason: "进房即为纯音频"));
     }
 
     scrollController.addListener(scrollListener);
@@ -1416,6 +1437,8 @@ class LiveRoomController extends PlayerController
     _cancelAutoExitTimers();
     _autoExitSession.stop();
     _superChatRefreshTimer?.cancel();
+    _backgroundDowngradeTimer?.cancel();
+    _usingAudioOnlyStream = false;
     _liveEventFlowTimer?.cancel();
     _onlineRefreshTimer?.cancel();
     _onlineStatusRefreshPolicy.reset();
@@ -1727,16 +1750,26 @@ class LiveRoomController extends PlayerController
         return;
       }
       qualites.value = playQualites;
+      int preferred;
       if (qualityLevel == 2) {
         // 最高
-        currentQuality = 0;
+        preferred = 0;
       } else if (qualityLevel == 0) {
         // 最低
-        currentQuality = playQualites.length - 1;
+        preferred = playQualites.length - 1;
       } else {
         // 中间档
-        int middle = (playQualites.length / 2).floor();
-        currentQuality = middle;
+        preferred = (playQualites.length / 2).floor();
+      }
+      final lowest = playQualites.length - 1;
+      if (AppSettingsController.instance.audioOnlyBackground.value &&
+          preferred != lowest) {
+        // 进房时纯音频已开启：直接用最低档开播，省得播起来再换流（换流会中断 1-2 秒）。
+        // 记下用户本应选的档位，关闭纯音频时还原回去。
+        _qualityBeforeAudioOnly = preferred;
+        currentQuality = lowest;
+      } else {
+        currentQuality = preferred;
       }
 
       // 播放地址预解析：清晰度确定后立即发起（fire-and-forget），
@@ -2021,6 +2054,11 @@ class LiveRoomController extends PlayerController
       "size=${player.state.width}x${player.state.height}",
     );
     Log.d("播放链接\n$finalUrl");
+    // 换文件后 mpv 会重新做轨道选择、vid 重置为 auto → 纯音频期间必须补停一次轨。
+    // 覆盖所有重开路径：切清晰度、切线路、播放重试、后台恢复等。
+    if (_videoTrackDisabled) {
+      await setAudioOnlyMode(true);
+    }
   }
 
   Future<void> _waitForPlayerReopen() async {
@@ -2382,7 +2420,7 @@ class LiveRoomController extends PlayerController
                 Obx(
                   () => SettingsSwitch(
                     title: "后台播放",
-                    subtitle: "移动端仍可能被系统省电策略关闭",
+                    subtitle: "退到后台/锁屏自动只播放声音（停画面省电），回到前台恢复画面",
                     value: settings.allowBackgroundPlayback.value,
                     onChanged: settings.setAllowBackgroundPlayback,
                   ),
@@ -2489,10 +2527,21 @@ class LiveRoomController extends PlayerController
       title: "切换清晰度",
       child: RadioGroup(
         groupValue: currentQuality,
-        onChanged: (e) {
+        onChanged: (e) async {
           Get.back();
+          // 切清晰度会重开流，影视会从头播 → 先记住进度，重开后 seek 回去。
+          final previousPosition =
+              isVod ? player.state.position : Duration.zero;
           currentQuality = e ?? 0;
-          getPlayUrl();
+          // 用户已手动指定清晰度 → 纯音频期间的自动降档记录作废，退出时不再还原。
+          _qualityBeforeAudioOnly = -1;
+          // getPlayUrl 解析的是正常流（不是站点纯音频流），标记同步清掉，
+          // 否则退出纯音频时会多一次无谓的重开。
+          _usingAudioOnlyStream = false;
+          await getPlayUrl();
+          if (isVod && previousPosition > Duration.zero) {
+            await _seekAfterQualitySwitch(previousPosition);
+          }
         },
         child: ListView.builder(
           itemCount: qualites.length,
@@ -3432,6 +3481,15 @@ ${errorStackTrace ?? ""}''');
             resumePending: true,
           ),
         );
+        // 明确暂停：不依赖 Video 控件的构建期参数，改设置后当次即可生效。
+        unawaited(
+          player.pause().catchError((Object e) {
+            Log.d("退后台暂停失败: $e");
+          }),
+        );
+      } else {
+        // 允许后台播放：退后台后自动降级为纯音频，只解码声音、不解码画面。
+        _scheduleBackgroundAudioOnlyDowngrade();
       }
     } else if (state == AppLifecycleState.resumed) {
       Log.d("返回前台");
@@ -3446,8 +3504,7 @@ ${errorStackTrace ?? ""}''');
       _backgroundedAt = null;
       _positionBeforeBackground = null;
       unawaited(
-        _recoverPlaybackAfterForeground(
-          "返回前台",
+        _handleForegroundRestore(
           since: backgroundedAt,
           previousPosition: positionBeforeBackground,
         ),
@@ -3491,6 +3548,278 @@ ${errorStackTrace ?? ""}''');
     }
     Log.d("$reason 后检测到播放停滞，尝试恢复");
     await setPlayer(refreshUrls: _shouldRefreshUrlsOnPlaybackRetry);
+  }
+
+  /// 返回前台：先撤销后台降级（恢复画面），没重开流再走原有的停滞恢复逻辑。
+  Future<void> _handleForegroundRestore({
+    required DateTime? since,
+    required Duration? previousPosition,
+  }) async {
+    if (await _restoreFromBackgroundAudioOnly()) {
+      return;
+    }
+    await _recoverPlaybackAfterForeground(
+      "返回前台",
+      since: since,
+      previousPosition: previousPosition,
+    );
+  }
+
+  /// 退到后台超过阈值后自动停掉视频轨（只留声音，省电）。
+  /// 仅移动端生效——桌面端窗口失焦时用户只是切窗口，画面应继续显示。
+  void _scheduleBackgroundAudioOnlyDowngrade() {
+    _backgroundDowngradeTimer?.cancel();
+    if (!Platform.isAndroid && !Platform.isIOS) {
+      return;
+    }
+    // 手动纯音频已经停过轨，无需后台再降一次。
+    if (_backgroundAudioOnly || _videoTrackDisabled) {
+      return;
+    }
+    _backgroundDowngradeTimer = Timer(const Duration(seconds: 30), () async {
+      if (!isBackground || _backgroundAudioOnly) {
+        return;
+      }
+      _backgroundAudioOnly = true;
+      // 降档要重开流，会中断 1~2 秒声音。WiFi/有线流量不值钱，不值得为此打断听感；
+      // 只有移动数据才降档省流量。停轨（省电）与网络类型无关，始终执行。
+      final downgrade = await _isMobileNetwork();
+      Log.d(
+        "后台超过 30 秒，自动降级为纯音频（停视频轨，只解码声音）"
+        "${downgrade ? " + 移动网络，降最低清晰度省流量" : "，非移动网络，不降档"}",
+      );
+      await _enterAudioOnly(reason: "后台自动降级", downgrade: downgrade);
+    });
+  }
+
+  /// 当前是否为移动数据网络。用于判断「值不值得为省流量重开流」：
+  /// 降档会中断 1~2 秒声音，WiFi/有线网络下这点流量收益远小于打断的损失。
+  /// 取不到网络类型时按非移动网络处理——宁可不省流量，也不打断播放。
+  Future<bool> _isMobileNetwork() async {
+    if (!Platform.isAndroid && !Platform.isIOS) {
+      return false;
+    }
+    try {
+      final result = await Connectivity().checkConnectivity();
+      // 7.x 返回 List（可能同时有多种连接）；只要含移动数据就算移动网络。
+      return result.contains(ConnectivityResult.mobile) &&
+          !result.contains(ConnectivityResult.wifi);
+    } catch (e) {
+      Log.d("获取网络类型失败: $e，按非移动网络处理（不降档）");
+      return false;
+    }
+  }
+
+  /// 进入纯音频：停视频轨（省解码/渲染）+ 可选降到最低清晰度（省流量）。
+  /// 顺序很关键：先停轨（立刻生效，不等网络），再降档；降档会重开流、
+  /// 播放器重建后 vid 被重置，所以降档成功必须补停一次轨。
+  /// [downgrade] = false 时只停轨不换清晰度（WiFi 下后台降级用，避免打断听感）。
+  Future<void> _enterAudioOnly({
+    required String reason,
+    bool downgrade = true,
+  }) async {
+    _videoTrackDisabled = true;
+    await setAudioOnlyMode(true);
+    if (!downgrade || _roomDisposed) {
+      return;
+    }
+    // 站点能直接给纯音频流（B站）→ 优先用它：流里没有视频轨，
+    // 比"降到最低清晰度"再省 60~70% 流量，且播放器完全不做视频解码。
+    // 取不到才回退到降清晰度。
+    if (await _switchToAudioOnlyStream(reason: reason)) {
+      if (!_roomDisposed) {
+        await setAudioOnlyMode(true);
+      }
+      return;
+    }
+    final switched = await _downgradeQualityForAudioOnly(reason: reason);
+    if (switched && !_roomDisposed) {
+      await setAudioOnlyMode(true);
+    }
+  }
+
+  /// 切到站点提供的「真·纯音频流」（目前仅 B 站支持，实测 192~448 kbps）。
+  /// 返回 true 表示已换流；取不到/失败一律返回 false，由调用方回退到降清晰度。
+  Future<bool> _switchToAudioOnlyStream({required String reason}) async {
+    if (!site.liveSite.supportsAudioOnlyStream || _usingAudioOnlyStream) {
+      return false;
+    }
+    final roomDetail = detail.value;
+    if (roomDetail == null || _roomDisposed) {
+      return false;
+    }
+    final loadGeneration = _loadGeneration;
+    // 换流会重开：VOD 会从头播，先记住进度稍后 seek 回去。
+    final resumeAt = isVod ? player.state.position : Duration.zero;
+    LivePlayUrl? playUrl;
+    try {
+      playUrl = await site.liveSite.getAudioOnlyPlayUrls(detail: roomDetail);
+    } catch (e) {
+      Log.d("$reason：取纯音频流异常，回退降清晰度: $e");
+      return false;
+    }
+    if (playUrl == null ||
+        playUrl.urls.isEmpty ||
+        !_isCurrentLoad(loadGeneration) ||
+        _roomDisposed) {
+      return false;
+    }
+    _usingAudioOnlyStream = true;
+    playUrls.value = playUrl.urls;
+    playHeaders = playUrl.headers;
+    currentLineIndex = 0;
+    currentLineInfo.value = "线路1";
+    await initPlaylist();
+    if (!_isCurrentLoad(loadGeneration)) {
+      return true;
+    }
+    if (resumeAt > Duration.zero) {
+      await _seekAfterQualitySwitch(resumeAt);
+    }
+    Log.d("$reason：已切到纯音频流（${playUrl.urls.length} 条线路，无视频轨）");
+    return true;
+  }
+
+  /// 纯音频期间把清晰度降到最低档。直播是单路交织流，音视频无法分离，
+  /// 唯一能省流量的办法就是换成码率更低的那条流。
+  /// 返回 true 表示已重开流。
+  Future<bool> _downgradeQualityForAudioOnly({required String reason}) async {
+    // 清晰度列表按「高 → 低」排列（index 0 = 最高，末位 = 最低）。
+    if (qualites.length <= 1 || currentQuality < 0) {
+      return false;
+    }
+    final lowest = qualites.length - 1;
+    if (currentQuality == lowest) {
+      return false;
+    }
+    final previous = currentQuality;
+    final previousInfo = currentQualityInfo.value;
+    // 降档会重开流：VOD 会从头播，先记住进度稍后 seek 回去。
+    final resumeAt = isVod ? player.state.position : Duration.zero;
+    final loadGeneration = _loadGeneration;
+    _qualityBeforeAudioOnly = previous;
+    currentQuality = lowest;
+    // 先解析新地址：失败就回滚，旧流继续播、声音不中断（后台尤其不能断）。
+    final reloaded = await _reloadPlayUrls(resetLine: true, silent: true);
+    if (!reloaded || !_isCurrentLoad(loadGeneration)) {
+      _qualityBeforeAudioOnly = -1;
+      currentQuality = previous;
+      currentQualityInfo.value = previousInfo;
+      return false;
+    }
+    await initPlaylist();
+    if (!_isCurrentLoad(loadGeneration)) {
+      return true;
+    }
+    if (resumeAt > Duration.zero) {
+      await _seekAfterQualitySwitch(resumeAt);
+    }
+    Log.d("$reason：清晰度降到最低档（${qualites[lowest].quality}），省流量");
+    return true;
+  }
+
+  /// 切清晰度后 VOD 会从头播，seek 回切档前的进度。
+  /// mpv 刚 open 时 duration 可能还是 0，此时 seek 无效，需等一等再试。
+  Future<void> _seekAfterQualitySwitch(Duration target) async {
+    for (var i = 0; i < 3; i++) {
+      try {
+        if (player.state.duration > Duration.zero || i == 2) {
+          await player.seek(target);
+          return;
+        }
+      } catch (e) {
+        Log.d("切清晰度后恢复进度失败: $e");
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+    }
+  }
+
+  /// 恢复视频轨 + 还原纯音频期间降过的清晰度。
+  /// 返回 true 表示已重开流，调用方无需再走停滞恢复逻辑。
+  Future<bool> _restoreVideoTrack() async {
+    if (!_videoTrackDisabled) {
+      return false;
+    }
+    _videoTrackDisabled = false;
+    await setAudioOnlyMode(false);
+    // 之前切过站点纯音频流 → playUrls 现在是音频流，必须解析回正常流才有画面。
+    if (_usingAudioOnlyStream) {
+      _usingAudioOnlyStream = false;
+      // 音频流与清晰度无关，但「进房即为纯音频」时清晰度被压到了最低档；
+      // 切回正常流前要把原档位还原，否则用户的画质设置会被悄悄留在最低档。
+      final pendingQuality = _qualityBeforeAudioOnly;
+      _qualityBeforeAudioOnly = -1;
+      if (pendingQuality >= 0 &&
+          pendingQuality < qualites.length &&
+          pendingQuality != currentQuality) {
+        currentQuality = pendingQuality;
+      }
+      final loadGeneration = _loadGeneration;
+      final resumeAt = isVod ? player.state.position : Duration.zero;
+      final reloaded = await _reloadPlayUrls(resetLine: true, silent: true);
+      if (reloaded && _isCurrentLoad(loadGeneration)) {
+        await initPlaylist();
+        if (_isCurrentLoad(loadGeneration)) {
+          if (resumeAt > Duration.zero) {
+            await _seekAfterQualitySwitch(resumeAt);
+          }
+          Log.d("退出纯音频：已切回正常视频流"
+              "${pendingQuality >= 0 ? "，画质还原为 ${qualites[currentQuality].quality}" : ""}");
+        }
+        // 已经重开过流，画面随之恢复，无需再走下面的直播重开分支。
+        return true;
+      }
+      // 切回失败：交给下面的逻辑兜底（直播仍需重开流出画面）。
+      Log.d("退出纯音频：切回正常流失败，走兜底重开");
+    }
+    // 纯音频期间降过清晰度 → 切回原档（会重开流，vid 已先恢复为 auto）。
+    final restore = _qualityBeforeAudioOnly;
+    _qualityBeforeAudioOnly = -1;
+    if (restore >= 0 &&
+        restore < qualites.length &&
+        restore != currentQuality &&
+        _isCurrentLoad(_loadGeneration)) {
+      final previous = currentQuality;
+      final previousInfo = currentQualityInfo.value;
+      final resumeAt = isVod ? player.state.position : Duration.zero;
+      final loadGeneration = _loadGeneration;
+      currentQuality = restore;
+      final reloaded = await _reloadPlayUrls(resetLine: true, silent: true);
+      if (reloaded && _isCurrentLoad(loadGeneration)) {
+        await initPlaylist();
+        if (_isCurrentLoad(loadGeneration)) {
+          if (resumeAt > Duration.zero) {
+            await _seekAfterQualitySwitch(resumeAt);
+          }
+          Log.d("退出纯音频：清晰度还原为 ${qualites[restore].quality}");
+        }
+        // 已经重开过流，画面随之恢复，无需再走下面的直播重开分支。
+        return true;
+      }
+      // 还原失败：回滚清晰度，交给下面的逻辑兜底（直播仍需重开流出画面）。
+      currentQuality = previous;
+      currentQualityInfo.value = previousInfo;
+    }
+    if (!isVod && _isCurrentLoad(_loadGeneration)) {
+      await setPlayer(refreshUrls: false);
+      return true;
+    }
+    return false;
+  }
+
+  /// 恢复后台降级的视频轨。返回 true 表示已重新开流，无需再走停滞恢复。
+  Future<bool> _restoreFromBackgroundAudioOnly() async {
+    _backgroundDowngradeTimer?.cancel();
+    if (!_backgroundAudioOnly) {
+      return false;
+    }
+    _backgroundAudioOnly = false;
+    // 用户手动开着纯音频 → 保持停轨，画面继续由占位层遮住（关掉时再恢复，见 _restoreVideoTrack）。
+    if (AppSettingsController.instance.audioOnlyBackground.value) {
+      return false;
+    }
+    Log.d("返回前台，恢复视频轨");
+    return _restoreVideoTrack();
   }
 
   @override

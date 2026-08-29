@@ -131,7 +131,8 @@ class PlaySettingsPage extends GetView<AppSettingsController> {
                 Obx(
                   () => SettingsSwitch(
                     title: "纯音频模式",
-                    subtitle: "直播中点开立即只播放声音、不显示画面（前台/锁屏都持续，像音乐播放器）",
+                    subtitle:
+                        "只播放声音、不显示画面，并自动切到最低清晰度省流量；关闭后自动还原。退后台只放声音，移动网络下降清晰度，WiFi 不降",
                     value: controller.audioOnlyBackground.value,
                     onChanged: (e) {
                       controller.setAudioOnlyBackground(e);

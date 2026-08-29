@@ -1661,6 +1661,18 @@ class DouyinSite implements LiveSite {
     );
   }
 
+  /// 抖音直播为单路交织流，服务端不提供纯音频流
+  /// （官方"听抖音"只支持点播中长视频，直播不适用）。
+  @override
+  bool get supportsAudioOnlyStream => false;
+
+  @override
+  Future<LivePlayUrl?> getAudioOnlyPlayUrls({
+    required LiveRoomDetail detail,
+  }) {
+    return Future.value(null);
+  }
+
   @override
   Future<bool> getLiveStatus({required String roomId}) async {
     final targetId = roomId.trim();

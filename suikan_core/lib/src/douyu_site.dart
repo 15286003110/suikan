@@ -359,6 +359,17 @@ class DouyuSite implements LiveSite {
     return LiveSearchAnchorResult(hasMore: hasMore, items: items);
   }
 
+  /// 斗鱼直播为单路交织流，服务端不提供纯音频流（实测 multirates 只有视频档）。
+  @override
+  bool get supportsAudioOnlyStream => false;
+
+  @override
+  Future<LivePlayUrl?> getAudioOnlyPlayUrls({
+    required LiveRoomDetail detail,
+  }) {
+    return Future.value(null);
+  }
+
   @override
   Future<bool> getLiveStatus({required String roomId}) async {
     var roomInfo = await _getRoomInfo(roomId);

@@ -135,14 +135,14 @@ mixin PlayerMixin {
     ),
   );
 
-  /// 纯音频模式：停用/恢复视频轨道（mpv vid=no / auto）。
-  /// 直播流（FLV/TS）音视频交织，停轨易引起同步卡顿 → 只停渲染（页面移除视频控件）；
-  /// 电影/VOD 音视频轨独立，真正停视频轨只解码音频（最省性能）。
+  /// 纯音频模式：停用/恢复视频轨道（mpv vid=no / auto），直播与影视一视同仁。
+  /// 停轨后只解码音频，视频解码与渲染开销全部省掉。
+  /// 恢复时调用方需负责让画面回来：影视切回 auto 即出画面，
+  /// 直播需重新开一次流（见 LiveRoomController._restoreVideoTrack）。
   Future<void> setAudioOnlyMode(bool enable) async {
     try {
       final native = player.platform as NativePlayer;
-      final isVod = player.state.duration > Duration.zero;
-      await native.setProperty('vid', enable && isVod ? 'no' : 'auto');
+      await native.setProperty('vid', enable ? 'no' : 'auto');
     } catch (e) {
       Log.d('setAudioOnlyMode($enable) error: $e');
     }

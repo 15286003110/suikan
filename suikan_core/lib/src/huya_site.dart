@@ -657,6 +657,18 @@ class HuyaSite implements LiveSite {
     return LiveSearchAnchorResult(hasMore: hasMore, items: items);
   }
 
+  /// 虎牙服务端不提供纯音频流：实测 vBitRateInfo 档位全是视频档
+  /// （蓝光30M/20M/8M/4M/超清/流畅500kbps），官方"仅音频播放"是客户端停解码。
+  @override
+  bool get supportsAudioOnlyStream => false;
+
+  @override
+  Future<LivePlayUrl?> getAudioOnlyPlayUrls({
+    required LiveRoomDetail detail,
+  }) {
+    return Future.value(null);
+  }
+
   @override
   Future<bool> getLiveStatus({required String roomId}) async {
     var roomInfo = await _getRoomInfo(roomId);

@@ -89,6 +89,19 @@ class LiveSite {
     return Future.value(LivePlayUrl(urls: []));
   }
 
+  /// 是否支持「真·纯音频流」——服务端能直接返回一条不含视频轨的流。
+  /// 默认 false：多数直播是单路音视频交织流（HTTP-FLV / TS），客户端无法只拉音频，
+  /// 只能下载后丢弃视频数据，也就省不了流量。
+  bool get supportsAudioOnlyStream => false;
+
+  /// 读取纯音频流（流中不含视频轨）。
+  /// 返回 null 表示取不到，调用方应回退到「停视频轨 + 降最低清晰度」。
+  Future<LivePlayUrl?> getAudioOnlyPlayUrls({
+    required LiveRoomDetail detail,
+  }) {
+    return Future.value(null);
+  }
+
   /// 查询直播状态
   Future<bool> getLiveStatus({required String roomId}) {
     return Future.value(false);
