@@ -4,8 +4,11 @@ import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 import 'package:get/get.dart';
 import 'package:simple_live_tv_app/app/app_focus_node.dart';
 import 'package:simple_live_tv_app/app/app_style.dart';
+import 'package:simple_live_tv_app/app/fnos/fn_os_service.dart';
 import 'package:simple_live_tv_app/app/sites.dart';
 import 'package:simple_live_tv_app/modules/hot_live/hot_live_controller.dart';
+import 'package:simple_live_tv_app/modules/settings/custom_source/custom_source_browse_page.dart';
+import 'package:simple_live_tv_app/modules/settings/fnos/fn_os_browse_page.dart';
 import 'package:simple_live_tv_app/routes/app_navigation.dart';
 import 'package:simple_live_tv_app/widgets/app_scaffold.dart';
 import 'package:simple_live_tv_app/widgets/button/highlight_button.dart';
@@ -85,7 +88,22 @@ class HotLivePage extends GetView<HotliveController> {
                       selected: controller.siteId.value == e.id,
                       focusNode: AppFocusNode(),
                       onTap: () {
-                        controller.setSite(e.id);
+                        final id = e.id;
+                        // 自定义直播源/飞牛影视库与手机端一致：打开频道网格/影视库浏览页，
+                        // 不走内置平台的推荐接口。
+                        if (id.startsWith('custom_')) {
+                          Get.to(() => CustomSourceBrowsePage(sourceId: id));
+                          return;
+                        }
+                        if (id.startsWith('fnos_')) {
+                          final server =
+                              FnOsService.instance.serverForSiteId(id);
+                          if (server != null) {
+                            Get.to(() => FnOsBrowsePage(server: server));
+                          }
+                          return;
+                        }
+                        controller.setSite(id);
                       },
                     ),
                   ),
