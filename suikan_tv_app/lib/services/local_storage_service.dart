@@ -1,5 +1,9 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:get/get.dart';
 import 'package:hive/hive.dart';
+import 'package:path/path.dart' as p;
 import 'package:simple_live_tv_app/app/log.dart';
 
 class LocalStorageService extends GetxService {
@@ -190,12 +194,25 @@ class LocalStorageService extends GetxService {
   late Box<String> shieldBox;
 
   Future init() async {
-    settingsBox = await Hive.openBox(
-      "TVLocalStorage",
-    );
-    shieldBox = await Hive.openBox(
-      "TVDanmuShield",
-    );
+    settingsBox = await _openBoxSafe("TVLocalStorage");
+    shieldBox = await _openBoxSafe("TVDanmuShield");
+  }
+
+  /// 打开 Hive 箱（带超时与空箱兜底）。
+  /// 损坏/被占用文件会让 Hive.openBox 挂起（不抛异常）→ 必须限时；超时改用
+  /// 临时目录空箱，保证 App 启动永不因设置箱卡死（设置项丢失可由用户重设）。
+  Future<Box<T>> _openBoxSafe<T>(String name) async {
+    try {
+      final future = Hive.openBox<T>(name);
+      // 超时后原始 future 仍可能在后台完成并抛错 → 消费其错误，避免 Unhandled Exception。
+      unawaited(future.then((_) {}, onError: (Object _) {}));
+      return await future.timeout(const Duration(seconds: 5));
+    } catch (e) {
+      Log.logPrint("打开[$name]箱超时/异常($e)，改用临时空箱兜底");
+    }
+    final fallbackDir =
+        p.join(Directory.systemTemp.path, 'suikan_box_fallback');
+    return Hive.openBox('${name}_fb', path: fallbackDir);
   }
 
   T getValue<T>(dynamic key, T defaultValue) {

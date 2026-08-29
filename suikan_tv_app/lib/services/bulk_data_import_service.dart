@@ -162,7 +162,7 @@ class BulkDataImportService {
       );
     }
     if (overwrite) {
-      await DBService.instance.followBox.clear();
+      await DBService.runExclusive(() => DBService.instance.followBox.clear());
     }
     await _putFollows(users, policy, onProgress: onProgress);
     final result = BulkImportResult(
@@ -197,7 +197,7 @@ class BulkDataImportService {
       message: "正在整理历史 0/${rawHistories.length}",
     ));
     if (overwrite) {
-      await DBService.instance.historyBox.clear();
+      await DBService.runExclusive(() => DBService.instance.historyBox.clear());
     }
     final existing = overwrite
         ? <String, History>{}
@@ -335,7 +335,7 @@ class BulkDataImportService {
     for (final user in users) {
       buffer[user.id] = user;
       if (buffer.length >= policy.dbBatchSize) {
-        await DBService.instance.followBox.putAll(buffer);
+        await DBService.runExclusive(() => DBService.instance.followBox.putAll(buffer));
         written += buffer.length;
         buffer.clear();
         _notifyProgress(
@@ -350,7 +350,7 @@ class BulkDataImportService {
       }
     }
     if (buffer.isNotEmpty) {
-      await DBService.instance.followBox.putAll(buffer);
+      await DBService.runExclusive(() => DBService.instance.followBox.putAll(buffer));
       written += buffer.length;
       _notifyProgress(
         onProgress,
@@ -374,7 +374,7 @@ class BulkDataImportService {
     for (final history in histories) {
       buffer[history.id] = history;
       if (buffer.length >= policy.dbBatchSize) {
-        await DBService.instance.historyBox.putAll(buffer);
+        await DBService.runExclusive(() => DBService.instance.historyBox.putAll(buffer));
         written += buffer.length;
         buffer.clear();
         _notifyProgress(
@@ -389,7 +389,7 @@ class BulkDataImportService {
       }
     }
     if (buffer.isNotEmpty) {
-      await DBService.instance.historyBox.putAll(buffer);
+      await DBService.runExclusive(() => DBService.instance.historyBox.putAll(buffer));
       written += buffer.length;
       _notifyProgress(
         onProgress,
