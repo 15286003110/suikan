@@ -438,6 +438,7 @@ class CustomSourceBrowsePage extends StatelessWidget {
             itemBuilder: (_, i) {
               final g = entry.value[i];
               return FocusCard(
+                onActivate: () => c.openGroup(g),
                 child: _ChannelCard(
                   group: g,
                   onTap: () => c.openGroup(g),
@@ -469,6 +470,7 @@ class CustomSourceBrowsePage extends StatelessWidget {
       itemBuilder: (_, i) {
         final g = list[i];
         return FocusCard(
+          onActivate: () => c.openGroup(g),
           child: _ChannelCard(
             group: g,
             onTap: () => c.openGroup(g),

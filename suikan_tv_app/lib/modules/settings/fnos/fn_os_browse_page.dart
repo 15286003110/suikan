@@ -424,7 +424,10 @@ class _FnOsBrowsePageState extends State<FnOsBrowsePage> {
             delegate: SliverChildBuilderDelegate(
               (_, i) {
                 final m = movies[i];
-                return FocusCard(child: _buildPortraitMovieCard(m));
+                return FocusCard(
+                  onActivate: () => _openMovie(m),
+                  child: _buildPortraitMovieCard(m),
+                );
               },
               childCount: movies.length,
             ),
@@ -460,7 +463,10 @@ class _FnOsBrowsePageState extends State<FnOsBrowsePage> {
             delegate: SliverChildBuilderDelegate(
               (_, i) {
                 final s = series[i];
-                return FocusCard(child: _buildPortraitSeriesCard(s));
+                return FocusCard(
+                  onActivate: () => _openSeries(s),
+                  child: _buildPortraitSeriesCard(s),
+                );
               },
               childCount: series.length,
             ),
