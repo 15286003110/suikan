@@ -35,6 +35,20 @@ class DBService extends GetxService {
     followBox = await _openBoxResilient<FollowUser>("TVFollowUser");
     customSourceBox = await _openBoxResilient<String>("CustomSource");
     fnOsBox = await _openBoxResilient<String>("FnOsServer");
+    // 异步压缩各箱（删除操作留下的空洞会随使用膨胀，压缩可保持读写速度）；
+    // 不阻塞启动，失败静默。
+    unawaited(_compactAllBoxes());
+  }
+
+  Future<void> _compactAllBoxes() async {
+    await Future<void>.delayed(const Duration(seconds: 5));
+    for (final box in <Box>[historyBox, followBox, customSourceBox, fnOsBox]) {
+      try {
+        await box.compact();
+      } catch (_) {
+        // 单个箱压缩失败不影响其余
+      }
+    }
   }
 
   /// Hive 数据目录（由 main 传入）。
