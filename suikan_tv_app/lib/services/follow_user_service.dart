@@ -1382,7 +1382,7 @@ class FollowUserService extends BasePageController<FollowUser> {
     if (!result) {
       return;
     }
-    await DBService.instance.followBox.delete(item.id);
+    await DBService.runExclusive(() => DBService.instance.followBox.delete(item.id));
     if (refresh) {
       refreshData(forceStatus: false);
     } else {

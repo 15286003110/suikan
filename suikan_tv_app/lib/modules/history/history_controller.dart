@@ -23,7 +23,7 @@ class HistoryController extends BasePageController<History> {
     if (!result) {
       return;
     }
-    await DBService.instance.historyBox.clear();
+    await DBService.runExclusive(() => DBService.instance.historyBox.clear());
     refreshData();
   }
 
@@ -32,7 +32,7 @@ class HistoryController extends BasePageController<History> {
     if (!result) {
       return;
     }
-    await DBService.instance.historyBox.delete(item.id);
+    await DBService.runExclusive(() => DBService.instance.historyBox.delete(item.id));
     refreshData();
   }
 }

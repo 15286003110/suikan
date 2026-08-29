@@ -2739,7 +2739,7 @@ class LiveRoomController extends PlayerController
                   if (!confirmed) {
                     return;
                   }
-                  await DBService.instance.historyBox.delete(item.id);
+                  await DBService.runExclusive(() => DBService.instance.historyBox.delete(item.id));
                   await loadHistory();
                 },
               ),
