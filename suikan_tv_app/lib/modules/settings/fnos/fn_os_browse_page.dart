@@ -9,6 +9,7 @@ import 'package:simple_live_tv_app/app/fnos/fn_os_models.dart';
 import 'package:simple_live_tv_app/app/fnos/fn_os_service.dart';
 import 'package:simple_live_tv_app/modules/settings/fnos/fn_os_detail_page.dart';
 import 'package:simple_live_tv_app/services/local_storage_service.dart';
+import 'package:simple_live_tv_app/widgets/focus_card.dart';
 import 'package:simple_live_tv_app/widgets/net_image.dart';
 import 'package:simple_live_tv_app/widgets/shadow_card.dart';
 
@@ -423,7 +424,7 @@ class _FnOsBrowsePageState extends State<FnOsBrowsePage> {
             delegate: SliverChildBuilderDelegate(
               (_, i) {
                 final m = movies[i];
-                return _buildPortraitMovieCard(m);
+                return FocusCard(child: _buildPortraitMovieCard(m));
               },
               childCount: movies.length,
             ),
@@ -459,7 +460,7 @@ class _FnOsBrowsePageState extends State<FnOsBrowsePage> {
             delegate: SliverChildBuilderDelegate(
               (_, i) {
                 final s = series[i];
-                return _buildPortraitSeriesCard(s);
+                return FocusCard(child: _buildPortraitSeriesCard(s));
               },
               childCount: series.length,
             ),

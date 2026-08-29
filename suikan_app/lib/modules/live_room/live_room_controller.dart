@@ -270,15 +270,17 @@ class LiveRoomController extends PlayerController
     loadData();
     _startLiveEventFlowTimer();
 
-    // 纯音频模式：只保留音频流（mpv vid=no 停用视频轨道，配合页面移除视频控件，
-    // 真正省性能）。前台/后台/锁屏都持续，后台保活由播放状态监听自动管理。
+    // 纯音频模式：页面占位层遮画面（直播/点播通用，即时恢复）。
+    // 仅 VOD（影视点播）额外停用视频轨道（mpv vid=no）省解码——直播流切轨会卡顿，不切。
     ever(
       AppSettingsController.instance.audioOnlyBackground,
       (bool v) {
-        unawaited(setAudioOnlyMode(v));
+        if (isVod) {
+          unawaited(setAudioOnlyMode(v));
+        }
       },
     );
-    if (AppSettingsController.instance.audioOnlyBackground.value) {
+    if (AppSettingsController.instance.audioOnlyBackground.value && isVod) {
       unawaited(setAudioOnlyMode(true));
     }
 

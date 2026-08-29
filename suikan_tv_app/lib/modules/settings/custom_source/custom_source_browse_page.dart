@@ -7,6 +7,7 @@ import 'package:simple_live_tv_app/app/custom_source/m3u_models.dart';
 import 'package:simple_live_tv_app/app/sites.dart';
 import 'package:simple_live_tv_app/routes/app_navigation.dart';
 import 'package:simple_live_tv_app/services/local_storage_service.dart';
+import 'package:simple_live_tv_app/widgets/focus_card.dart';
 import 'package:simple_live_tv_app/widgets/live_room_grid_layout.dart';
 import 'package:simple_live_tv_app/widgets/net_image.dart';
 import 'package:simple_live_tv_app/widgets/shadow_card.dart';
@@ -436,10 +437,12 @@ class CustomSourceBrowsePage extends StatelessWidget {
             itemCount: entry.value.length,
             itemBuilder: (_, i) {
               final g = entry.value[i];
-              return _ChannelCard(
-                group: g,
-                onTap: () => c.openGroup(g),
-                onLongPress: () => c.showLinePicker(g),
+              return FocusCard(
+                child: _ChannelCard(
+                  group: g,
+                  onTap: () => c.openGroup(g),
+                  onLongPress: () => c.showLinePicker(g),
+                ),
               );
             },
           ),
@@ -465,10 +468,12 @@ class CustomSourceBrowsePage extends StatelessWidget {
       itemCount: list.length,
       itemBuilder: (_, i) {
         final g = list[i];
-        return _ChannelCard(
-          group: g,
-          onTap: () => c.openGroup(g),
-          onLongPress: () => c.showLinePicker(g),
+        return FocusCard(
+          child: _ChannelCard(
+            group: g,
+            onTap: () => c.openGroup(g),
+            onLongPress: () => c.showLinePicker(g),
+          ),
         );
       },
     );
