@@ -38,63 +38,19 @@ class CustomSourceService extends GetxService {
     final box = DBService.instance.customSourceBox;
     sources.clear();
     registeredSites.clear();
-    var migrated = false;
     for (final key in box.keys) {
       final raw = box.get(key);
       if (raw == null) continue;
       try {
         final src = M3uSource.fromJson(json.decode(raw) as Map<String, dynamic>);
-        // 存量台标 URL 迁移：fanmingming.com（被墙）→ jsDelivr CDN 镜像
-        final migratedSrc = _migrateLogos(src);
-        if (migratedSrc != null) {
-          sources.add(migratedSrc);
-          _registerSite(migratedSrc);
-          await _persist(migratedSrc);
-          migrated = true;
-        } else {
-          sources.add(src);
-          _registerSite(src);
-        }
+        sources.add(src);
+        _registerSite(src);
       } catch (e, stack) {
         Log.e('自定义源[$key]解析失败: $e', stack);
       }
     }
     startAutoRefresh();
     return this;
-  }
-
-  /// 将源内所有频道的台标 URL 规范化（fanmingming → jsDelivr）。
-  /// 有变更返回新 M3uSource，无变更返回 null。
-  M3uSource? _migrateLogos(M3uSource src) {
-    var changed = false;
-    final channels = src.channels.map((c) {
-      if (c.logo == null || c.logo!.isEmpty) return c;
-      final normalized = normalizeLogoUrl(c.logo!);
-      if (normalized == c.logo) return c;
-      changed = true;
-      return M3uChannel(
-        name: c.name,
-        url: c.url,
-        logo: normalized,
-        group: c.group,
-        tvgId: c.tvgId,
-      );
-    }).toList();
-    if (!changed) return null;
-    return M3uSource(
-      id: src.id,
-      name: src.name,
-      url: src.url,
-      enabled: src.enabled,
-      lastUpdated: src.lastUpdated,
-      addedAt: src.addedAt,
-      channels: channels,
-      sortMode: src.sortMode,
-      autoRefresh: src.autoRefresh,
-      refreshMode: src.refreshMode,
-      refreshIntervalHours: src.refreshIntervalHours,
-      refreshHour: src.refreshHour,
-    );
   }
 
   /// 频道唯一键：优先用 tvgId，否则用「名称+地址」避免同名多线路冲突。

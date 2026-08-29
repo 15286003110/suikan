@@ -1,19 +1,7 @@
 import 'm3u_models.dart';
 
-/// 台标 URL 规范化：`live.fanmingming.com`（境外服务器，国内直连超时不可达）
-/// 替换为 jsDelivr CDN 镜像（`cdn.jsdelivr.net/gh/fanmingming/live@main`，实测可达）。
-/// 路径结构一致（`/tv/xxx.png`），可直接映射。
-String normalizeLogoUrl(String url) {
-  if (url.isEmpty) return url;
-  const from = 'live.fanmingming.com/tv/';
-  if (url.contains(from)) {
-    final name = url.substring(url.indexOf(from) + from.length);
-    if (name.isNotEmpty) {
-      return 'https://cdn.jsdelivr.net/gh/fanmingming/live@main/tv/$name';
-    }
-  }
-  return url;
-}
+/// 台标 URL 规范化：不做任何镜像/替换，原样返回（不写死任何第三方源地址）。
+String normalizeLogoUrl(String url) => url;
 
 /// 解析 M3U / M3U8 直播源文本为频道列表。
 /// 支持 #EXTINF 的 tvg-id / tvg-logo / group-title 属性，
