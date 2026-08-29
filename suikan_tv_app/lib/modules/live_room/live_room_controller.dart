@@ -84,6 +84,11 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
   final autoExitSource = AutoExitSource.none.obs;
   bool _autoExitCompleting = false;
   bool _roomDisposed = false;
+  // 播放地址预解析缓存：detail 就绪后立即解析，首次进房消费（进房秒出画面）。
+  Future<List<String>>? _preloadPlayUrlsFuture;
+  Map<String, String>? _preloadPlayHeaders;
+  String? _preloadQuality;
+  bool _preloadConsumed = false;
 
   /// 设置的自动关闭时长，单位分钟
   var autoExitMinutes = 60.obs;
@@ -784,6 +789,24 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
         currentQuality = middle;
       }
 
+      // 播放地址预解析：清晰度确定后立即发起（fire-and-forget），
+      // 首次播放直接消费缓存（进房秒出画面）；失败/换质量/重试仍走原逻辑。
+      if (currentQuality >= 0 && currentQuality < qualites.length) {
+        _preloadConsumed = false;
+        final q = qualites[currentQuality];
+        final detail0 = detail.value;
+        _preloadPlayUrlsFuture = site.liveSite
+            .getPlayUrls(detail: detail0!, quality: q)
+            .then((r) {
+          _preloadQuality = q.quality;
+          _preloadPlayHeaders = r.headers;
+          return r.urls;
+        }).catchError((Object _) {
+          _preloadPlayUrlsFuture = null;
+          return <String>[];
+        });
+      }
+
       await getPlayUrl();
     } catch (e, stackTrace) {
       Log.e("读取播放清晰度失败：${site.id}/$roomId error=$e", stackTrace);
@@ -796,14 +819,33 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
     currentQualityInfo.value = qualites[currentQuality].quality;
     currentLineInfo.value = "";
     currentLineIndex = -1;
-    var playUrl = await site.liveSite
-        .getPlayUrls(detail: detail.value!, quality: qualites[currentQuality]);
-    if (playUrl.urls.isEmpty) {
+    // 预解析缓存消费：首次进房且质量匹配时直接使用（省一次网络往返，进房秒出画面）。
+    List<String>? urls;
+    Map<String, String>? headers;
+    final pre = _preloadPlayUrlsFuture;
+    if (!_preloadConsumed &&
+        pre != null &&
+        _preloadQuality == qualites[currentQuality].quality) {
+      _preloadConsumed = true;
+      try {
+        urls = await pre;
+        headers = _preloadPlayHeaders;
+      } catch (_) {
+        urls = null;
+      }
+    }
+    if (urls == null) {
+      final playUrl = await site.liveSite
+          .getPlayUrls(detail: detail.value!, quality: qualites[currentQuality]);
+      urls = playUrl.urls;
+      headers = playUrl.headers;
+    }
+    if (urls.isEmpty) {
       playbackLoadError.value = "无法读取播放地址，请稍后重试";
       return;
     }
-    playUrls.value = playUrl.urls;
-    playHeaders = playUrl.headers;
+    playUrls.value = urls;
+    playHeaders = headers;
     currentLineIndex = 0;
     currentLineInfo.value = "线路${currentLineIndex + 1}";
     //重置错误次数
@@ -1144,6 +1186,10 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
   @override
   void onClose() {
     _roomDisposed = true;
+    _preloadPlayUrlsFuture = null;
+    _preloadPlayHeaders = null;
+    _preloadQuality = null;
+    _preloadConsumed = true;
     WidgetsBinding.instance.removeObserver(this);
     autoExitTimer?.cancel();
     _autoExitSession.stop();

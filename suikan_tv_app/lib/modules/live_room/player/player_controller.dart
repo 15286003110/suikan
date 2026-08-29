@@ -34,8 +34,8 @@ mixin PlayerMixin {
     configuration: MpvOptionsService.videoControllerConfiguration(),
   );
 
-  Future<void> initializePlayer() async {
-    await MpvOptionsService.applyToPlayer(player);
+  Future<void> initializePlayer({bool isVod = false}) async {
+    await MpvOptionsService.applyToPlayer(player, isVod: isVod);
   }
 }
 mixin PlayerStateMixin on PlayerMixin {
