@@ -130,11 +130,11 @@ class PlaySettingsPage extends GetView<AppSettingsController> {
                 AppStyle.divider,
                 Obx(
                   () => SettingsSwitch(
-                    title: "允许后台继续播放",
-                    subtitle: "移动端仍可能被系统省电策略关闭，返回前台时会尽量自动恢复",
-                    value: controller.allowBackgroundPlayback.value,
+                    title: "纯音频模式",
+                    subtitle: "直播中点开立即只播放声音、不显示画面（前台/锁屏都持续，像音乐播放器）",
+                    value: controller.audioOnlyBackground.value,
                     onChanged: (e) {
-                      controller.setAllowBackgroundPlayback(e);
+                      controller.setAudioOnlyBackground(e);
                     },
                   ),
                 ),

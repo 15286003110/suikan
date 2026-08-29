@@ -135,6 +135,17 @@ mixin PlayerMixin {
     ),
   );
 
+  /// 纯音频模式：停用/恢复视频轨道（mpv vid=no / auto）。
+  /// 开启后只保留音频流，不渲染画面，更省电省流量。
+  Future<void> setAudioOnlyMode(bool enable) async {
+    try {
+      final native = player.platform as NativePlayer;
+      await native.setProperty('vid', enable ? 'no' : 'auto');
+    } catch (e) {
+      Log.d('setAudioOnlyMode($enable) error: $e');
+    }
+  }
+
   /// 初始化播放器并设置静态 mpv 参数。
   Future<void> initializePlayer() async {
     if (_playerInitialized) {
@@ -2603,10 +2614,12 @@ class PlayerController extends BaseController
       return;
     }
     if (playing &&
-        AppSettingsController.instance.allowBackgroundPlayback.value) {
+        (AppSettingsController.instance.allowBackgroundPlayback.value ||
+            AppSettingsController.instance.audioOnlyBackground.value)) {
       await BackgroundPlaybackService.instance.start();
     } else if (!playing ||
-        !AppSettingsController.instance.allowBackgroundPlayback.value) {
+        (!AppSettingsController.instance.allowBackgroundPlayback.value &&
+            !AppSettingsController.instance.audioOnlyBackground.value)) {
       await BackgroundPlaybackService.instance.stop();
     }
   }

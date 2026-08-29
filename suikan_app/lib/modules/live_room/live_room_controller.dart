@@ -209,7 +209,9 @@ class LiveRoomController extends PlayerController
   var isBackground = false;
 
   bool get _allowBackgroundPlayback =>
-      AppSettingsController.instance.allowBackgroundPlayback.value;
+      AppSettingsController.instance.allowBackgroundPlayback.value ||
+      // 纯音频模式下视同允许后台：前台/锁屏都持续只放声音
+      AppSettingsController.instance.audioOnlyBackground.value;
 
   /// 直播间加载是否失败
   var loadError = false.obs;
@@ -267,6 +269,18 @@ class LiveRoomController extends PlayerController
     followed.value = DBService.instance.getFollowExist("${site.id}_$roomId");
     loadData();
     _startLiveEventFlowTimer();
+
+    // 纯音频模式：点开关立即生效（停用视频轨道），前台/后台/锁屏都持续只放声音。
+    // 后台保活由播放状态监听自动管理（见 PlayerStateMixin._syncBackgroundPlaybackService）。
+    ever(
+      AppSettingsController.instance.audioOnlyBackground,
+      (bool v) {
+        unawaited(setAudioOnlyMode(v));
+      },
+    );
+    if (AppSettingsController.instance.audioOnlyBackground.value) {
+      unawaited(setAudioOnlyMode(true));
+    }
 
     scrollController.addListener(scrollListener);
 

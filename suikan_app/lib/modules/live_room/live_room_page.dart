@@ -680,16 +680,63 @@ class LiveRoomPage extends GetView<LiveRoomController> {
         Video(
           key: controller.globalPlayerKey,
           controller: controller.videoController,
-          pauseUponEnteringBackgroundMode:
-              !AppSettingsController.instance.allowBackgroundPlayback.value,
-          resumeUponEnteringForegroundMode:
-              !AppSettingsController.instance.allowBackgroundPlayback.value,
+          pauseUponEnteringBackgroundMode: !AppSettingsController
+                  .instance.allowBackgroundPlayback.value &&
+              !AppSettingsController.instance.audioOnlyBackground.value,
+          resumeUponEnteringForegroundMode: !AppSettingsController
+                  .instance.allowBackgroundPlayback.value &&
+              !AppSettingsController.instance.audioOnlyBackground.value,
           controls:
               pipMode ? null : (state) => playerControls(state, controller),
           aspectRatio: aspectRatio,
           fit: boxFit,
           // 自己实现
           wakelock: false,
+        ),
+        // 纯音频模式占位画面：不显示视频画面，像音乐播放器一样；点按恢复画面
+        Obx(
+          () => AppSettingsController.instance.audioOnlyBackground.value
+              ? Positioned.fill(
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () {
+                      AppSettingsController.instance
+                          .setAudioOnlyBackground(false);
+                    },
+                    child: const ColoredBox(
+                      color: Color(0xFF14141A),
+                      child: Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.music_note,
+                              size: 72,
+                              color: Colors.white38,
+                            ),
+                            SizedBox(height: 12),
+                            Text(
+                              "纯音频模式",
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 15,
+                              ),
+                            ),
+                            SizedBox(height: 6),
+                            Text(
+                              "点按恢复画面",
+                              style: TextStyle(
+                                color: Colors.white38,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                )
+              : const SizedBox.shrink(),
         ),
         if (!pipMode)
           Obx(
@@ -1558,17 +1605,15 @@ class LiveRoomPage extends GetView<LiveRoomController> {
               },
             ),
             Obx(() {
-              final allow =
-                  AppSettingsController.instance.allowBackgroundPlayback.value;
+              final audioOnly =
+                  AppSettingsController.instance.audioOnlyBackground.value;
               return SwitchListTile(
-                secondary: const Icon(Icons.headphones_outlined),
-                title: const Text("后台播放"),
-                subtitle: Text(Platform.isAndroid
-                    ? "退出到桌面后继续播放（可被系统省电策略关闭）"
-                    : "窗口最小化/隐藏后继续播放"),
-                value: allow,
+                secondary: const Icon(Icons.music_note_outlined),
+                title: const Text("纯音频模式"),
+                subtitle: const Text("点开立即只播放声音，不显示画面（锁屏/后台都持续）"),
+                value: audioOnly,
                 onChanged: (v) {
-                  AppSettingsController.instance.setAllowBackgroundPlayback(v);
+                  AppSettingsController.instance.setAudioOnlyBackground(v);
                 },
               );
             }),

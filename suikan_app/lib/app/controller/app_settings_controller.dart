@@ -158,6 +158,9 @@ class AppSettingsController extends GetxController {
     allowBackgroundPlayback.value =
         _loadAllowBackgroundPlayback(playerAutoPause.value);
 
+    audioOnlyBackground.value = LocalStorageService.instance
+        .getValue(LocalStorageService.kAudioOnlyBackground, false);
+
     playerForceHttps.value = LocalStorageService.instance
         .getValue(LocalStorageService.kPlayerForceHttps, false);
     autoSwitchNextOnLiveEnd.value = LocalStorageService.instance.getValue(
@@ -1077,6 +1080,14 @@ class AppSettingsController extends GetxController {
     if (!e) {
       BackgroundPlaybackService.instance.stop();
     }
+  }
+
+  /// 后台纯音频模式：退到后台/锁屏时停用视频轨道，只保留声音（mpv vid=no）。
+  var audioOnlyBackground = false.obs;
+  void setAudioOnlyBackground(bool e) {
+    audioOnlyBackground.value = e;
+    LocalStorageService.instance
+        .setValue(LocalStorageService.kAudioOnlyBackground, e);
   }
 
   var autoFullScreen = false.obs;
