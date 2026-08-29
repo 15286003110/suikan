@@ -75,6 +75,8 @@ class SearchAnchorPage extends GetView<SearchAnchorController> {
             alignment: WrapAlignment.center,
             spacing: 36.w,
             children: Sites.supportSites
+                .where((e) =>
+                    !e.id.startsWith('custom_') && !e.id.startsWith('fnos_'))
                 .map(
                   (e) => Obx(
                     () => HighlightButton(

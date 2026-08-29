@@ -75,6 +75,8 @@ class SearchRoomPage extends GetView<SearchRoomController> {
             alignment: WrapAlignment.center,
             spacing: 36.w,
             children: Sites.supportSites
+                .where((e) =>
+                    !e.id.startsWith('custom_') && !e.id.startsWith('fnos_'))
                 .map(
                   (e) => Obx(
                     () => HighlightButton(

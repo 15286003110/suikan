@@ -116,9 +116,17 @@ Future<String?> resolveHivePath() async {
   final appSupportDir = await getApplicationSupportDirectory();
   if (!DesktopStartupArgs.isSecondaryDesktopInstance) {
     await writeDesktopStartupLog("primary hive source=${appSupportDir.path}");
-    return appSupportDir.path;
+    // TV 版使用独立数据子目录，避免与手机/WIN 版（suikan_app）共享 Hive 文件：
+    // 两版 getApplicationSupportDirectory 指向同一目录且箱名相同（CustomSource/
+    // FnOsServer 等），共享会让 TV 首次打开读取到 WIN 版数据导致卡死/内存暴涨。
+    final tvDataDir = Directory(p.join(appSupportDir.path, "tv"));
+    await tvDataDir.create(recursive: true);
+    await writeDesktopStartupLog("tv hive dir=${tvDataDir.path}");
+    return tvDataDir.path;
   }
-  final instanceDir = await prepareSecondaryHiveDirectory(appSupportDir);
+  final instanceDir = await prepareSecondaryHiveDirectory(
+    Directory(p.join(appSupportDir.path, "tv")),
+  );
   await writeDesktopStartupLog("secondary hive snapshot=${instanceDir.path}");
   return instanceDir.path;
 }
