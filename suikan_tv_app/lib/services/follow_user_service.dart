@@ -40,6 +40,7 @@ class FollowUserService extends BasePageController<FollowUser> {
   var refreshProgress = const FollowRefreshProgress.idle().obs;
 
   Timer? updateTimer;
+  Timer? _eventReloadTimer;
   Timer? _refreshProgressResetTimer;
   bool needUpdate = true;
   int _updateGeneration = 0;
@@ -57,15 +58,18 @@ class FollowUserService extends BasePageController<FollowUser> {
   void onInit() {
     subscription = EventBus.instance.listen(Constant.kUpdateFollow, (p0) {
       needUpdate = false;
-      refreshData(forceStatus: false);
+      // 延迟 150ms 再刷新，避免同步完成瞬间并发触发大量状态请求拖慢界面。
+      _eventReloadTimer?.cancel();
+      _eventReloadTimer = Timer(const Duration(milliseconds: 150), () {
+        refreshData(forceStatus: false);
+      });
     });
 
-    final initialLoad =
-        list.isEmpty ? refreshData(forceStatus: false) : Future<void>.value();
-    unawaited(initialLoad.whenComplete(_refreshOnHomeStartup));
-    if (list.isNotEmpty) {
-      unawaited(_refreshOnHomeStartup());
-    }
+    // 启动只加载本地关注列表（轻量），不在启动时全量刷新主播状态：
+    // 同步大量关注后，启动全量刷新会并发发起几百个状态请求，弱性能设备
+    // （电视盒子）会被拖死导致白屏/打不开。状态刷新交由定时器（initTimer）
+    // 与进入关注页/手动刷新触发。
+    unawaited(refreshData(forceStatus: false));
     initTimer();
     super.onInit();
   }
@@ -1394,6 +1398,7 @@ class FollowUserService extends BasePageController<FollowUser> {
     updating.value = false;
     _cancelRefreshProgressReset();
     _resetRefreshProgress();
+    _eventReloadTimer?.cancel();
     updateTimer?.cancel();
     subscription?.cancel();
     super.onClose();
