@@ -1,7 +1,6 @@
 name: dart_quickjs
-description: QuickJS-ng JavaScript engine bindings for Dart/Flutter.
+description: QuickJS-ng JavaScript engine bindings for Dart/Flutter. (vendored copy; see bindings notes in this repo)
 version: 1.0.0
-repository: https://github.com/xiaoyaocz/dart_quickjs
 publish_to: none
 
 environment:
