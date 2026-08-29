@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/get.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 
 import 'package:simple_live_tv_app/app/app_style.dart';
 import 'package:simple_live_tv_app/app/controller/base_controller.dart';
@@ -85,6 +86,11 @@ class HomeController extends BaseController {
         ),
       );
       if (result == true) {
+        // 退出前关闭 Hive，确保数据完整落盘（避免播放中退出导致写入不完整，
+        // 二次打开读到未完成数据而白屏/卡死——2.1.21 用户实测"退出后再打开页面为空"）。
+        try {
+          await Hive.close();
+        } catch (_) {}
         SystemNavigator.pop();
       }
     } finally {
