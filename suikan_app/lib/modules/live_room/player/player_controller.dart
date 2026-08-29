@@ -149,12 +149,12 @@ mixin PlayerMixin {
   }
 
   /// 初始化播放器并设置静态 mpv 参数。
-  Future<void> initializePlayer() async {
+  Future<void> initializePlayer({bool isVod = false}) async {
     if (_playerInitialized) {
       return;
     }
     _playerInitialized = true;
-    await MpvOptionsService.applyToPlayer(player);
+    await MpvOptionsService.applyToPlayer(player, isVod: isVod);
     final nativePlayer = player.platform as NativePlayer;
     // 设置音频输出驱动
     if (AppSettingsController.instance.customPlayerOutput.value) {

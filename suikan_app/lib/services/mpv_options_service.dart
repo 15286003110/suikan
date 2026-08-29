@@ -117,7 +117,10 @@ class MpvOptionsService {
     );
   }
 
-  static Future<void> applyToPlayer(Player player) async {
+  static Future<void> applyToPlayer(
+    Player player, {
+    bool isVod = false,
+  }) async {
     if (Platform.isIOS) {
       return;
     }
@@ -127,6 +130,11 @@ class MpvOptionsService {
     final options = Map<String, String>.from(effectiveOptions())
       ..remove("vo")
       ..remove("hwdec");
+    // 缓冲策略：直播小缓冲（低延迟）、点播大缓冲（不卡）。
+    // 属性为 mpv 网络/解复用缓冲上限与预读时长，setProperty 失败静默忽略。
+    options["demuxer-max-bytes"] = isVod ? "134217728" : "16777216";
+    options["demuxer-readahead-secs"] = isVod ? "30" : "5";
+    options["cache-secs"] = isVod ? "30" : "5";
     for (final entry in options.entries) {
       try {
         await (player.platform as dynamic).setProperty(entry.key, entry.value);

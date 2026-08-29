@@ -508,8 +508,12 @@ Future initServices([String? hivePath]) async {
   // 自定义源 / 飞牛影视库必须在 runApp 之前完成注册：
   // 否则首页/分类按 Sites.browseSites 构建标签时站点尚未就绪，
   // 且 IndexedController 启动自动恢复“上次直播间”会找不到 custom_/fnos_ 站点。
-  await Get.put(CustomSourceService()).init();
-  await Get.put(FnOsService()).init();
+  // 两者仅依赖 DBService（已就绪）且互相独立，并行初始化。
+  Log.d("Init CustomSource + FnOs (并行)");
+  await Future.wait([
+    Get.put(CustomSourceService()).init(),
+    Get.put(FnOsService()).init(),
+  ]);
   Get.put(CurrentRoomService());
   //初始化设置控制器
   Get.put(AppSettingsController());

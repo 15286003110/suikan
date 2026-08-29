@@ -231,6 +231,12 @@ class LiveRoomController extends PlayerController
   int? _playerReopeningGeneration;
   bool _roomDisposed = false;
   int _loadGeneration = 0;
+  // 播放地址预解析缓存：detail 就绪后立即解析，首次进房消费（进房秒出画面）。
+  Future<List<String>>? _preloadPlayUrlsFuture;
+  Map<String, String>? _preloadPlayHeaders;
+  String? _preloadQuality;
+  int _preloadGeneration = 0;
+  bool _preloadConsumed = false;
   final Set<String> _superChatFingerprints = <String>{};
   LiveRepeatedDanmuAggregator _liveEventFlowAggregator =
       LiveRepeatedDanmuAggregator();
@@ -1390,6 +1396,10 @@ class LiveRoomController extends PlayerController
   @override
   void onClose() async {
     _roomDisposed = true;
+    _preloadPlayUrlsFuture = null;
+    _preloadPlayHeaders = null;
+    _preloadQuality = null;
+    _preloadConsumed = true;
     clearTransientPlayerOverlays();
     _loadGeneration += 1;
     WidgetsBinding.instance.removeObserver(this);
@@ -1729,6 +1739,25 @@ class LiveRoomController extends PlayerController
         currentQuality = middle;
       }
 
+      // 播放地址预解析：清晰度确定后立即发起（fire-and-forget），
+      // 首次播放直接消费缓存（进房秒出画面）；失败/换质量/重试仍走原逻辑。
+      if (currentQuality >= 0 && currentQuality < qualites.length) {
+        _preloadGeneration = loadGeneration;
+        _preloadConsumed = false;
+        final q = qualites[currentQuality];
+        final detail0 = roomDetail;
+        _preloadPlayUrlsFuture = site.liveSite
+            .getPlayUrls(detail: detail0, quality: q)
+            .then((r) {
+          _preloadQuality = q.quality;
+          _preloadPlayHeaders = r.headers;
+          return r.urls;
+        }).catchError((Object _) {
+          _preloadPlayUrlsFuture = null;
+          return <String>[];
+        });
+      }
+
       await getPlayUrl();
     } catch (e, stackTrace) {
       if (!_isCurrentLoad(loadGeneration)) {
@@ -1770,19 +1799,42 @@ class LiveRoomController extends PlayerController
       return false;
     }
     currentQualityInfo.value = qualites[currentQuality].quality;
-    var playUrl = await site.liveSite
-        .getPlayUrls(detail: detail.value!, quality: qualites[currentQuality]);
+    // 预解析缓存消费：首次进房且质量匹配时直接使用（省一次网络往返，进房秒出画面）。
+    // 换质量/重试/切线路等场景 _preloadConsumed 已为 true，走原逻辑重新解析。
+    List<String>? urls;
+    Map<String, String>? headers;
+    final pre = _preloadPlayUrlsFuture;
+    if (!_preloadConsumed &&
+        pre != null &&
+        _preloadGeneration == loadGeneration &&
+        _preloadQuality == qualites[currentQuality].quality) {
+      _preloadConsumed = true;
+      try {
+        urls = await pre;
+        headers = _preloadPlayHeaders;
+      } catch (_) {
+        urls = null;
+      }
+    }
+    if (urls == null) {
+      final playUrl = await site.liveSite.getPlayUrls(
+        detail: detail.value!,
+        quality: qualites[currentQuality],
+      );
+      urls = playUrl.urls;
+      headers = playUrl.headers;
+    }
     if (!_isCurrentLoad(loadGeneration)) {
       return false;
     }
-    if (playUrl.urls.isEmpty) {
+    if (urls.isEmpty) {
       if (!silent) {
         SmartDialog.showToast("无法读取播放地址");
       }
       return false;
     }
-    playUrls.value = playUrl.urls;
-    playHeaders = playUrl.headers;
+    playUrls.value = urls;
+    playHeaders = headers;
     if (resetLine || currentLineIndex < 0) {
       currentLineIndex = 0;
     } else if (currentLineIndex >= playUrls.length) {
@@ -1941,7 +1993,7 @@ class LiveRoomController extends PlayerController
 
     // 重新初始化播放器，并带上当前线路的请求头。
     final openStopwatch = Stopwatch()..start();
-    await initializePlayer();
+    await initializePlayer(isVod: isVod);
     if (!_isCurrentLoad(loadGeneration)) {
       return;
     }

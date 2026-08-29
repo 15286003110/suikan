@@ -283,8 +283,12 @@ Future initServices([String? hivePath]) async {
   Get.put(KuaishouAccountService());
   Get.put(ProfileBackupService());
 
-  await Get.put(CustomSourceService()).init();
-  await Get.put(FnOsService()).init();
+  // 自定义源 / 飞牛影视库仅依赖 DBService（已就绪）且互相独立，并行初始化。
+  Log.d("Init CustomSource + FnOs (并行)");
+  await Future.wait([
+    Get.put(CustomSourceService()).init(),
+    Get.put(FnOsService()).init(),
+  ]);
 
   if (DesktopStartupArgs.isSecondaryDesktopInstance) {
     Log.i("Skip SyncService for TV-Windows secondary player instance");
