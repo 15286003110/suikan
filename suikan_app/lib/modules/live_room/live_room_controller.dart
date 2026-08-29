@@ -270,8 +270,8 @@ class LiveRoomController extends PlayerController
     loadData();
     _startLiveEventFlowTimer();
 
-    // 纯音频模式：点开关立即生效（停用视频轨道），前台/后台/锁屏都持续只放声音。
-    // 后台保活由播放状态监听自动管理（见 PlayerStateMixin._syncBackgroundPlaybackService）。
+    // 纯音频模式：只保留音频流（mpv vid=no 停用视频轨道，配合页面移除视频控件，
+    // 真正省性能）。前台/后台/锁屏都持续，后台保活由播放状态监听自动管理。
     ever(
       AppSettingsController.instance.audioOnlyBackground,
       (bool v) {

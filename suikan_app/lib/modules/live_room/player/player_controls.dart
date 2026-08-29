@@ -426,6 +426,25 @@ Widget _buildFullBottomBar(
                 color: Colors.white,
               ),
             ),
+            Obx(
+              () => IconButton(
+                tooltip: "纯音频模式",
+                onPressed: () {
+                  AppSettingsController.instance.setAudioOnlyBackground(
+                    !AppSettingsController.instance.audioOnlyBackground.value,
+                  );
+                },
+                icon: Icon(
+                  AppSettingsController.instance.audioOnlyBackground.value
+                      ? Icons.music_note_rounded
+                      : Icons.music_note_outlined,
+                  color:
+                      AppSettingsController.instance.audioOnlyBackground.value
+                          ? const Color(0xFFFF8FAB)
+                          : Colors.white,
+                ),
+              ),
+            ),
             Padding(
               padding: const EdgeInsets.only(left: 8),
               child: Text(
@@ -551,6 +570,25 @@ Widget _buildNormalBottomBar(
                 AssetImage('assets/icons/icon_danmaku_setting.png'),
                 size: 24,
                 color: Colors.white,
+              ),
+            ),
+            Obx(
+              () => IconButton(
+                tooltip: "纯音频模式",
+                onPressed: () {
+                  AppSettingsController.instance.setAudioOnlyBackground(
+                    !AppSettingsController.instance.audioOnlyBackground.value,
+                  );
+                },
+                icon: Icon(
+                  AppSettingsController.instance.audioOnlyBackground.value
+                      ? Icons.music_note_rounded
+                      : Icons.music_note_outlined,
+                  color:
+                      AppSettingsController.instance.audioOnlyBackground.value
+                          ? const Color(0xFFFF8FAB)
+                          : Colors.white,
+                ),
               ),
             ),
             Padding(

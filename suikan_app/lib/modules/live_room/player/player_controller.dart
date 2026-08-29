@@ -136,11 +136,13 @@ mixin PlayerMixin {
   );
 
   /// 纯音频模式：停用/恢复视频轨道（mpv vid=no / auto）。
-  /// 开启后只保留音频流，不渲染画面，更省电省流量。
+  /// 直播流（FLV/TS）音视频交织，停轨易引起同步卡顿 → 只停渲染（页面移除视频控件）；
+  /// 电影/VOD 音视频轨独立，真正停视频轨只解码音频（最省性能）。
   Future<void> setAudioOnlyMode(bool enable) async {
     try {
       final native = player.platform as NativePlayer;
-      await native.setProperty('vid', enable ? 'no' : 'auto');
+      final isVod = player.state.duration > Duration.zero;
+      await native.setProperty('vid', enable && isVod ? 'no' : 'auto');
     } catch (e) {
       Log.d('setAudioOnlyMode($enable) error: $e');
     }

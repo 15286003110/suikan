@@ -677,67 +677,70 @@ class LiveRoomPage extends GetView<LiveRoomController> {
         const Positioned.fill(
           child: ColoredBox(color: Colors.black),
         ),
-        Video(
-          key: controller.globalPlayerKey,
-          controller: controller.videoController,
-          pauseUponEnteringBackgroundMode: !AppSettingsController
-                  .instance.allowBackgroundPlayback.value &&
-              !AppSettingsController.instance.audioOnlyBackground.value,
-          resumeUponEnteringForegroundMode: !AppSettingsController
-                  .instance.allowBackgroundPlayback.value &&
-              !AppSettingsController.instance.audioOnlyBackground.value,
-          controls:
-              pipMode ? null : (state) => playerControls(state, controller),
-          aspectRatio: aspectRatio,
-          fit: boxFit,
-          // 自己实现
-          wakelock: false,
-        ),
-        // 纯音频模式占位画面：不显示视频画面，像音乐播放器一样；点按恢复画面
-        Obx(
-          () => AppSettingsController.instance.audioOnlyBackground.value
-              ? Positioned.fill(
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: () {
-                      AppSettingsController.instance
-                          .setAudioOnlyBackground(false);
-                    },
-                    child: const ColoredBox(
-                      color: Color(0xFF14141A),
-                      child: Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.music_note,
-                              size: 72,
-                              color: Colors.white38,
-                            ),
-                            SizedBox(height: 12),
-                            Text(
-                              "纯音频模式",
-                              style: TextStyle(
-                                color: Colors.white70,
-                                fontSize: 15,
-                              ),
-                            ),
-                            SizedBox(height: 6),
-                            Text(
-                              "点按恢复画面",
-                              style: TextStyle(
-                                color: Colors.white38,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
+        // 纯音频模式：视频控件整个移除（不再渲染/请求画面帧），只显示占位；点按恢复画面。
+        // 配合 mpv vid=no（见 LiveRoomController.onInit），真正只保留音频流，更省性能。
+        Obx(() {
+          final audioOnly =
+              AppSettingsController.instance.audioOnlyBackground.value;
+          if (audioOnly) {
+            return Positioned.fill(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () {
+                  AppSettingsController.instance
+                      .setAudioOnlyBackground(false);
+                },
+                child: const ColoredBox(
+                  color: Color(0xFF14141A),
+                  child: Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.music_note,
+                          size: 72,
+                          color: Colors.white38,
                         ),
-                      ),
+                        SizedBox(height: 12),
+                        Text(
+                          "纯音频模式",
+                          style: TextStyle(
+                            color: Colors.white70,
+                            fontSize: 15,
+                          ),
+                        ),
+                        SizedBox(height: 6),
+                        Text(
+                          "点按恢复画面",
+                          style: TextStyle(
+                            color: Colors.white38,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                )
-              : const SizedBox.shrink(),
-        ),
+                ),
+              ),
+            );
+          }
+          return Video(
+            key: controller.globalPlayerKey,
+            controller: controller.videoController,
+            pauseUponEnteringBackgroundMode: !AppSettingsController
+                    .instance.allowBackgroundPlayback.value &&
+                !AppSettingsController.instance.audioOnlyBackground.value,
+            resumeUponEnteringForegroundMode: !AppSettingsController
+                    .instance.allowBackgroundPlayback.value &&
+                !AppSettingsController.instance.audioOnlyBackground.value,
+            controls:
+                pipMode ? null : (state) => playerControls(state, controller),
+            aspectRatio: aspectRatio,
+            fit: boxFit,
+            // 自己实现
+            wakelock: false,
+          );
+        }),
         if (!pipMode)
           Obx(
             () => Visibility(
