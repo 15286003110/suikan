@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/services.dart';
@@ -137,13 +138,13 @@ class DlnaReceiverService extends GetxService {
   // ---------- HTTP ----------
 
   Future<shelf.Response> _handleHttp(shelf.Request request) async {
-    // 事件订阅：返回 501（多数投屏端用轮询，不依赖事件推送）
-    if (request.method == 'SUBSCRIBE' || request.method == 'UNSUBSCRIBE') {
-      return shelf.Response(
-        501,
-        body: 'Not Implemented',
-        headers: {'Content-Type': 'text/plain'},
-      );
+    // GENA 事件订阅：部分严格投屏端先 SUBSCRIBE 订阅状态变化再投屏，
+    // 不实现会被判设备不可用（Cling 系完整接收端都有）。
+    if (request.method == 'SUBSCRIBE') {
+      return _subscribe(request);
+    }
+    if (request.method == 'UNSUBSCRIBE') {
+      return _unsubscribe(request);
     }
     final path = request.url.path;
     if (path.isEmpty || path == 'device.xml' || path == 'device_description.xml') {
@@ -215,6 +216,86 @@ class DlnaReceiverService extends GetxService {
   }
 
   String _serverHeader() => 'SuikanTV/2.1 UPnP/1.0 SuikanTV-DLNADOC/1.50';
+
+  // ---------- GENA 事件订阅 ----------
+
+  /// 订阅者（callback URL + SID），投屏端 SUBSCRIBE 后靠 NOTIFY 推送状态变化。
+  final Map<String, String> _subscribers = <String, String>{}; // sid -> callback
+  int _eventSeq = 0;
+
+  shelf.Response _subscribe(shelf.Request request) {
+    final callback = request.headers['callback'] ?? '';
+    final nt = request.headers['nt'] ?? '';
+    if (callback.isEmpty || (nt.isNotEmpty && nt != 'upnp:event')) {
+      return shelf.Response(412, body: 'Precondition Failed');
+    }
+    // callback 形如 <http://192.168.1.5:1234/notify>，提取 URL
+    final m = RegExp(r'<([^>]+)>').firstMatch(callback);
+    final url = m?.group(1);
+    if (url == null) {
+      return shelf.Response(412, body: 'Precondition Failed');
+    }
+    // 幂等：同一 callback 复用 SID
+    String? sid = _subscribers.entries
+        .where((e) => e.value == url)
+        .map((e) => e.key)
+        .firstOrNull;
+    if (sid == null) {
+      sid = 'uuid:${DateTime.now().microsecondsSinceEpoch.toRadixString(16)}';
+      _subscribers[sid] = url;
+    }
+    return shelf.Response.ok('', headers: {
+      'SID': sid,
+      'TIMEOUT': 'Second-1800',
+    });
+  }
+
+  shelf.Response _unsubscribe(shelf.Request request) {
+    final sid = request.headers['sid'] ?? '';
+    _subscribers.remove(sid);
+    return shelf.Response.ok('');
+  }
+
+  /// 状态变化时向所有订阅者推送 NOTIFY（GENA propchange）。
+  void _notifyEvent() {
+    final state = _queryState();
+    final body =
+        '<?xml version="1.0"?>'
+        '<e:propertyset xmlns:e="urn:schemas-upnp-org:event-1-0">'
+        '<e:property><TransportState>$state</TransportState></e:property>'
+        '<e:property><CurrentTransportActions>Play,Pause,Stop,Seek</CurrentTransportActions></e:property>'
+        '</e:propertyset>';
+    final seq = _eventSeq++;
+    for (final entry in _subscribers.entries) {
+      unawaited(_postNotify(entry.value, entry.key, seq, body));
+    }
+  }
+
+  Future<void> _postNotify(
+    String callback,
+    String sid,
+    int seq,
+    String body,
+  ) async {
+    try {
+      final uri = Uri.parse(callback);
+      final client = HttpClient();
+      try {
+        final req = await client.postUrl(uri);
+        req.headers.set('CONTENT-TYPE', 'text/xml; charset="utf-8"');
+        req.headers.set('NT', 'upnp:event');
+        req.headers.set('NTS', 'upnp:propchange');
+        req.headers.set('SID', sid);
+        req.headers.set('SEQ', '$seq');
+        req.add(utf8.encode(body));
+        await req.close().timeout(const Duration(seconds: 3));
+      } finally {
+        client.close();
+      }
+    } catch (_) {
+      // 订阅者不在线，忽略（下次状态变化重试）
+    }
+  }
 
   // ---------- DIAL REST ----------
 
@@ -812,6 +893,7 @@ class DlnaReceiverService extends GetxService {
 
   Future<void> _doPlay() async {
     _transportState = 'PLAYING';
+    _notifyEvent();
     final c = _liveRoom();
     if (c != null) {
       try {
@@ -822,6 +904,7 @@ class DlnaReceiverService extends GetxService {
 
   Future<void> _doPause() async {
     _transportState = 'PAUSED';
+    _notifyEvent();
     final c = _liveRoom();
     if (c != null) {
       try {
@@ -832,6 +915,7 @@ class DlnaReceiverService extends GetxService {
 
   Future<void> _doStop() async {
     _transportState = 'STOPPED';
+    _notifyEvent();
     final c = _liveRoom();
     if (c != null) {
       try {
@@ -921,6 +1005,7 @@ class DlnaReceiverService extends GetxService {
     _currentUrl = url;
     currentUrl.value = url;
     _transportState = 'PLAYING';
+    _notifyEvent();
     // 已有投屏页面（本页或其它投屏端投的）在播：原地切换播放——
     // 同一播放器换源，新投屏全面顶掉旧投屏（旧流先 stop，不会双声音）。
     final c = _liveRoom();
