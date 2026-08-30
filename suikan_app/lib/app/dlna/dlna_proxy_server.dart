@@ -16,6 +16,11 @@ class DlnaProxyServer {
   HttpServer? _server;
   String? _targetUrl;
   Map<String, String>? _targetHeaders;
+  DateTime _lastActivity = DateTime.now();
+  Timer? _idleTimer;
+
+  /// 空闲回收阈值：超过该时长无请求自动停止代理（投屏结束后清理，防残留）。
+  static const _idleTimeout = Duration(minutes: 10);
 
   bool get running => _server != null;
 
@@ -29,11 +34,19 @@ class DlnaProxyServer {
     await stop();
     _targetUrl = targetUrl;
     _targetHeaders = headers;
+    _lastActivity = DateTime.now();
 
     final handler =
         const Pipeline().addMiddleware(logRequests()).addHandler(_proxy);
     _server = await shelf_io.serve(handler, InternetAddress.anyIPv4, 0);
     final port = _server!.port;
+    // 空闲超时自动回收：投屏面板关闭/App 退出都不会主动停代理
+    // （否则接收方拉流会断），只有"停止投屏"或长时间无请求才停。
+    _idleTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+      if (DateTime.now().difference(_lastActivity) > _idleTimeout) {
+        stop();
+      }
+    });
     final ip = await _localIp();
     return 'http://$ip:$port/';
   }
@@ -56,6 +69,7 @@ class DlnaProxyServer {
 
   /// 转发请求：把设备的请求转发到目标 URL，带上目标 headers。
   Future<Response> _proxy(Request request) async {
+    _lastActivity = DateTime.now();
     final target = _targetUrl;
     if (target == null) {
       return Response.notFound('proxy not configured');
@@ -99,6 +113,8 @@ class DlnaProxyServer {
   }
 
   Future<void> stop() async {
+    _idleTimer?.cancel();
+    _idleTimer = null;
     final s = _server;
     _server = null;
     _targetUrl = null;

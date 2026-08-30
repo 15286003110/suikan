@@ -238,6 +238,16 @@ class DlnaCastService {
   /// 若 [headers] 非空（如 fnOS 的 Authorization+Authx 鉴权），先在本地起
   /// HTTP 代理，把代理地址推给设备（设备请求代理时实时带鉴权头转发，绕开
   /// `<res http-header>` 非标属性兼容性差的问题）。
+  /// 头是否"可推断"（接收端能自己补的，如 referer/user-agent）。
+  /// 这类头不需要走本地代理——直接推原 URL，接收端（随看TV 按域名自动补
+  /// referer）自己解决，投出端退出 App 也不影响接收方继续播。
+  /// 反之（Authorization/Authx 签名等）必须走代理实时转发。
+  bool _isInferableHeader(String key) {
+    final k = key.toLowerCase();
+    return k == 'referer' || k == 'user-agent' || k == 'accept' ||
+        k == 'origin';
+  }
+
   Future<void> cast(
     DlnaDevice device,
     String url, {
@@ -245,7 +255,9 @@ class DlnaCastService {
     String? title,
   }) async {
     var pushUrl = url;
-    if (headers != null && headers.isNotEmpty) {
+    final needsProxy = headers != null &&
+        headers.entries.any((e) => !_isInferableHeader(e.key));
+    if (needsProxy) {
       pushUrl = await DlnaProxyServer.instance.start(
         targetUrl: url,
         headers: headers,

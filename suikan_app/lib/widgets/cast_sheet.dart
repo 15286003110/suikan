@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:simple_live_app/app/dlna/dlna_cast_service.dart';
-import 'package:simple_live_app/app/dlna/dlna_proxy_server.dart';
 import 'package:simple_live_app/app/utils.dart';
 
 class CastSheet extends StatefulWidget {
@@ -34,8 +33,9 @@ class CastSheetState extends State<CastSheet> {
 
   @override
   void dispose() {
-    // 关闭面板时兜底停止本地代理（避免残留占用端口）
-    DlnaProxyServer.instance.stop();
+    // 注意：不要在这里停本地代理！投屏成功后代理要持续服务接收端拉流，
+    // 面板关闭/页面退出就停代理会让接收端断流（投屏方影响接收方）。
+    // 代理生命周期：用户显式"停止投屏"（_stop）或 10 分钟空闲自动回收。
     super.dispose();
   }
 
