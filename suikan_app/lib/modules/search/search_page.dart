@@ -6,8 +6,7 @@ import 'package:simple_live_app/modules/search/global_search_view.dart';
 
 /// 方案 B：彻底单页全局搜索
 /// - 单输入框，输入防抖 600ms 自动搜
-/// - 无平台/本地内容 Tab，一次搜索聚合全部来源
-/// - 房间/主播模式通过右上角按钮切换
+/// - 无平台/本地内容 Tab、无房间/主播切换，一次搜索聚合全部来源
 class SearchPage extends GetView<GlobalSearchController> {
   const SearchPage({Key? key}) : super(key: key);
 
@@ -36,32 +35,10 @@ class SearchPage extends GetView<GlobalSearchController> {
                 AppStyle.hGap8,
               ],
             ),
-            suffixIcon: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // 房间/主播模式切换
-                Obx(
-                  () => TextButton(
-                    onPressed: () {
-                      controller.searchMode.value =
-                          controller.searchMode.value == 0 ? 1 : 0;
-                      if (controller.searchController.text.trim().isNotEmpty) {
-                        controller.searchGlobal(
-                          controller.searchController.text,
-                        );
-                      }
-                    },
-                    child: Text(
-                      controller.searchMode.value == 0 ? "房间" : "主播",
-                    ),
-                  ),
-                ),
-                IconButton(
-                  onPressed: () =>
-                      controller.searchGlobal(controller.searchController.text),
-                  icon: const Icon(Icons.search),
-                ),
-              ],
+            suffixIcon: IconButton(
+              onPressed: () =>
+                  controller.searchGlobal(controller.searchController.text),
+              icon: const Icon(Icons.search),
             ),
           ),
           onSubmitted: (e) {

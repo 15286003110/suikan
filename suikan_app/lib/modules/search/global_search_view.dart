@@ -126,7 +126,7 @@ class _SectionView extends StatelessWidget {
     });
   }
 
-  /// 本地内容（自定义源频道 + 影视库）列表
+  /// 本地内容（自定义源频道 + 影视库）网格卡片，与平台结果样式一致
   Widget _buildLocalList() {
     if (section.items.isEmpty && section.status.value == 1) {
       return const Padding(
@@ -134,21 +134,23 @@ class _SectionView extends StatelessWidget {
         child: Text('无匹配内容', style: TextStyle(color: Colors.grey)),
       );
     }
-    return ListView.separated(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: section.items.length,
-      separatorBuilder: (context, index) => const Divider(height: 1),
-      itemBuilder: (_, i) {
-        final r = section.items[i] as LocalSearchResult;
-        return ListTile(
-          dense: true,
-          leading: r.cover == null
-              ? const Icon(Icons.play_circle_outline)
-              : NetImage(r.cover!, width: 40, height: 40, borderRadius: 8),
-          title: Text(r.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-          subtitle: Text(r.subtitle, maxLines: 1, overflow: TextOverflow.ellipsis),
-          onTap: () => _openLocal(r),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final layout = _resolveGrid(constraints.maxWidth);
+        return GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: layout,
+            mainAxisSpacing: 10,
+            crossAxisSpacing: 10,
+            mainAxisExtent: 200,
+          ),
+          itemCount: section.items.length,
+          itemBuilder: (_, i) {
+            final r = section.items[i] as LocalSearchResult;
+            return _LocalResultCard(result: r, onTap: () => _openLocal(r));
+          },
         );
       },
     );
@@ -216,6 +218,62 @@ class _SectionView extends StatelessWidget {
     if (width >= 500) return 3;
     if (width >= 320) return 2;
     return 1;
+  }
+}
+
+/// 本地内容结果卡片（自定义源频道/影视库），封面+标题+副标题，与平台卡片同风格。
+class _LocalResultCard extends StatelessWidget {
+  final LocalSearchResult result;
+  final VoidCallback onTap;
+  const _LocalResultCard({required this.result, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final cover = result.cover;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: AppStyle.radius8,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: ClipRRect(
+              borderRadius: AppStyle.radius8,
+              child: SizedBox(
+                width: double.infinity,
+                child: cover == null
+                    ? Container(
+                        color: Colors.black26,
+                        child: const Icon(
+                          Icons.play_circle_outline,
+                          color: Colors.white54,
+                          size: 40,
+                        ),
+                      )
+                    : NetImage(
+                        cover,
+                        fit: BoxFit.cover,
+                        httpHeaders: result.httpHeaders,
+                      ),
+              ),
+            ),
+          ),
+          AppStyle.vGap4,
+          Text(
+            result.title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+          ),
+          Text(
+            result.subtitle,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 11, color: Colors.grey),
+          ),
+        ],
+      ),
+    );
   }
 }
 
