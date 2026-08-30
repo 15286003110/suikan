@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/services.dart';
+import 'package:simple_live_app/app/dlna/dlna_proxy_server.dart';
 
 /// 局域网 DLNA / UPnP 投屏（把当前直播直链推送到电视/盒子上的渲染设备）。
 ///
@@ -51,11 +52,12 @@ class DlnaCastService {
     Duration timeout = const Duration(seconds: 5),
   }) async {
     final devices = <String, DlnaDevice>{};
-    // iOS 发组播必须绑定具体接口（绑定 0.0.0.0 报 "No route to host" errno 65）；
-    // WIN/Android 走 anyIPv4 由系统选默认路由即可，强行绑接口反而可能选错网卡
-    // （虚拟网卡/VPN 优先于 WiFi）导致收不到设备响应。
+    // 绑定策略：
+    // - iOS 必须绑定具体网卡（发组播硬性要求，否则 No route to host）
+    // - WIN 也绑定具体网卡（anyIPv4 下 joinMulticast 可能失败导致收不到响应）
+    // - Android 走 anyIPv4（原生 MulticastLock 已申请，系统选默认路由）
     RawDatagramSocket socket;
-    if (Platform.isIOS) {
+    if (!Platform.isAndroid) {
       try {
         final interfaces = await NetworkInterface.list(
           type: InternetAddressType.IPv4,
@@ -77,27 +79,16 @@ class DlnaCastService {
     } else {
       socket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0);
     }
-    try {
-      socket.multicastHops = 4;
-      try {
-        socket.joinMulticast(InternetAddress(_ssdpAddress));
-      } catch (e) {
-        // 加入组播组失败时仍尝试发送（部分设备会回本机/仍可收到）。
-        assert(() {
-          // ignore: avoid_print
-          print('DLNA joinMulticast failed: $e');
-          return true;
-        }());
-      }
-      // 轮换多个 ST：部分设备只响应 ssdp:all 或 rootdevice，不响应 MediaRenderer。
-      // （飞牛播放器能发现设备的原因之一就是发送了更通用的搜索目标。）
-      const searchTargets = [
-        'urn:schemas-upnp-org:device:MediaRenderer:1',
-        'ssdp:all',
-        'upnp:rootdevice',
-      ];
-      for (final st in searchTargets) {
-        final search = utf8.encode(
+
+    // 轮换多个 ST：部分设备只响应 ssdp:all 或 rootdevice，不响应 MediaRenderer。
+    const searchTargets = [
+      'urn:schemas-upnp-org:device:MediaRenderer:1',
+      'ssdp:all',
+      'upnp:rootdevice',
+    ];
+    final searches = <List<int>>[
+      for (final st in searchTargets)
+        utf8.encode(
           'M-SEARCH * HTTP/1.1\r\n'
           'HOST: $_ssdpAddress:$_ssdpPort\r\n'
           'MAN: "ssdp:discover"\r\n'
@@ -105,29 +96,66 @@ class DlnaCastService {
           'ST: $st\r\n'
           'USER-AGENT: Suikan/2.1 DLNADOC/1.50\r\n'
           '\r\n',
-        );
-        for (var i = 0; i < 2; i++) {
-          socket.send(search, InternetAddress(_ssdpAddress), _ssdpPort);
-          await Future.delayed(const Duration(milliseconds: 300));
-        }
+        ),
+    ];
+
+    // 参考成熟实现（chromecast_dlna_finder 等）：socket.listen 收包 + Timer 周期发包，
+    // 两者并行，避免"无人接收时响应丢失"或"无事件时死等发包"。
+    final completer = Completer<void>();
+    var sent = 0;
+    late final Timer sendTimer;
+    sendTimer = Timer.periodic(const Duration(milliseconds: 400), (_) {
+      if (sent >= searches.length * 2) {
+        sendTimer.cancel();
+        return;
       }
-      final until = DateTime.now().add(timeout);
-      await for (final event in socket) {
+      try {
+        socket.send(
+          searches[sent % searches.length],
+          InternetAddress(_ssdpAddress),
+          _ssdpPort,
+        );
+        sent++;
+      } catch (_) {
+        sendTimer.cancel();
+      }
+    });
+    // 立即发第一个
+    socket.send(
+      searches.first,
+      InternetAddress(_ssdpAddress),
+      _ssdpPort,
+    );
+    sent++;
+
+    socket.listen(
+      (event) async {
         if (event == RawSocketEvent.read) {
-          final dg = socket.receive();
-          if (dg == null) continue;
-          final data = String.fromCharCodes(dg.data);
-          final location = _headerValue(data, 'LOCATION');
-          if (location != null && !devices.containsKey(location)) {
-            final dev = await _parseDevice(location);
-            if (dev != null) devices[location] = dev;
+          while (true) {
+            final dg = socket.receive();
+            if (dg == null) break;
+            final data = String.fromCharCodes(dg.data);
+            final location = _headerValue(data, 'LOCATION');
+            if (location != null && !devices.containsKey(location)) {
+              final dev = await _parseDevice(location);
+              if (dev != null) devices[location] = dev;
+            }
           }
         }
-        if (DateTime.now().isAfter(until)) break;
-      }
-    } finally {
-      socket.close();
-    }
+      },
+      onDone: () {
+        if (!completer.isCompleted) completer.complete();
+      },
+      onError: (e) {
+        if (!completer.isCompleted) completer.complete();
+      },
+    );
+
+    // 等超时后收尾
+    await Future.delayed(timeout);
+    sendTimer.cancel();
+    socket.close();
+    await completer.future.timeout(const Duration(seconds: 1), onTimeout: () {});
     return devices.values.toList();
   }
 
@@ -206,18 +234,29 @@ class DlnaCastService {
   }
 
   /// 把视频直链推送到设备并播放。
+  ///
+  /// 若 [headers] 非空（如 fnOS 的 Authorization+Authx 鉴权），先在本地起
+  /// HTTP 代理，把代理地址推给设备（设备请求代理时实时带鉴权头转发，绕开
+  /// `<res http-header>` 非标属性兼容性差的问题）。
   Future<void> cast(
     DlnaDevice device,
     String url, {
     Map<String, String>? headers,
     String? title,
   }) async {
-    final metadata = _buildMetadata(title ?? '随看直播', url);
+    var pushUrl = url;
+    if (headers != null && headers.isNotEmpty) {
+      pushUrl = await DlnaProxyServer.instance.start(
+        targetUrl: url,
+        headers: headers,
+      );
+    }
+    final metadata = _buildMetadata(title ?? '随看直播', pushUrl);
     await _soap(
       device.avTransportUrl,
       'SetAVTransportURI',
       '<InstanceID>0</InstanceID>'
-      '<CurrentURI>${_esc(url)}</CurrentURI>'
+      '<CurrentURI>${_esc(pushUrl)}</CurrentURI>'
       '<CurrentURIMetaData>${_esc(metadata)}</CurrentURIMetaData>',
     );
     await _soap(
@@ -233,6 +272,7 @@ class DlnaCastService {
       'Stop',
       '<InstanceID>0</InstanceID>',
     );
+    await DlnaProxyServer.instance.stop();
   }
 
   Future<void> _soap(String url, String action, String args) async {

@@ -92,6 +92,9 @@ class LocalStorageService extends GetxService {
   /// 硬件解码
   static const String kHardwareDecode = "HardwareDecode";
 
+  /// 投屏接收（DLNA MediaRenderer）
+  static const String kDlnaReceiverEnable = "DlnaReceiverEnable";
+
   /// 聊天区文字大小
   static const String kChatTextSize = "ChatTextSize";
 

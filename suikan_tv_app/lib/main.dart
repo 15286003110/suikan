@@ -18,6 +18,7 @@ import 'package:simple_live_tv_app/app/desktop_startup_args.dart';
 import 'package:simple_live_tv_app/app/app_style.dart';
 import 'package:simple_live_tv_app/app/controller/app_settings_controller.dart';
 import 'package:simple_live_tv_app/app/custom_source/custom_source_service.dart';
+import 'package:simple_live_tv_app/app/dlna/dlna_receiver_service.dart';
 import 'package:simple_live_tv_app/app/fnos/fn_os_service.dart';
 import 'package:simple_live_tv_app/app/log.dart';
 import 'package:simple_live_tv_app/app/sites.dart';
@@ -297,6 +298,12 @@ Future initServices([String? hivePath]) async {
   }
 
   Get.put(FollowUserService());
+
+  // 投屏接收（DLNA MediaRenderer）：注册服务，开关已开则立即启动
+  Get.put(DlnaReceiverService());
+  if (AppSettingsController.instance.dlnaReceiverEnable.value) {
+    unawaited(DlnaReceiverService.instance.start());
+  }
 }
 
 class MyApp extends StatefulWidget {

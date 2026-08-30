@@ -228,6 +228,24 @@ class SettingsPage extends GetView<SettingsController> {
         Obx(
           () => SettingsItemWidget(
             foucsNode: AppFocusNode(),
+            title: "投屏接收",
+            items: const {
+              0: "关",
+              1: "开",
+            },
+            value: AppSettingsController.instance.dlnaReceiverEnable.value
+                ? 1
+                : 0,
+            onChanged: (e) {
+              AppSettingsController.instance
+                  .setDlnaReceiverEnable(e == 1);
+            },
+          ),
+        ),
+        AppStyle.vGap24,
+        Obx(
+          () => SettingsItemWidget(
+            foucsNode: AppFocusNode(),
             title: "关播后自动换下一个直播间",
             items: const {0: "关", 1: "开"},
             value: AppSettingsController.instance.autoSwitchNextOnLiveEnd.value

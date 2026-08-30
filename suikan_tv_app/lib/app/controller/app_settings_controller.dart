@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/services.dart';
+import 'package:simple_live_tv_app/app/dlna/dlna_receiver_service.dart';
 import 'package:simple_live_tv_app/services/local_storage_service.dart';
 
 import 'package:get/get.dart';
@@ -139,6 +140,8 @@ class AppSettingsController extends GetxController {
 
     hardwareDecode.value = LocalStorageService.instance
         .getValue(LocalStorageService.kHardwareDecode, true);
+    dlnaReceiverEnable.value = LocalStorageService.instance
+        .getValue(LocalStorageService.kDlnaReceiverEnable, false);
     chatTextSize.value = LocalStorageService.instance
         .getValue(LocalStorageService.kChatTextSize, 14.0);
 
@@ -323,6 +326,27 @@ class AppSettingsController extends GetxController {
     hardwareDecode.value = e;
     LocalStorageService.instance
         .setValue(LocalStorageService.kHardwareDecode, e);
+  }
+
+  /// 投屏接收（DLNA MediaRenderer）
+  var dlnaReceiverEnable = false.obs;
+  void setDlnaReceiverEnable(bool e) {
+    dlnaReceiverEnable.value = e;
+    LocalStorageService.instance
+        .setValue(LocalStorageService.kDlnaReceiverEnable, e);
+    // 联动启停接收端服务（延迟注册场景下找不到服务时静默）
+    try {
+      final service = Get.isRegistered<DlnaReceiverService>()
+          ? Get.find<DlnaReceiverService>()
+          : null;
+      if (service != null) {
+        if (e) {
+          service.start();
+        } else {
+          service.stop();
+        }
+      }
+    } catch (_) {}
   }
 
   var chatTextSize = 14.0.obs;
