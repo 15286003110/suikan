@@ -12,7 +12,6 @@ import 'package:simple_live_app/app/constant.dart';
 import 'package:simple_live_app/app/controller/app_settings_controller.dart';
 import 'package:simple_live_app/app/utils.dart';
 import 'package:simple_live_app/modules/live_room/live_room_controller.dart';
-import 'package:simple_live_app/modules/settings/danmu_settings_page.dart';
 import 'package:simple_live_app/widgets/superchat_card.dart';
 import 'package:simple_live_core/simple_live_core.dart';
 import 'package:window_manager/window_manager.dart';
@@ -419,12 +418,8 @@ Widget _buildFullBottomBar(
               ),
             ),
             IconButton(
-              onPressed: () => showDanmakuSettings(controller),
-              icon: const ImageIcon(
-                AssetImage('assets/icons/icon_danmaku_setting.png'),
-                size: 24,
-                color: Colors.white,
-              ),
+              onPressed: () => controller.showCastSheet(),
+              icon: const Icon(Icons.cast, color: Colors.white),
             ),
             Obx(
               () => IconButton(
@@ -565,12 +560,8 @@ Widget _buildNormalBottomBar(
               ),
             ),
             IconButton(
-              onPressed: () => showDanmakuSettings(controller),
-              icon: const ImageIcon(
-                AssetImage('assets/icons/icon_danmaku_setting.png'),
-                size: 24,
-                color: Colors.white,
-              ),
+              onPressed: () => controller.showCastSheet(),
+              icon: const Icon(Icons.cast, color: Colors.white),
             ),
             Obx(
               () => IconButton(
@@ -861,28 +852,6 @@ void showQualitesInfo(LiveRoomController controller) {
           },
         );
       },
-    ),
-  );
-}
-
-void showDanmakuSettings(LiveRoomController controller) {
-  if (controller.useBottomSheetPlayerMenus) {
-    controller.showDanmuSettingsSheet();
-    return;
-  }
-  Utils.showRightDialog(
-    title: "弹幕设置",
-    width: 400,
-    useSystem: true,
-    child: ListView(
-      padding: AppStyle.edgeInsetsA12,
-      children: [
-        DanmuSettingsView(
-          danmakuController: controller.danmakuController,
-          siteId: controller.site.id,
-          previewViewportHeight: controller.danmakuViewportHeight.value,
-        ),
-      ],
     ),
   );
 }

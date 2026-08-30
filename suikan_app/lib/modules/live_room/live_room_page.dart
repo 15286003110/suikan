@@ -14,7 +14,6 @@ import 'package:simple_live_app/app/utils.dart';
 import 'package:simple_live_app/modules/live_room/live_room_controller.dart';
 import 'package:simple_live_app/modules/live_room/player/player_controls.dart';
 import 'package:simple_live_app/modules/live_room/widgets/live_contribution_rank_panel.dart';
-import 'package:simple_live_app/app/dlna/dlna_cast_service.dart';
 import 'package:simple_live_app/widgets/keep_alive_wrapper.dart';
 import 'package:simple_live_app/widgets/net_image.dart';
 import 'package:simple_live_app/widgets/settings/settings_action.dart';
@@ -1543,14 +1542,6 @@ class LiveRoomPage extends GetView<LiveRoomController> {
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
-              leading: const Icon(Icons.refresh),
-              title: const Text("刷新"),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () {
-                controller.refreshRoom();
-              },
-            ),
-            ListTile(
               leading: const Icon(Icons.play_circle_outline),
               title: const Text("切换清晰度"),
               trailing: const Icon(Icons.chevron_right),
@@ -1566,15 +1557,6 @@ class LiveRoomPage extends GetView<LiveRoomController> {
               onTap: () {
                 Get.back();
                 controller.showPlayUrlsSheet();
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.aspect_ratio_outlined),
-              title: const Text("画面尺寸"),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () {
-                Get.back();
-                controller.showPlayerSettingsSheet();
               },
             ),
             ListTile(
@@ -1598,37 +1580,6 @@ class LiveRoomPage extends GetView<LiveRoomController> {
               ),
             ),
             ListTile(
-              leading: const Icon(Icons.timer_outlined),
-              title: const Text("定时关闭"),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () {
-                Get.back();
-                controller.showAutoExitSheet();
-              },
-            ),
-            Obx(() {
-              final audioOnly =
-                  AppSettingsController.instance.audioOnlyBackground.value;
-              return SwitchListTile(
-                secondary: const Icon(Icons.music_note_outlined),
-                title: const Text("纯音频模式"),
-                subtitle: const Text("点开立即只播放声音，不显示画面（锁屏/后台都持续）"),
-                value: audioOnly,
-                onChanged: (v) {
-                  AppSettingsController.instance.setAudioOnlyBackground(v);
-                },
-              );
-            }),
-            ListTile(
-              leading: const Icon(Icons.history_outlined),
-              title: const Text("观看历史"),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () {
-                Get.back();
-                controller.openHistoryPage();
-              },
-            ),
-            ListTile(
               leading: const Icon(Icons.interests_outlined),
               title: const Text("同类推荐"),
               subtitle: Text(controller.currentRecommendationSubtitle),
@@ -1640,15 +1591,6 @@ class LiveRoomPage extends GetView<LiveRoomController> {
                       Get.back();
                       controller.openCategoryRecommendation();
                     },
-            ),
-            ListTile(
-              leading: const Icon(Icons.share_sharp),
-              title: const Text("分享直播间"),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () {
-                Get.back();
-                controller.share();
-              },
             ),
             ListTile(
               leading: const Icon(Icons.copy),
@@ -1677,39 +1619,11 @@ class LiveRoomPage extends GetView<LiveRoomController> {
                 controller.showDebugInfo();
               },
             ),
-            ListTile(
-              leading: const Icon(Icons.cast),
-              title: const Text("投屏到设备"),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () {
-                Get.back();
-                showCastSheet();
-              },
-            ),
           ],
         ),
       ),
     );
   }
-
-  void showCastSheet() {
-    final url = controller.currentPlayUrl;
-    if (url == null || url.isEmpty) {
-      SmartDialog.showToast("暂无可投屏的播放地址");
-      return;
-    }
-    showModalBottomSheet(
-      context: Get.context!,
-      isScrollControlled: true,
-      useSafeArea: true,
-      builder: (context) => _CastSheet(
-        url: url,
-        headers: controller.currentPlayHeaders,
-        title: controller.detail.value?.title ?? "随看直播",
-      ),
-    );
-  }
-
 
   String parseDuration(int sec) {
     // 转为时分秒
@@ -1725,164 +1639,6 @@ class LiveRoomPage extends GetView<LiveRoomController> {
     return "${s.toString().padLeft(2, '0')}秒";
   }
 }
-
-class _CastSheet extends StatefulWidget {
-  final String url;
-  final Map<String, String>? headers;
-  final String title;
-
-  const _CastSheet({
-    required this.url,
-    this.headers,
-    required this.title,
-  });
-
-  @override
-  State<_CastSheet> createState() => _CastSheetState();
-}
-
-class _CastSheetState extends State<_CastSheet> {
-  List<DlnaDevice> devices = [];
-  bool loading = true;
-  DlnaDevice? castingDevice;
-  String? error;
-
-  @override
-  void initState() {
-    super.initState();
-    _discover();
-  }
-
-  Future<void> _discover() async {
-    setState(() {
-      loading = true;
-      error = null;
-    });
-    try {
-      await DlnaCastService.instance.acquireMulticastLock();
-      final list = await DlnaCastService.instance.discover();
-      if (mounted) {
-        setState(() {
-          devices = list;
-          loading = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          error = e.toString();
-          loading = false;
-        });
-      }
-    } finally {
-      await DlnaCastService.instance.releaseMulticastLock();
-    }
-  }
-
-  Future<void> _cast(DlnaDevice d) async {
-    SmartDialog.showLoading(msg: "正在投屏…");
-    try {
-      await DlnaCastService.instance.cast(
-        d,
-        widget.url,
-        headers: widget.headers,
-        title: widget.title,
-      );
-      SmartDialog.dismiss();
-      if (mounted) setState(() => castingDevice = d);
-      SmartDialog.showToast("已投屏到 ${d.name}");
-    } catch (e) {
-      SmartDialog.dismiss();
-      SmartDialog.showToast("投屏失败：$e");
-    }
-  }
-
-  Future<void> _stop() async {
-    final d = castingDevice;
-    if (d == null) return;
-    try {
-      await DlnaCastService.instance.stop(d);
-      SmartDialog.showToast("已停止投屏");
-    } catch (e) {
-      SmartDialog.showToast("停止失败：$e");
-    } finally {
-      if (mounted) setState(() => castingDevice = null);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Utils.bottomSheetSafeArea(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          ListTile(
-            leading: const Icon(Icons.cast),
-            title: const Text("投屏到设备"),
-            subtitle: castingDevice != null
-                ? Text("正在投屏到 ${castingDevice!.name}")
-                : null,
-            trailing: IconButton(
-              icon: const Icon(Icons.refresh),
-              tooltip: "重新搜索",
-              onPressed: _discover,
-            ),
-          ),
-          const Divider(height: 1),
-          if (castingDevice != null)
-            ListTile(
-              leading: const Icon(Icons.stop_circle_outlined),
-              title: const Text("停止投屏"),
-              onTap: _stop,
-            ),
-          if (loading)
-            const Padding(
-              padding: EdgeInsets.all(24),
-              child: Center(child: CircularProgressIndicator()),
-            )
-          else if (error != null)
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Text("搜索失败：$error", style: const TextStyle(color: Colors.grey)),
-            )
-          else if (devices.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(24),
-              child: Center(
-                child: Text(
-                  "未发现可用设备\n请确保手机/电脑与电视在同一局域网，且电视已开启投屏接收",
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.grey),
-                ),
-              ),
-            )
-          else
-            ListView.separated(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              padding: const EdgeInsets.only(bottom: 12),
-              itemCount: devices.length,
-              separatorBuilder: (_, __) => const Divider(height: 1),
-              itemBuilder: (_, i) {
-                final d = devices[i];
-                final isCasting = castingDevice == d;
-                return ListTile(
-                  leading: const Icon(Icons.tv),
-                  title: Text(d.name),
-                  subtitle: d.location != null ? Text(d.location!) : null,
-                  trailing: isCasting
-                      ? const Chip(label: Text("投屏中"))
-                      : const Icon(Icons.chevron_right),
-                  onTap: isCasting ? null : () => _cast(d),
-                );
-              },
-            ),
-        ],
-      ),
-    );
-  }
-}
-
 
 class _InteractiveChatText extends StatelessWidget {
   static final RegExp _emojiTokenPattern = RegExp(r'\[[^\[\]]{1,16}\]');

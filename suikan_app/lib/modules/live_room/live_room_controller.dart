@@ -41,6 +41,7 @@ import 'package:simple_live_app/widgets/follow_user_item.dart';
 import 'package:simple_live_app/widgets/net_image.dart';
 import 'package:simple_live_app/widgets/settings/settings_card.dart';
 import 'package:simple_live_app/widgets/settings/settings_switch.dart';
+import 'package:simple_live_app/widgets/cast_sheet.dart';
 import 'package:simple_live_app/widgets/status/app_empty_widget.dart';
 import 'package:simple_live_core/simple_live_core.dart';
 import 'package:url_launcher/url_launcher_string.dart';
@@ -182,6 +183,25 @@ class LiveRoomController extends PlayerController
           ? playUrls[currentLineIndex]
           : null;
   Map<String, String>? get currentPlayHeaders => playHeaders;
+
+  /// 弹出投屏到设备面板（DLNA 局域网推流）
+  void showCastSheet() {
+    final url = currentPlayUrl;
+    if (url == null || url.isEmpty) {
+      SmartDialog.showToast("暂无可投屏的播放地址");
+      return;
+    }
+    showModalBottomSheet(
+      context: Get.context!,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (context) => CastSheet(
+        url: url,
+        headers: currentPlayHeaders,
+        title: detail.value?.title ?? "随看直播",
+      ),
+    );
+  }
 
   /// 自动退出倒计时，单位秒
   var countdown = 60.obs;
