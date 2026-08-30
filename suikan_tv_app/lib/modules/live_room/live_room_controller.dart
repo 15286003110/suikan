@@ -30,13 +30,16 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
   static const _appWindowChannel = MethodChannel('simple_live_tv/app_window');
   final Site pSite;
   final String pRoomId;
+  final bool pIsVod;
   late LiveDanmaku liveDanmaku;
   LiveRoomController({
     required this.pSite,
     required this.pRoomId,
+    this.pIsVod = false,
   }) {
     rxSite = pSite.obs;
     rxRoomId = pRoomId.obs;
+    rxIsVod = pIsVod.obs;
     liveDanmaku = site.liveSite.getDanmaku();
   }
   final FocusNode focusNode = FocusNode();
@@ -44,6 +47,8 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
   Site get site => rxSite.value;
   late Rx<String> rxRoomId;
   String get roomId => rxRoomId.value;
+  late Rx<bool> rxIsVod;
+  bool get isVod => rxIsVod.value;
 
   Rx<LiveRoomDetail?> detail = Rx<LiveRoomDetail?>(null);
   var online = 0.obs;
@@ -895,7 +900,7 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
     }
     currentLineInfo.value = "线路${currentLineIndex + 1}";
     errorMsg.value = "";
-    await initializePlayer();
+    await initializePlayer(isVod: isVod);
     player.open(
       Media(
         playUrls[currentLineIndex],

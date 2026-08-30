@@ -302,7 +302,10 @@ Future initServices([String? hivePath]) async {
   // 投屏接收（DLNA MediaRenderer）：注册服务，开关已开则立即启动
   Get.put(DlnaReceiverService());
   if (AppSettingsController.instance.dlnaReceiverEnable.value) {
-    unawaited(DlnaReceiverService.instance.start());
+    unawaited(DlnaReceiverService.instance.start().catchError((Object err) {
+      // 1900 端口被占等启动失败，静默处理（开关会显示关）
+      return null;
+    }));
   }
 }
 

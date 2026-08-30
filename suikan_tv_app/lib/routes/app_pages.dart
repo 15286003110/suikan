@@ -66,6 +66,7 @@ class AppPages {
         () => LiveRoomController(
           pSite: Get.arguments,
           pRoomId: Get.parameters["roomId"] ?? "",
+          pIsVod: Get.parameters["isVod"] == "true",
         ),
       ),
     ),

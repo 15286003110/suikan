@@ -341,9 +341,13 @@ class AppSettingsController extends GetxController {
           : null;
       if (service != null) {
         if (e) {
-          service.start();
+          unawaited(service.start().catchError((Object err) {
+            // 1900 端口被占等启动失败，静默并回退开关状态
+            dlnaReceiverEnable.value = false;
+            return null;
+          }));
         } else {
-          service.stop();
+          unawaited(service.stop());
         }
       }
     } catch (_) {}
