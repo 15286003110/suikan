@@ -122,6 +122,19 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        // ⚠️ 手机版体积铁律（2026-08-31 实测，改前先看这段）：
+        // media_kit 的 libmpv.so 是 **AAR 依赖里的预编译 so**，按 ABI 全量打包。
+        // `--target-platform android-arm64` 只管 Dart 的 libapp.so，管不到它。
+        // 若编译时漏了 `--split-per-abi`，装出来的 universal 包会把
+        // armeabi-v7a(11.2MB) + x86_64(15.1MB) 的 libmpv.so 一起打进去，
+        // 安装包从 ~45MB 膨胀到 ~70MB，多出的 26MB 在 arm64 手机上永远用不到。
+        // → **手机版编译命令必须带 `--split-per-abi`**，产物取 app-arm64-v8a-release.apk。
+        //
+        // ❌ 别试图用 `ndk { abiFilters += listOf("arm64-v8a") }` 解决：实测对这类
+        // AAR so **完全不生效**（连续两次编译仍是 69.9MB，三个 ABI 的 mpv 全在）。
+        // 而且它与 `--split-per-abi` 互斥，同时存在会直接构建失败：
+        // "Conflicting configuration: 'arm64-v8a' in ndk abiFilters cannot be
+        //  present when splits abi filters are set"。
     }
 
     signingConfigs {
