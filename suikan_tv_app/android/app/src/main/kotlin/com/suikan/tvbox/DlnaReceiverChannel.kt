@@ -72,8 +72,10 @@ class DlnaReceiverChannel(
         thread = Thread {
             var sock: MulticastSocket? = null
             try {
-                // reuseAddress 必须在 bind 前设置，才能与系统 DLNA 服务共享 1900
-                sock = MulticastSocket()
+                // 注意：MulticastSocket() 无参构造会隐式 bind 随机端口（Java 行为），
+                // 再 bind 1900 会报 EINVAL。必须用 MulticastSocket(null)（不 bind），
+                // 先设 reuseAddress（在 bind 前生效）再 bind 1900，与系统 DLNA 共享端口。
+                sock = MulticastSocket(null)
                 sock!!.reuseAddress = true
                 sock!!.timeToLive = 4
                 sock!!.bind(InetSocketAddress(1900))

@@ -43,6 +43,7 @@ class DlnaReceiverService extends GetxService {
   static const String _avtType = 'urn:schemas-upnp-org:service:AVTransport:1';
   static const String _cmType = 'urn:schemas-upnp-org:service:ConnectionManager:1';
   static const String _rcType = 'urn:schemas-upnp-org:service:RenderingControl:1';
+  static const String _dialType = 'urn:dial-multiscreen-org:service:dial:1';
 
   HttpServer? _httpServer;
   Timer? _notifyTimer;
@@ -166,6 +167,45 @@ class DlnaReceiverService extends GetxService {
         'Content-Type': 'text/xml; charset=utf-8',
       });
     }
+    // DIAL（安卓 B站/虎牙/腾讯视频等投屏协议）：REST 接口
+    if (path == 'apps' || path == 'apps/') {
+      if (request.method == 'GET') {
+        return _dialAppsIndex();
+      }
+      if (request.method == 'POST') {
+        // 投屏端 POST 视频 URL 启动播放
+        final body = await request.readAsString();
+        final url = body.trim();
+        if (url.isNotEmpty) {
+          _currentUrl = url;
+          currentUrl.value = url;
+          _play(url);
+        }
+        return shelf.Response(201);
+      }
+      return shelf.Response.notFound('Not Found');
+    }
+    if (path.startsWith('apps/')) {
+      final appId = path.substring('apps/'.length);
+      if (request.method == 'GET') {
+        return _dialAppState(appId);
+      }
+      if (request.method == 'POST') {
+        final body = await request.readAsString();
+        final url = body.trim();
+        if (url.isNotEmpty) {
+          _currentUrl = url;
+          currentUrl.value = url;
+          _play(url);
+        }
+        return shelf.Response(201);
+      }
+      if (request.method == 'DELETE') {
+        _doStop();
+        return shelf.Response(200);
+      }
+      return shelf.Response.notFound('Not Found');
+    }
     if (path.startsWith('control')) {
       final body = await request.readAsString();
       final soapAction = request.headers['soapaction'] ?? '';
@@ -175,6 +215,31 @@ class DlnaReceiverService extends GetxService {
   }
 
   String _serverHeader() => 'SuikanTV/2.1 UPnP/1.0 SuikanTV-DLNADOC/1.50';
+
+  // ---------- DIAL REST ----------
+
+  shelf.Response _dialAppsIndex() {
+    const xml = '''<?xml version="1.0" encoding="UTF-8"?>
+<service xmlns="urn:dial-multiscreen-org:schemas:2012:dial">
+  <name>随看TV</name>
+  <options allowStop="true"/>
+</service>''';
+    return shelf.Response.ok(xml, headers: {
+      'Content-Type': 'application/xml; charset=utf-8',
+    });
+  }
+
+  shelf.Response _dialAppState(String appId) {
+    final xml = '''<?xml version="1.0" encoding="UTF-8"?>
+<service xmlns="urn:dial-multiscreen-org:schemas:2012:dial">
+  <name>$appId</name>
+  <state>${_transportState == 'STOPPED' ? 'stopped' : 'running'}</state>
+  <options allowStop="true"/>
+</service>''';
+    return shelf.Response.ok(xml, headers: {
+      'Content-Type': 'application/xml; charset=utf-8',
+    });
+  }
 
   // ---------- 设备描述 ----------
 
@@ -186,7 +251,7 @@ class DlnaReceiverService extends GetxService {
   <specVersion><major>1</major><minor>0</minor></specVersion>
   <device>
     <deviceType>$_deviceType</deviceType>
-    <friendlyName>Suikan TV</friendlyName>
+    <friendlyName>随看TV</friendlyName>
     <manufacturer>Suikan</manufacturer>
     <manufacturerURL>https://github.com/mobingchong/suikan</manufacturerURL>
     <modelDescription>Suikan TV DLNA Media Renderer</modelDescription>
@@ -197,6 +262,8 @@ class DlnaReceiverService extends GetxService {
     <UDN>$_uuid</UDN>
     <dlna:X_DLNADOC>DMR-1.50</dlna:X_DLNADOC>
     <dlna:X_DLNACAP>av-upload,av-play,av-pause,av-stop,av-seek</dlna:X_DLNACAP>
+    <dial:additionalApplication xmlns:dial="urn:dial-multiscreen-org:schemas:2012:dial"
+                                dial:appId="suikan.tv" dial:name="随看TV"/>
     <serviceList>
       <service>
         <serviceType>$_avtType</serviceType>
@@ -218,6 +285,13 @@ class DlnaReceiverService extends GetxService {
         <controlURL>/control/rendering</controlURL>
         <eventSubURL>/control/event</eventSubURL>
         <SCPDURL>/control/rendering_scpd.xml</SCPDURL>
+      </service>
+      <service>
+        <serviceType>$_dialType</serviceType>
+        <serviceId>urn:dial-multiscreen-org:serviceId:dial</serviceId>
+        <controlURL>/apps</controlURL>
+        <eventSubURL>/apps</eventSubURL>
+        <SCPDURL></SCPDURL>
       </service>
     </serviceList>
     <presentationURL>http://$ip:$_httpPort/</presentationURL>
@@ -895,6 +969,7 @@ class DlnaReceiverService extends GetxService {
     if (st == _avtType) return _avtType;
     if (st == _cmType) return _cmType;
     if (st == _rcType) return _rcType;
+    if (st == _dialType) return _dialType;
     // 部分端会搜 通配 的 MediaRenderer
     if (st.startsWith('urn:schemas-upnp-org:device:MediaRenderer')) {
       return _deviceType;
@@ -917,6 +992,7 @@ class DlnaReceiverService extends GetxService {
       'upnp:rootdevice',
       _uuid,
       _deviceType,
+      _dialType,
     ];
     for (final nt in targets) {
       final usn = nt == _uuid ? _uuid : '$_uuid::$nt';
@@ -941,6 +1017,7 @@ class DlnaReceiverService extends GetxService {
       'upnp:rootdevice',
       _uuid,
       _deviceType,
+      _dialType,
     ];
     for (final nt in targets) {
       final usn = nt == _uuid ? _uuid : '$_uuid::$nt';
