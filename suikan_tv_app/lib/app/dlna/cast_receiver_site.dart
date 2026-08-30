@@ -47,8 +47,11 @@ class CastReceiverSite extends CustomM3uSite {
         host.contains('hdslb.com')) {
       return 'https://www.bilibili.com/';
     }
-    // 斗鱼
-    if (host.contains('douyu.com') || host.contains('douyucdn.cn')) {
+    // 斗鱼（含 CDN：douyucdn.cn / douyucdn2.cn / douyucdn3.cn 等系列）
+    if (host.contains('douyu.com') ||
+        host.contains('douyucdn.cn') ||
+        host.contains('douyucdn2.cn') ||
+        host.contains('douyucdn3.cn')) {
       return 'https://www.douyu.com/';
     }
     // 抖音
