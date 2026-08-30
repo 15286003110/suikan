@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:simple_live_app/app/app_style.dart';
-import 'package:simple_live_app/app/sites.dart';
-import 'package:simple_live_app/modules/search/local_content_search_view.dart';
-import 'package:simple_live_app/modules/search/search_controller.dart';
-import 'package:simple_live_app/modules/search/search_list_view.dart';
+import 'package:simple_live_app/modules/search/global_search_controller.dart';
+import 'package:simple_live_app/modules/search/global_search_view.dart';
 
-class SearchPage extends GetView<AppSearchController> {
+/// 方案 B：彻底单页全局搜索
+/// - 单输入框，输入防抖 600ms 自动搜
+/// - 无平台/本地内容 Tab，一次搜索聚合全部来源
+/// - 房间/主播模式通过右上角按钮切换
+class SearchPage extends GetView<GlobalSearchController> {
   const SearchPage({Key? key}) : super(key: key);
 
   @override
@@ -17,8 +19,9 @@ class SearchPage extends GetView<AppSearchController> {
         title: TextField(
           controller: controller.searchController,
           autofocus: true,
+          onChanged: controller.onInputChanged,
           decoration: InputDecoration(
-            hintText: "搜点什么吧",
+            hintText: "搜索所有平台与本地内容",
             border: OutlineInputBorder(
               borderRadius: AppStyle.radius24,
             ),
@@ -30,87 +33,43 @@ class SearchPage extends GetView<AppSearchController> {
                   onPressed: Get.back,
                   icon: const Icon(Icons.arrow_back),
                 ),
-                Obx(
-                  () => DropdownButton<int>(
-                    underline: const SizedBox(),
-                    items: const [
-                      DropdownMenuItem(
-                        value: 0,
-                        child: Text("房间"),
-                      ),
-                      DropdownMenuItem(
-                        value: 1,
-                        child: Text("主播"),
-                      ),
-                    ],
-                    value: controller.searchMode.value,
-                    onChanged: (e) {
-                      controller.searchMode.value = e ?? 0;
-                      controller.doSearch();
-                    },
-                  ),
-                ),
                 AppStyle.hGap8,
               ],
             ),
-            suffixIcon: IconButton(
-              onPressed: controller.doSearch,
-              icon: const Icon(Icons.search),
+            suffixIcon: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // 房间/主播模式切换
+                Obx(
+                  () => TextButton(
+                    onPressed: () {
+                      controller.searchMode.value =
+                          controller.searchMode.value == 0 ? 1 : 0;
+                      if (controller.searchController.text.trim().isNotEmpty) {
+                        controller.searchGlobal(
+                          controller.searchController.text,
+                        );
+                      }
+                    },
+                    child: Text(
+                      controller.searchMode.value == 0 ? "房间" : "主播",
+                    ),
+                  ),
+                ),
+                IconButton(
+                  onPressed: () =>
+                      controller.searchGlobal(controller.searchController.text),
+                  icon: const Icon(Icons.search),
+                ),
+              ],
             ),
           ),
           onSubmitted: (e) {
-            controller.doSearch();
+            controller.searchGlobal(e);
           },
         ),
-        bottom: TabBar(
-          controller: controller.tabController,
-          padding: EdgeInsets.zero,
-          tabAlignment: TabAlignment.center,
-          tabs: [
-            const Tab(
-              child: Row(
-                children: [
-                  Icon(Icons.search, size: 20),
-                  SizedBox(width: 8),
-                  Text('本地内容'),
-                ],
-              ),
-            ),
-            ...controller.searchSites
-                .map(
-                  (e) => Tab(
-                    //text: e.name,
-                    child: Row(
-                      children: [
-                        Image.asset(
-                          e.logo,
-                          width: 24,
-                        ),
-                        AppStyle.hGap8,
-                        Text(e.name),
-                      ],
-                    ),
-                  ),
-                )
-                .toList(),
-          ],
-          labelPadding: AppStyle.edgeInsetsH20,
-          isScrollable: true,
-          indicatorSize: TabBarIndicatorSize.label,
-        ),
       ),
-      body: TabBarView(
-        physics: const NeverScrollableScrollPhysics(),
-        controller: controller.tabController,
-        children: [
-          const LocalContentSearchView(),
-          ...controller.searchSites
-              .map((e) => SearchListView(
-                        e.id,
-                      ))
-              .toList(),
-        ],
-      ),
+      body: const GlobalSearchView(),
     );
   }
 }

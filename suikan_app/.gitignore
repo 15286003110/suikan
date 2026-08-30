@@ -51,3 +51,10 @@ pubspec.lock
 .fvm/
 
 /android/app/.cxx
+# Flutter 各平台 ephemeral 临时目录（插件符号链接，编译自动生成）
+android/flutter/
+windows/flutter/ephemeral/
+linux/flutter/ephemeral/
+macos/flutter/ephemeral/
+ios/flutter/ephemeral/
+

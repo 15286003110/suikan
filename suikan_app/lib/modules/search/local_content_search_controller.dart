@@ -43,6 +43,23 @@ class LocalContentSearchController extends GetxController {
     }
   }
 
+  /// 全局搜索用：同时搜直播源频道 + 影视库，合并结果。
+  Future<void> searchAll(String kw) async {
+    keyword = kw.trim();
+    if (keyword.isEmpty) {
+      results.clear();
+      return;
+    }
+    searching.value = true;
+    results.clear();
+    try {
+      _searchChannels();
+      await _searchMedia();
+    } finally {
+      searching.value = false;
+    }
+  }
+
   /// 直播源频道：遍历所有自定义源的本地频道，按名称过滤。
   void _searchChannels() {
     final kw = keyword.toLowerCase();

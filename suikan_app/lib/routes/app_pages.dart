@@ -15,7 +15,8 @@ import 'package:simple_live_app/modules/settings/follow_settings_page.dart';
 import 'package:simple_live_app/modules/sync/profile_backup/profile_backup_controller.dart';
 import 'package:simple_live_app/modules/sync/profile_backup/profile_backup_page.dart';
 import 'package:simple_live_app/modules/sync/sync_page.dart';
-import 'package:simple_live_app/modules/search/search_controller.dart';
+import 'package:simple_live_app/modules/search/global_search_controller.dart';
+import 'package:simple_live_app/modules/search/local_content_search_controller.dart';
 import 'package:simple_live_app/modules/search/search_page.dart';
 import 'package:simple_live_app/modules/sync/local_sync/device/sync_device_controller.dart';
 import 'package:simple_live_app/modules/sync/local_sync/device/sync_device_page.dart';
@@ -96,7 +97,8 @@ class AppPages {
       name: RoutePath.kSearch,
       page: () => const SearchPage(),
       bindings: [
-        BindingsBuilder.put(() => AppSearchController()),
+        BindingsBuilder.put(() => LocalContentSearchController()),
+        BindingsBuilder.put(() => GlobalSearchController()),
       ],
     ),
     //分类详情

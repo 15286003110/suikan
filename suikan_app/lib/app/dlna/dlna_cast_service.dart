@@ -51,27 +51,65 @@ class DlnaCastService {
     Duration timeout = const Duration(seconds: 5),
   }) async {
     final devices = <String, DlnaDevice>{};
-    RawDatagramSocket? socket;
-    try {
+    // iOS 发组播必须绑定具体接口（绑定 0.0.0.0 报 "No route to host" errno 65）；
+    // WIN/Android 走 anyIPv4 由系统选默认路由即可，强行绑接口反而可能选错网卡
+    // （虚拟网卡/VPN 优先于 WiFi）导致收不到设备响应。
+    RawDatagramSocket socket;
+    if (Platform.isIOS) {
+      try {
+        final interfaces = await NetworkInterface.list(
+          type: InternetAddressType.IPv4,
+          includeLoopback: false,
+        );
+        RawDatagramSocket? bound;
+        for (final iface in interfaces) {
+          if (iface.addresses.isEmpty) continue;
+          final addr = iface.addresses.first;
+          if (addr.isLoopback) continue;
+          bound = await RawDatagramSocket.bind(addr, 0);
+          break;
+        }
+        socket = bound ??
+            await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0);
+      } catch (_) {
+        socket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0);
+      }
+    } else {
       socket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0);
+    }
+    try {
       socket.multicastHops = 4;
       try {
         socket.joinMulticast(InternetAddress(_ssdpAddress));
-      } catch (_) {
-        // 部分平台/无多播锁时加入失败，仍可收到本机回包。
+      } catch (e) {
+        // 加入组播组失败时仍尝试发送（部分设备会回本机/仍可收到）。
+        assert(() {
+          // ignore: avoid_print
+          print('DLNA joinMulticast failed: $e');
+          return true;
+        }());
       }
-      final search = utf8.encode(
-        'M-SEARCH * HTTP/1.1\r\n'
-        'HOST: $_ssdpAddress:$_ssdpPort\r\n'
-        'MAN: "ssdp:discover"\r\n'
-        'MX: 3\r\n'
-        'ST: urn:schemas-upnp-org:device:MediaRenderer:1\r\n'
-        'USER-AGENT: Suikan/2.1 DLNADOC/1.50\r\n'
-        '\r\n',
-      );
-      for (var i = 0; i < 2; i++) {
-        socket.send(search, InternetAddress(_ssdpAddress), _ssdpPort);
-        await Future.delayed(const Duration(milliseconds: 350));
+      // 轮换多个 ST：部分设备只响应 ssdp:all 或 rootdevice，不响应 MediaRenderer。
+      // （飞牛播放器能发现设备的原因之一就是发送了更通用的搜索目标。）
+      const searchTargets = [
+        'urn:schemas-upnp-org:device:MediaRenderer:1',
+        'ssdp:all',
+        'upnp:rootdevice',
+      ];
+      for (final st in searchTargets) {
+        final search = utf8.encode(
+          'M-SEARCH * HTTP/1.1\r\n'
+          'HOST: $_ssdpAddress:$_ssdpPort\r\n'
+          'MAN: "ssdp:discover"\r\n'
+          'MX: 3\r\n'
+          'ST: $st\r\n'
+          'USER-AGENT: Suikan/2.1 DLNADOC/1.50\r\n'
+          '\r\n',
+        );
+        for (var i = 0; i < 2; i++) {
+          socket.send(search, InternetAddress(_ssdpAddress), _ssdpPort);
+          await Future.delayed(const Duration(milliseconds: 300));
+        }
       }
       final until = DateTime.now().add(timeout);
       await for (final event in socket) {
@@ -88,7 +126,7 @@ class DlnaCastService {
         if (DateTime.now().isAfter(until)) break;
       }
     } finally {
-      socket?.close();
+      socket.close();
     }
     return devices.values.toList();
   }

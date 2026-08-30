@@ -67,18 +67,11 @@ Widget buildFullControls(
           controller,
           padding: padding,
         ),
-        controller.isVod
-            ? _buildVodBottomBar(
-                controller,
-                fullScreen: true,
-                padding: padding,
-                volumeButtonKey: volumeButtonKey,
-              )
-            : _buildFullBottomBar(
-                controller,
-                padding: padding,
-                volumeButtonKey: volumeButtonKey,
-              ),
+        _buildFullBottomBar(
+          controller,
+          padding: padding,
+          volumeButtonKey: volumeButtonKey,
+        ),
         _buildSideLockButton(
           controller,
           padding: padding,
@@ -143,20 +136,11 @@ Widget buildControls(
         _buildPlayerSuperChatOverlay(controller),
         _buildBufferingIndicator(videoState),
         _buildGestureLayer(controller),
-        controller.isVod
-            ? _buildVodBottomBar(
-                controller,
-                fullScreen: false,
-                padding: EdgeInsets.only(
-                  bottom: MediaQuery.of(videoState.context).padding.bottom,
-                ),
-                volumeButtonKey: volumeButtonKey,
-              )
-            : _buildNormalBottomBar(
-                controller,
-                isPortrait: isPortrait,
-                volumeButtonKey: volumeButtonKey,
-              ),
+        _buildNormalBottomBar(
+          controller,
+          isPortrait: isPortrait,
+          volumeButtonKey: volumeButtonKey,
+        ),
         _buildGestureTip(controller),
       ],
     ),
@@ -394,8 +378,13 @@ Widget _buildFullBottomBar(
           right: padding.right + 12,
           bottom: padding.bottom,
         ),
-        child: Row(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
+            // VOD（影视库）时顶部叠一条进度条，其余按钮与直播完全一致
+            if (controller.isVod) _VodProgressBar(controller: controller),
+            Row(
+              children: [
             IconButton(
               onPressed: controller.refreshRoom,
               icon: const Icon(
@@ -493,6 +482,16 @@ Widget _buildFullBottomBar(
                 style: const TextStyle(color: Colors.white, fontSize: 15),
               ),
             ),
+            if (controller.isVod)
+              TextButton(
+                onPressed: () => showPlaybackSpeedSheet(controller),
+                child: Obx(
+                  () => Text(
+                    '${controller.playbackRate.value.toStringAsFixed(2)}x',
+                    style: const TextStyle(color: Colors.white, fontSize: 15),
+                  ),
+                ),
+              ),
             IconButton(
               onPressed: () {
                 if (controller.smallWindowState.value) {
@@ -505,6 +504,8 @@ Widget _buildFullBottomBar(
                 Remix.fullscreen_exit_fill,
                 color: Colors.white,
               ),
+            ),
+              ],
             ),
           ],
         ),
@@ -536,8 +537,13 @@ Widget _buildNormalBottomBar(
             ],
           ),
         ),
-        child: Row(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
+            // VOD（影视库）时顶部叠一条进度条，其余按钮与直播完全一致
+            if (controller.isVod) _VodProgressBar(controller: controller),
+            Row(
+              children: [
             IconButton(
               onPressed: controller.refreshRoom,
               icon: const Icon(
@@ -637,6 +643,16 @@ Widget _buildNormalBottomBar(
                   style: const TextStyle(color: Colors.white, fontSize: 15),
                 ),
               ),
+            if (controller.isVod)
+              TextButton(
+                onPressed: () => showPlaybackSpeedSheet(controller),
+                child: Obx(
+                  () => Text(
+                    '${controller.playbackRate.value.toStringAsFixed(2)}x',
+                    style: const TextStyle(color: Colors.white, fontSize: 15),
+                  ),
+                ),
+              ),
             if (!Platform.isAndroid && !Platform.isIOS)
               IconButton(
                 onPressed: controller.enterSmallWindow,
@@ -652,6 +668,8 @@ Widget _buildNormalBottomBar(
                 Remix.fullscreen_line,
                 color: Colors.white,
               ),
+            ),
+              ],
             ),
           ],
         ),
@@ -917,97 +935,6 @@ void showPlayerSettings(LiveRoomController controller) {
       ),
     ),
   );
-}
-
-/// 点播（如飞牛影视）底部控制条：进度条 + 播放/暂停 + 倍速 + 音量 + 全屏。
-Widget _buildVodBottomBar(
-  LiveRoomController controller, {
-  required bool fullScreen,
-  required EdgeInsets padding,
-  required GlobalKey volumeButtonKey,
-}) {
-  return Obx(() {
-    final visible = controller.showControlsState.value &&
-        !controller.lockControlsState.value;
-    return AnimatedPositioned(
-      left: 0,
-      right: 0,
-      bottom: visible ? 0 : -(108 + padding.bottom),
-      duration: const Duration(milliseconds: 200),
-      child: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Colors.transparent,
-              Colors.black87,
-            ],
-          ),
-        ),
-        padding: EdgeInsets.only(
-          left: padding.left + 12,
-          right: padding.right + 12,
-          bottom: padding.bottom,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _VodProgressBar(controller: controller),
-            Row(
-              children: [
-                TextButton(
-                  onPressed: () => showPlaybackSpeedSheet(controller),
-                  child: Obx(
-                    () => Text(
-                      '${controller.playbackRate.value.toStringAsFixed(2)}x',
-                      style: const TextStyle(color: Colors.white, fontSize: 14),
-                    ),
-                  ),
-                ),
-                const Expanded(child: SizedBox()),
-                if (!Platform.isAndroid && !Platform.isIOS)
-                  IconButton(
-                    key: volumeButtonKey,
-                    onPressed: () {
-                      final ctx = volumeButtonKey.currentContext;
-                      if (ctx == null) return;
-                      controller.showVolumeSlider(ctx, keepAlive: true);
-                    },
-                    icon: Icon(
-                      controller.mutedState.value
-                          ? Icons.volume_off
-                          : Icons.volume_down,
-                      size: 24,
-                      color: Colors.white,
-                    ),
-                  ),
-                IconButton(
-                  onPressed: controller.toggleMute,
-                  icon: Icon(
-                    controller.mutedState.value
-                        ? Icons.volume_off
-                        : Icons.volume_up,
-                    size: 24,
-                    color: Colors.white,
-                  ),
-                ),
-                IconButton(
-                  onPressed: fullScreen
-                      ? controller.exitFull
-                      : controller.enterFullScreen,
-                  icon: Icon(
-                    fullScreen ? Icons.fullscreen_exit : Icons.fullscreen,
-                    color: Colors.white,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  });
 }
 
 /// 点播进度条：播放/暂停 + 可拖动进度 + 当前/总时长。
