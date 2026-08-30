@@ -1,16 +1,18 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/get.dart';
 import 'package:remixicon/remixicon.dart';
 import 'package:simple_live_app/app/app_style.dart';
-import 'package:simple_live_app/app/log.dart';
 import 'package:simple_live_app/app/platform_utils.dart';
 import 'package:simple_live_app/app/utils.dart';
 import 'package:simple_live_app/routes/app_navigation.dart';
 import 'package:simple_live_app/routes/route_path.dart';
 import 'package:simple_live_app/modules/settings/custom_source/custom_source_list_page.dart';
 import 'package:simple_live_app/modules/settings/fnos/fn_os_list_page.dart';
+import 'package:simple_live_app/services/db_service.dart';
+import 'package:simple_live_app/services/diagnose_export_service.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 
 class MinePage extends StatelessWidget {
@@ -298,6 +300,29 @@ class MinePage extends StatelessWidget {
                       "https://github.com/mobingchong/suikan",
                       mode: LaunchMode.externalApplication,
                     );
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Remix.file_copy_line),
+                  title: const Text("导出诊断包"),
+                  subtitle: const Text(
+                    "复制本地数据文件（含损坏备份）到可访问目录，用于排查数据丢失",
+                  ),
+                  trailing: const Icon(
+                    Icons.chevron_right,
+                    color: Colors.grey,
+                  ),
+                  onTap: () async {
+                    SmartDialog.showToast("正在导出诊断包…");
+                    final path = await DiagnoseExportService.export(
+                      hiveDir: DBService.instance.hiveDir,
+                    );
+                    if (path == null || path.isEmpty) {
+                      SmartDialog.showToast("导出失败：无法访问外部存储");
+                      return;
+                    }
+                    await Clipboard.setData(ClipboardData(text: path));
+                    SmartDialog.showToast("已导出：$path", displayTime: const Duration(seconds: 5));
                   },
                 ),
               ],

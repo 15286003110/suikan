@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- iOS 14+ 发送/接收 IP 多播 **必需** 的受限权限。
+	     DLNA/UPnP 的设备发现就是往 239.255.255.250:1900 发 SSDP M-SEARCH 多播包。
+	     缺这个权限时系统会**静默丢弃**多播包 —— 不报错、不崩溃、本地网络
+	     权限弹窗也照弹，但设备列表永远是空的。
+
+	     这是 iOS 端"投屏里看不到接收设备"的直接原因。
+	     该权限属 Apple 受限权限，正规上架需向 Apple 申请；本 App 走 TrollStore
+	     自签分发，可直接使用。 -->
+	<key>com.apple.developer.networking.multicast</key>
+	<true/>
+	<!-- 允许调试器附加（TrollStore 自签分发需要） -->
+	<key>get-task-allow</key>
+	<true/>
+</dict>
+</plist>

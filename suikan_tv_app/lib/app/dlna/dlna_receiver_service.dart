@@ -8,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:shelf/shelf.dart' as shelf;
 import 'package:shelf/shelf_io.dart' as shelf_io;
 import 'package:simple_live_tv_app/app/controller/app_settings_controller.dart';
+import 'package:simple_live_tv_app/app/log.dart';
 import 'package:simple_live_tv_app/app/dlna/cast_receiver_site.dart';
 import 'package:simple_live_tv_app/app/sites.dart';
 import 'package:simple_live_tv_app/modules/live_room/live_room_controller.dart';
@@ -58,6 +59,12 @@ class DlnaReceiverService extends GetxService {
 
   String _transportState = 'STOPPED'; // STOPPED / PLAYING / PAUSED
   String _currentUrl = '';
+  bool _isVod = false;
+  /// 本次投屏携带的请求头（由投出端随 SuikanHeaders 下发）。
+  /// 自定义直播源靠它才能通过源站校验——TV 端按域名补头只覆盖虎牙/斗鱼等
+  /// 几个平台，自定义源域名匹配不上就会裸请求被拒。
+  /// m3u8 的分片请求 URL 与投屏 URL 不同，所以这里按"会话"保存而非按 URL。
+  Map<String, String> _castHeaders = const {};
   String _currentTitle = '';
   String _currentMetaData = '';
 
@@ -85,6 +92,11 @@ class DlnaReceiverService extends GetxService {
       InternetAddress.anyIPv4,
       0,
     );
+    // 端口确定后才能把投屏流包成本地代理地址（请求头由本进程补齐，
+    // 绕开 mpv 自定义头失效导致的虎牙/斗鱼播几秒就断）。
+    CastReceiverSite.proxyUrlBuilder = (String url) =>
+        'http://127.0.0.1:$_httpPort/cast_stream?vod=${_isVod ? 1 : 0}&u='
+        '${Uri.encodeComponent(url)}';
 
     // 2) SSDP：原生 MulticastSocket 共享 UDP 1900（盒子系统服务已占用该端口，
     //    Dart 层 RawDatagramSocket 无法 bind）。原生收到 M-SEARCH 后回调 onSearch，
@@ -155,6 +167,10 @@ class DlnaReceiverService extends GetxService {
         'Content-Type': 'text/xml; charset=utf-8',
         'Server': _serverHeader(),
       });
+    }
+    // 投屏流本地代理：播放器请求本机地址，由本进程带 referer/UA 去拉真实流。
+    if (path == 'cast_stream') {
+      return _handleCastStream(request);
     }
     if (path == 'control/avtransport_scpd.xml') {
       return shelf.Response.ok(_avtScpdXml(), headers: {
@@ -686,12 +702,19 @@ class DlnaReceiverService extends GetxService {
             onSuccess: () async {
               final uri = _xmlArg(body, 'CurrentURI') ?? '';
               final metaData = _xmlArg(body, 'CurrentURIMetaData') ?? '';
+              // 投屏端（随看）会带类型标记：点播才显示进度条/允许拖动进度。
+              final castType =
+                  (_xmlArg(body, 'SuikanCastType') ?? '').toLowerCase();
+              final isVod = castType == 'vod';
+              // 投出端直推原 URL 时会把自定义请求头一起带过来；没带就清空，
+              // 避免上一次投屏（自定义源）的头污染下一次（平台直播）。
+              _castHeaders = _parseCastHeaders(_xmlArg(body, 'SuikanHeaders'));
               if (uri.isNotEmpty) {
                 _currentUrl = uri;
                 _currentMetaData = metaData;
                 _currentTitle = _extractTitle(metaData) ?? '';
                 currentUrl.value = uri;
-                _play(uri, title: _currentTitle);
+                _play(uri, title: _currentTitle, isVod: isVod);
               }
             },
           );
@@ -1026,29 +1049,45 @@ class DlnaReceiverService extends GetxService {
 
   // ---------- 播放对接 ----------
 
-  void _play(String url, {String title = ''}) {
+  /// 播放器侧按总时长补判为点播后回调：把当前投屏升级成点播态。
+  ///
+  /// 第三方投屏端（飞牛影视等）不发 SuikanCastType，进来时一律按直播处理，
+  /// 代理地址也就带着 vod=0（屏蔽 Range）。播起来后播放器按 duration 认出是
+  /// 点播，必须在这里同步标记，否则代理不放行 Range → 拖动进度无效。
+  void markVodDetected() {
+    if (_isVod) return;
+    _isVod = true;
+    Log.i('投屏内容已补判为点播，代理开放 Range（支持拖动进度）');
+  }
+
+  /// 投屏接收专用 Site：roomId=URL 直接播 + 按域名补 referer/UA。
+  Site _castSite() => Site(
+        id: 'cast_receiver',
+        name: '投屏接收',
+        logo: '',
+        liveSite: CastReceiverSite(),
+      );
+
+  void _play(String url, {String title = '', bool isVod = false}) {
     _currentUrl = url;
     currentUrl.value = url;
+    _isVod = isVod;
     _transportState = 'PLAYING';
     _notifyEvent();
     // 已有投屏页面（本页或其它投屏端投的）在播：原地切换播放——
     // 同一播放器换源，新投屏全面顶掉旧投屏（旧流先 stop，不会双声音）。
+    // 必须传 newSite（CastReceiverSite）：否则复用旧站点解析 URL 会失败，
+    // 误报"未开播"（虎牙/斗鱼投屏黑屏的根因）。
     final c = _liveRoom();
     if (c != null) {
-      unawaited(c.switchRoom(url));
+      unawaited(c.switchRoom(url, newSite: _castSite(), newIsVod: isVod));
       return;
     }
     // 无投屏页面：新建直播间页开播
-    final site = Site(
-      id: 'cast_receiver',
-      name: '投屏接收',
-      logo: '',
-      liveSite: CastReceiverSite(),
-    );
     AppNavigator.toLiveRoomDetail(
-      site: site,
+      site: _castSite(),
       roomId: url,
-      isVod: true,
+      isVod: isVod,
     );
   }
 
@@ -1147,6 +1186,218 @@ class DlnaReceiverService extends GetxService {
   }
 
   // ---------- 工具 ----------
+
+  /// 投屏流本地代理：播放器请求本机地址，本进程带 referer/UA 去拉真实流，
+  /// 流式转发回去。
+  ///
+  /// 为什么要绕一圈：直连时请求头由 mpv 发送，依赖 media_kit 在 on_load 钩子
+  /// 里按 URI 查缓存回写 `http-header-fields`，投屏场景偶发不生效；虎牙/斗鱼
+  /// 这类校验严格 CDN 缺头会先吐几秒数据再掐断，表现为"播 1~2 秒就播放失败"。
+  /// 走代理后请求头完全由本进程控制，且能记录源站状态码便于定位。
+  Future<shelf.Response> _handleCastStream(shelf.Request request) async {
+    final target = request.url.queryParameters['u'] ?? '';
+    final uri = Uri.tryParse(target);
+    if (target.isEmpty || uri == null) {
+      return shelf.Response.badRequest(body: 'missing url');
+    }
+    final headers = <String, String>{
+      'User-Agent': CastReceiverSite.ua,
+      'Accept': '*/*',
+    };
+    final extra = CastReceiverSite.headersFor(target);
+    if (extra != null) headers.addAll(extra);
+    // 投出端随投屏下发的自定义头优先级最高：按域名补头只覆盖虎牙/斗鱼等平台，
+    // 自定义源域名匹配不上时只有这些头能让源站放行。
+    if (_castHeaders.isNotEmpty) headers.addAll(_castHeaders);
+
+    final client = HttpClient();
+    client.connectionTimeout = const Duration(seconds: 10);
+    // 必须关掉自动解压：默认 autoUncompress=true 会让 Dart 尝试按 gzip 处理
+    // 响应体，对 FLV 这类二进制直播流会导致数据被缓冲/提前结束（实测代理
+    // 0.7 秒就 EOF，直连却能稳定 25 秒）。流式转发必须原样透传字节。
+    client.autoUncompress = false;
+    try {
+      // 点播（影视库）需要支持拖动进度：转发 Range 并保留 Accept-Ranges/
+      // Content-Range；直播则必须屏蔽（分段返回会被播放器当成播完）。
+      //
+      // 这里读**服务的实时标记**而不是 URL 里烘焙的 vod 参数：第三方投屏进来
+      // 时 isVod 是 false，代理地址生成时就固定带上了 vod=0；等播放器按总时长
+      // 补判出点播再回头改标记，URL 并不会重新生成 —— 只有读实时标记才能让
+      // 代理跟上"后知后觉的点播"，Range 得以放行。
+      final isVod = _isVod;
+      final req = await client.openUrl('GET', uri);
+      headers.forEach((k, v) => req.headers.set(k, v));
+      if (isVod) {
+        final range = request.headers[HttpHeaders.rangeHeader];
+        if (range != null) {
+          req.headers.set(HttpHeaders.rangeHeader, range);
+        }
+      }
+      // 关键：明确要求源站不要压缩。Dart HttpClient 默认带
+      // `Accept-Encoding: gzip`，CDN 会返回压缩后的流，而代理是原样转发字节的，
+      // 转发时又不能带 content-encoding（长度未知、且播放器会按流式解析）→
+      // 播放器收到 gzip 数据却不知道要解压 → 播几秒就"播放失败"。
+      // 要求 identity（不压缩），转发链路上的字节即源站原始字节。
+      req.headers.set(HttpHeaders.acceptEncodingHeader, 'identity');
+      final resp = await req.close();
+      Log.i('投屏代理 ${uri.host} → ${resp.statusCode}');
+
+      // HLS 播放列表必须改写后才能转发：m3u8 里的分片大量写成相对路径
+      // （如 `segment001.ts`、`720p/index.m3u8`），原样转发的话播放器会拿
+      // **代理地址**当基准去拼 → 拼出 http://127.0.0.1:<port>/xxx.ts 必然 404，
+      // 表现就是"自定义直播源一投屏就直接出错"。
+      // 虎牙/斗鱼/抖音等平台直播是 FLV 单流，没有播放列表，所以这个问题
+      // 只在自定义源（M3U 里绝大多数是 HLS）上暴露。
+      if (_isHlsPlaylist(target, resp.headers.contentType)) {
+        final rewritten = await _rewriteHlsPlaylist(resp, uri);
+        client.close();
+        if (rewritten != null) {
+          Log.i('投屏代理 HLS 列表已改写 ${uri.host}');
+          return shelf.Response(
+            resp.statusCode,
+            body: rewritten,
+            headers: const {
+              'content-type': 'application/vnd.apple.mpegurl',
+              'cache-control': 'no-cache',
+            },
+          );
+        }
+        // 改写失败（超大/编码异常）：内容已被读走，无法再流式转发，
+        // 只能报错，避免返回半截数据让播放器更难排查。
+        return shelf.Response.internalServerError(
+          body: 'playlist rewrite failed',
+        );
+      }
+
+      // 流结束/播放器断开时释放上游连接（直播是长连接，停止播放才触发）
+      final out = StreamController<List<int>>();
+      final up = resp.listen(
+        out.add,
+        onError: out.addError,
+        onDone: () {
+          unawaited(out.close());
+          client.close();
+        },
+        cancelOnError: true,
+      );
+      out.onCancel = () {
+        unawaited(up.cancel());
+        client.close();
+      };
+      final outHeaders = <String, Object>{};
+      resp.headers.forEach((name, values) {
+        switch (name.toLowerCase()) {
+          case 'connection':
+          case 'transfer-encoding':
+          case 'content-length':
+          case 'content-encoding':
+            break;
+          // 直播不可 seek：屏蔽 Range 相关头，避免 mpv 把分段当成整个资源
+          // （播完一段就结束）。点播保留，供拖动进度使用。
+          case 'accept-ranges':
+          case 'content-range':
+            if (!isVod) break;
+            outHeaders[name] = values.join(', ');
+            break;
+          default:
+            outHeaders[name] = values.join(', ');
+        }
+      });
+      return shelf.Response(
+        resp.statusCode,
+        body: out.stream,
+        headers: outHeaders,
+        context: const {'shelf.io.buffer_output': false},
+      );
+    } catch (e, s) {
+      client.close();
+      Log.e('投屏代理失败：$target $e', s);
+      return shelf.Response.internalServerError(body: 'proxy error: $e');
+    }
+  }
+
+  /// m3u8 改写体积上限：播放列表正常只有几 KB～几十 KB，超过这个量级
+  /// 基本可以断定不是真正的播放列表（或被伪造成 .m3u8 的流），不再改写。
+  static const int _maxPlaylistBytes = 4 * 1024 * 1024;
+
+  /// 判断响应是否为 HLS 播放列表（m3u8）。
+  /// 自定义源常不带规范 content-type，所以同时看 URL 后缀。
+  bool _isHlsPlaylist(String url, ContentType? contentType) {
+    final path = Uri.tryParse(url)?.path.toLowerCase() ?? '';
+    if (path.endsWith('.m3u8')) return true;
+    final mime = contentType?.mimeType.toLowerCase() ?? '';
+    return mime == 'application/vnd.apple.mpegurl' ||
+        mime == 'application/x-mpegurl' ||
+        mime == 'audio/mpegurl' ||
+        mime == 'audio/x-mpegurl';
+  }
+
+  /// 把 m3u8 中的分片/嵌套列表地址全部改写成"经本代理"的绝对地址。
+  /// [base] 是该 m3u8 自身的 URL——相对地址必须以它为基准解析。
+  Future<String?> _rewriteHlsPlaylist(HttpClientResponse resp, Uri base) async {
+    try {
+      final buffer = <int>[];
+      await for (final chunk in resp) {
+        buffer.addAll(chunk);
+        if (buffer.length > _maxPlaylistBytes) return null;
+      }
+      final text = utf8.decode(buffer, allowMalformed: true);
+      final out = StringBuffer();
+      for (final rawLine in text.split(RegExp(r'\r?\n'))) {
+        final line = rawLine.trim();
+        if (line.isEmpty) {
+          out.writeln();
+        } else if (line.startsWith('#')) {
+          // 标签里也可能带 URI（如 #EXT-X-KEY 的密钥、#EXT-X-MAP 的初始化段）
+          out.writeln(_rewritePlaylistTagUri(line, base));
+        } else {
+          out.writeln(_proxiedSegmentUrl(line, base));
+        }
+      }
+      return out.toString();
+    } catch (e) {
+      Log.e('HLS 播放列表改写失败：$e', StackTrace.current);
+      return null;
+    }
+  }
+
+  /// 改写 m3u8 标签内的 URI="..."（AES-128 密钥、初始化段等）。
+  String _rewritePlaylistTagUri(String line, Uri base) {
+    return line.replaceAllMapped(
+      RegExp(r'URI="([^"]+)"', caseSensitive: false),
+      (m) => 'URI="${_proxiedSegmentUrl(m.group(1)!, base)}"',
+    );
+  }
+
+  /// 把（可能相对的）地址解析为绝对地址，再包一层本代理，
+  /// 这样分片请求也由本进程带 referer/UA 去取（防盗链通常同样校验分片）。
+  String _proxiedSegmentUrl(String ref, Uri base) {
+    final absolute = base.resolve(ref);
+    // 已经是本代理地址就别再套一层（避免 ?u= 嵌套编码导致解析失败）
+    if (absolute.host == '127.0.0.1' && absolute.path == '/cast_stream') {
+      return absolute.toString();
+    }
+    // 分片按点播处理：允许 Range，拖动/续播更稳
+    return 'http://127.0.0.1:$_httpPort/cast_stream?vod=1'
+        '&u=${Uri.encodeComponent(absolute.toString())}';
+  }
+
+  /// 解析投出端下发的请求头（Base64(JSON)）。
+  /// 用 Base64 是因为 JSON 的引号经 XML 转义后，正则取出来是未解码的
+  /// `&quot;`，直接 jsonDecode 必失败；Base64 不含任何 XML 特殊字符。
+  /// 自定义直播源（IPTV/私人 M3U）全靠这些头才能通过源站校验。
+  Map<String, String> _parseCastHeaders(String? raw) {
+    if (raw == null || raw.isEmpty) return const {};
+    try {
+      final decoded = jsonDecode(utf8.decode(base64Decode(raw)));
+      if (decoded is Map) {
+        return decoded.map((k, v) => MapEntry(k.toString(), v.toString()));
+      }
+    } catch (e) {
+      Log.i('投屏请求头解析失败：$e');
+    }
+    return const {};
+  }
 
   String? _xmlArg(String xml, String tag) {
     final m = RegExp('<$tag>(.*?)</$tag>', dotAll: true, caseSensitive: false)

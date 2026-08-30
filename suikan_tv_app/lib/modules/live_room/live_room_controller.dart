@@ -13,6 +13,7 @@ import 'package:simple_live_tv_app/app/app_style.dart';
 import 'package:simple_live_tv_app/app/constant.dart';
 import 'package:simple_live_tv_app/app/controller/app_settings_controller.dart';
 import 'package:simple_live_tv_app/app/desktop_startup_args.dart';
+import 'package:simple_live_tv_app/app/dlna/dlna_receiver_service.dart';
 import 'package:simple_live_tv_app/app/event_bus.dart';
 import 'package:simple_live_tv_app/app/log.dart';
 import 'package:simple_live_tv_app/app/sites.dart';
@@ -49,6 +50,46 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
   String get roomId => rxRoomId.value;
   late Rx<bool> rxIsVod;
   bool get isVod => rxIsVod.value;
+
+  /// 当前播放内容是否来自**投屏接收**（而非从关注列表/分类进的直播间）。
+  ///
+  /// 投屏会话没有"上一个/下一个直播间"的概念，播放中断时**绝不能**走直播间那套
+  /// 自动切换逻辑。虎牙 APP 投上来"播一会就自动停"就是这么来的：直播流一次轻微
+  /// EOF 触发 completed → mediaEnd → 重试两次后 _tryAutoSwitchToNextLiveRoom
+  /// → 切房间/退出，用户看到的就是"莫名其妙自己停了"。
+  bool get isCastSession => site.id == 'cast_receiver';
+
+  /// 投屏重试计数（与直播间的 mediaErrorRetryCount 分开，避免互相污染）
+  int _castRetryCount = 0;
+  DateTime? _castLastFailAt;
+  static const int _castMaxRetry = 5;
+
+  /// 记一次投屏播放失败。返回本次是第几次连续失败。
+  ///
+  /// 与上次失败间隔超过 30 秒就重新计数——否则"看了一个钟头后又断一次"时，
+  /// 重试额度早被前面几次小抖动耗光，直接弹错误。
+  int _bumpCastRetry() {
+    final now = DateTime.now();
+    if (_castLastFailAt != null &&
+        now.difference(_castLastFailAt!) > const Duration(seconds: 30)) {
+      _castRetryCount = 0;
+    }
+    _castLastFailAt = now;
+    _castRetryCount += 1;
+    return _castRetryCount;
+  }
+
+  /// 投屏中断后重连同一 URL（退避：0/1/2/3/3 秒）。
+  Future<void> _castReconnect() async {
+    final attempt = _castRetryCount;
+    final delay = attempt <= 1 ? 0 : (attempt - 1).clamp(1, 3);
+    if (delay > 0) {
+      await Future<void>.delayed(Duration(seconds: delay));
+    }
+    // 投屏的 roomId 就是直链，refreshUrls 必须为 false（没有平台接口可刷新）。
+    // 注意 setPlayer 是 void async，不能 await（原有调用点都是不 await 的）。
+    setPlayer(refreshUrls: false);
+  }
 
   Rx<LiveRoomDetail?> detail = Rx<LiveRoomDetail?>(null);
   var online = 0.obs;
@@ -768,13 +809,41 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
   /// 不能走"导航替换页面"（Get.offNamed）：替换期间新旧 controller 并存，
   /// 后续 SOAP Play/查询动作可能命中旧 controller，旧播放器不停 → 双声音。
   /// 这里直接复用当前 controller：先停旧流 → 改 roomId → loadData 重新拉取播放。
-  Future<void> switchRoom(String newRoomId) async {
-    if (roomId == newRoomId) {
+  ///
+  /// [newSite] 投屏接入专用：必须换成"URL 直播"的投屏接收 site（CastReceiverSite）。
+  /// 否则若 TV 此前开着某平台直播间，会用旧 site 把投屏 URL 当房间号去请求
+  /// 平台 API → 解析失败 → 误报"未开播"（虎牙/斗鱼投屏黑屏的根因）。
+  Future<void> switchRoom(
+    String newRoomId, {
+    Site? newSite,
+    bool? newIsVod,
+  }) async {
+    final sameSite = newSite == null || newSite == site;
+    if (roomId == newRoomId &&
+        sameSite &&
+        (newIsVod == null || newIsVod == isVod)) {
       // 同一 URL 重复投屏：恢复播放即可（不重置进度/不重拉流）
       try {
         await player.play();
       } catch (_) {}
       return;
+    }
+    if (newIsVod != null && newIsVod != isVod) {
+      // 点播↔直播切换（如投屏影视库后再投直播）：决定是否有进度条/可拖动。
+      rxIsVod.value = newIsVod;
+    }
+    // 新的一次投屏：重置重连计数，别让上一条流的重试次数拖累这一条。
+    _castRetryCount = 0;
+    _castLastFailAt = null;
+    if (newSite != null && newSite != site) {
+      // 换源站点：重建弹幕等站点相关状态（同 resetRoom）
+      rxSite.value = newSite;
+      CurrentRoomService.instance.setRoom(newSite, newRoomId);
+      liveDanmaku.stop();
+      _clearDanmuDedupeState();
+      clearLiveEventFlow();
+      danmakuController?.clear();
+      liveDanmaku = newSite.liveSite.getDanmaku();
     }
     // 先停旧流，确保换源瞬间没有新旧两个声音
     try {
@@ -941,8 +1010,77 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
   bool get _shouldRefreshUrlsOnPlaybackRetry =>
       site.id == Constant.kHuya || site.id == Constant.kDouyu;
 
+  /// 探测到明确总时长 → 补判为点播（仅投屏会话）。
+  ///
+  /// 第三方投屏端（飞牛影视等）不发 SuikanCastType，isVod 恒为 false，
+  /// 于是进度条被隐藏、左右键跑去开"关注列表/设置"，用户只看到按键说明。
+  /// 这里按 mpv 上报的总时长补上：直播流 duration 恒为 0，有总时长即点播。
+  ///
+  /// 只对投屏会话生效：自有影视库/录播会显式带 isVod，类型明确，不需要猜，
+  /// 也避免直播间的按键行为被悄悄改掉。
+  @override
+  void onDurationDetected(int seconds) {
+    if (!isCastSession || isVod) return;
+    rxIsVod.value = true;
+    Log.d("投屏内容探测到总时长 ${seconds}s，自动按点播处理（显示进度条）");
+    // 同步给投屏代理：放开 Range 请求，否则拖进度时源站不认、拖动无效。
+    DlnaReceiverService.instance.markVodDetected();
+    try {
+      SmartDialog.showToast("已识别为影视，左右键快进快退");
+    } catch (_) {}
+  }
+
+  /// 音量调整后同步静音标记（控制条上的"静音"状态展示用）。
+  @override
+  Future<int> adjustVolume(int delta) async {
+    final v = await super.adjustVolume(delta);
+    muted.value = v <= 0;
+    return v;
+  }
+
+  /// 投屏会话的播放结束：不切房间、不退出，只重连或提示。
+  Future<void> _handleCastPlaybackEnd() async {
+    if (isVod) {
+      // 点播正常播完（不是故障）——给个明确提示，别去重试，否则会从头再播一遍。
+      Log.d("投屏点播播放结束");
+      playbackLoadError.value = "播放结束";
+      _castRetryCount = 0;
+      return;
+    }
+    final attempt = _bumpCastRetry();
+    if (attempt <= _castMaxRetry) {
+      Log.d("投屏直播中断，第$attempt/$_castMaxRetry 次重连");
+      await _castReconnect();
+      return;
+    }
+    _castRetryCount = 0;
+    playbackLoadError.value = "投屏播放中断，请在投屏端重新投一次";
+    SmartDialog.showToast("投屏播放中断");
+  }
+
+  /// 投屏会话的播放失败：同样只重连，绝不做"跳下一个直播间"。
+  Future<void> _handleCastPlaybackError(String error) async {
+    final attempt = _bumpCastRetry();
+    Log.d("投屏播放失败($error)，第$attempt/$_castMaxRetry 次重连");
+    if (attempt <= _castMaxRetry) {
+      await _castReconnect();
+      return;
+    }
+    _castRetryCount = 0;
+    errorMsg.value = "播放失败：$error";
+    playbackLoadError.value = "播放失败：$error";
+    SmartDialog.showToast("播放失败:$error");
+    Log.e("投屏播放失败详情：$error", StackTrace.current);
+  }
+
   @override
   void mediaEnd() async {
+    // 投屏会话的"播放结束"含义完全不同：直播流偶发 EOF 也会触发 completed，
+    // 但用户并没有结束播放。这里静默重连，绝不切房间、绝不退出播放器。
+    if (isCastSession) {
+      await _handleCastPlaybackEnd();
+      return;
+    }
     if (mediaErrorRetryCount < 2) {
       Log.d("播放结束，尝试第${mediaErrorRetryCount + 1}次刷新");
       if (mediaErrorRetryCount == 1) {
@@ -970,6 +1108,10 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
   int mediaErrorRetryCount = 0;
   @override
   void mediaError(String error) async {
+    if (isCastSession) {
+      await _handleCastPlaybackError(error);
+      return;
+    }
     if (mediaErrorRetryCount < 2) {
       Log.d("播放失败，尝试第${mediaErrorRetryCount + 1}次刷新");
       if (mediaErrorRetryCount == 1) {
@@ -983,8 +1125,13 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
     }
 
     if (playUrls.length - 1 == currentLineIndex) {
-      errorMsg.value = "播放失败";
+      // 完整保留 mpv 原始错误：toast 一闪而过（投屏/电视场景用户根本来不及看），
+      // 同步写入 playbackLoadError → 画面居中持久显示，便于反馈定位
+      // （403 防盗链 / 超时 / 解码失败原因各不相同，必须看原文）。
+      errorMsg.value = "播放失败：$error";
+      playbackLoadError.value = "播放失败：$error";
       SmartDialog.showToast("播放失败:$error");
+      Log.e("播放失败详情：$error", StackTrace.current);
       await _tryAutoSwitchToNextLiveRoom(reason: "playback_failure");
     } else {
       //currentLineIndex += 1;
@@ -1127,6 +1274,12 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
 
     rxSite.value = site;
     rxRoomId.value = roomId;
+    // 从投屏切回普通直播间时清掉点播态：isVod 可能是投屏影视被自动补判出来的，
+    // 不复位的话切回直播仍按点播处理（左右键去快进而非开设置）。
+    // resetRoom 的调用方全是平台直播间，置 false 是准确的。
+    rxIsVod.value = false;
+    _castRetryCount = 0;
+    _castLastFailAt = null;
     CurrentRoomService.instance.setRoom(site, roomId);
     followed.value = DBService.instance.getFollowExist("${site.id}_$roomId");
     specialFollowed.value = DBService.instance.followBox

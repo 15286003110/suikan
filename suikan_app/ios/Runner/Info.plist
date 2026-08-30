@@ -36,7 +36,7 @@
 		<true/>
 	</dict>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>用于在同一局域网内发现并连接其他随看设备进行数据同步</string>
+	<string>用于发现并连接同一局域网内的投屏设备（电视/盒子），以及其他随看设备进行数据同步</string>
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_ssdp._udp</string>

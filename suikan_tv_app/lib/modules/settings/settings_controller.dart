@@ -10,6 +10,8 @@ import 'package:simple_live_tv_app/modules/settings/custom_source/custom_source_
 import 'package:simple_live_tv_app/modules/settings/fnos/fn_os_list_page.dart';
 import 'package:simple_live_tv_app/routes/app_navigation.dart';
 import 'package:simple_live_tv_app/services/bilibili_account_service.dart';
+import 'package:simple_live_tv_app/services/db_service.dart';
+import 'package:simple_live_tv_app/services/diagnose_export_service.dart';
 import 'package:simple_live_tv_app/services/douyin_account_service.dart';
 import 'package:simple_live_tv_app/services/kuaishou_account_service.dart';
 
@@ -323,5 +325,21 @@ class SettingsController extends BaseController
     }
     final cookieMatch = RegExp(r"(?:^|;)\s*kwfv1=([^;]+)").firstMatch(input);
     return cookieMatch?.group(1)?.trim() ?? "";
+  }
+
+  /// 导出诊断包：把当前 Hive 箱文件、历史备份、健康快照打包复制到外部缓存目录，
+  /// 便于用 adb pull 取出分析。
+  /// 场景：覆盖安装/强杀后数据异常时保留现场，避免"删了就再也没了"。
+  Future<void> exportDiagnose() async {
+    SmartDialog.showToast("正在导出诊断包…");
+    final path = await DiagnoseExportService.export(
+      hiveDir: DBService.instance.hiveDir,
+    );
+    if (path == null || path.isEmpty) {
+      SmartDialog.showToast("导出失败：无法访问外部存储");
+      return;
+    }
+    await Clipboard.setData(ClipboardData(text: path));
+    SmartDialog.showToast("已导出：\n$path\n（路径已复制）", displayTime: const Duration(seconds: 5));
   }
 }

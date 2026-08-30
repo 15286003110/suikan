@@ -168,7 +168,7 @@ class AppSettingsController extends GetxController {
         .getValue(LocalStorageService.kRoomAutoExitDuration, 60);
 
     playerCompatMode.value = LocalStorageService.instance
-        .getValue(LocalStorageService.kPlayerCompatMode, false);
+        .getValue(LocalStorageService.kPlayerCompatMode, true);
     mpvProfile.value = LocalStorageService.instance
         .getValue(LocalStorageService.kMpvProfile, "balanced");
 
@@ -575,7 +575,7 @@ class AppSettingsController extends GetxController {
         .setValue(LocalStorageService.kRoomAutoExitDuration, e);
   }
 
-  var playerCompatMode = false.obs;
+  var playerCompatMode = true.obs;
   void setPlayerCompatMode(bool e) {
     playerCompatMode.value = e;
     LocalStorageService.instance

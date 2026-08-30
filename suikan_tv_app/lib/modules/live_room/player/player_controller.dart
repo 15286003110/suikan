@@ -223,7 +223,15 @@ class PlayerController extends BaseController
   StreamSubscription? _widthSubscription;
   StreamSubscription? _heightSubscription;
   StreamSubscription? _logSubscription;
+  StreamSubscription? _positionSubscription;
+  StreamSubscription? _durationSubscription;
   DateTime? _lastAudioDiagnosticTime;
+
+  /// 点播当前进度（秒）
+  var vodPosition = 0.obs;
+
+  /// 点播总时长（秒，直播为 0）
+  var vodDuration = 0.obs;
 
   void initStream() {
     _errorSubscription = player.stream.error.listen((event) {
@@ -247,6 +255,20 @@ class PlayerController extends BaseController
         mediaEnd();
       }
     });
+    // 点播进度：影视库/投屏影视需要进度条与快进快退，直播用不到但订阅无害。
+    _positionSubscription = player.stream.position.listen((event) {
+      vodPosition.value = event.inSeconds;
+    });
+    _durationSubscription = player.stream.duration.listen((event) {
+      vodDuration.value = event.inSeconds;
+      // 第三方投屏端（飞牛影视、虎牙等）不会带 SuikanCastType 标记，isVod 一律
+      // 是 false → 没有进度条、左右键也不快进，只弹"按键说明"（用户反馈的原话）。
+      // 这里按**总时长**自动补判点播：直播流 mpv 报的 duration 恒为 0，
+      // 有明确总时长的一定是点播文件。阈值取 10 秒是躲开开播瞬间的诡异小值。
+      if (event.inSeconds >= 10) {
+        onDurationDetected(event.inSeconds);
+      }
+    });
     _logSubscription = player.stream.log.listen((event) {
       Log.d("播放器日志：$event");
     });
@@ -267,11 +289,166 @@ class PlayerController extends BaseController
   }
 
   void disposeStream() {
+    _seekThrottleTimer?.cancel();
+    _seekThrottleTimer = null;
     _errorSubscription?.cancel();
     _completedSubscription?.cancel();
     _widthSubscription?.cancel();
     _heightSubscription?.cancel();
     _logSubscription?.cancel();
+    _positionSubscription?.cancel();
+    _durationSubscription?.cancel();
+  }
+
+  /// 快进/快退（秒，负数后退）。点播（影视库/投屏影视）可用。
+  ///
+  /// 遥控长按方向键时系统按重复率连发 keydown，所以按**按住时长分级加速**：
+  /// 刚按下是 10 秒/次，按得越久单次跨度越大（10 → 30 → 60 → 120 秒），
+  /// 同时把触发间隔同步拉长（150 → 250 → 300 → 350ms）——只放大步进而不拉长
+  /// 间隔，会在几百毫秒内灌进几十条 seek，解复用器跟不上、画面长时间黑屏。
+  ///
+  /// 单击立即执行、无延迟感；松手后（700ms 内没有新的 keydown）自动复位，
+  /// 下次按下重新从 10 秒起步。**不依赖 KeyUpEvent**：直播页把 KeyUpEvent
+  /// 直接 ignored 了，这里拿不到按键抬起事件，只能按空闲时长判断。
+  static const Duration _seekIdleReset = Duration(milliseconds: 700);
+
+  int _pendingSeekDelta = 0;
+  Timer? _seekThrottleTimer;
+  DateTime? _seekPressStart;
+  DateTime? _lastSeekEvent;
+  DateTime? _lastSeekApply;
+  int _lastSeekTier = 0;
+
+  void seekRelative(int seconds) {
+    final now = DateTime.now();
+    // 距上次按键超过空闲阈值 → 当作新的一次按压，档位从头开始。
+    // 阈值取 700ms 是为了跨过遥控的「长按首次重复延迟」（约 400~500ms），
+    // 否则按下后第一个重复事件会被误判成新按压，档位永远升不上去。
+    if (_lastSeekEvent == null ||
+        now.difference(_lastSeekEvent!) > _seekIdleReset) {
+      _seekPressStart = now;
+      _lastSeekTier = 0;
+    }
+    _lastSeekEvent = now;
+
+    final tier = _seekTier(now.difference(_seekPressStart!));
+    _pendingSeekDelta += seconds * _seekStepScale(tier);
+
+    // 换档提示：让用户知道"按久了已经变快了"，避免以为按键失灵。
+    // 只在档位升高时提示，单击（0 档）不提示，连按也不会刷屏。
+    if (tier > _lastSeekTier) {
+      _lastSeekTier = tier;
+      try {
+        SmartDialog.showToast(
+            '${seconds < 0 ? '快退' : '快进'} ${10 * _seekStepScale(tier)} 秒/次');
+      } catch (_) {}
+    }
+
+    final sinceLast =
+        _lastSeekApply == null ? null : now.difference(_lastSeekApply!);
+    final interval = _seekInterval(tier);
+    _seekThrottleTimer?.cancel();
+    if (sinceLast == null || sinceLast.inMilliseconds >= interval) {
+      _applySeekDelta();
+    } else {
+      _seekThrottleTimer = Timer(
+          Duration(milliseconds: interval - sinceLast.inMilliseconds),
+          _applySeekDelta);
+    }
+  }
+
+  /// 按住时长 → 档位（0 起步，越久越高）。
+  int _seekTier(Duration held) {
+    final ms = held.inMilliseconds;
+    if (ms >= 4500) return 3;
+    if (ms >= 2500) return 2;
+    if (ms >= 1000) return 1;
+    return 0;
+  }
+
+  /// 档位 → 步进倍率（调用方传入的基准是 10 秒）。
+  int _seekStepScale(int tier) {
+    switch (tier) {
+      case 1:
+        return 3; // 30 秒
+      case 2:
+        return 6; // 60 秒
+      case 3:
+        return 12; // 120 秒
+      default:
+        return 1; // 10 秒
+    }
+  }
+
+  /// 档位 → 两次实际 seek 之间的最小间隔（档位越高越慢，防止灌爆解复用器）。
+  int _seekInterval(int tier) {
+    switch (tier) {
+      case 1:
+        return 250;
+      case 2:
+        return 300;
+      case 3:
+        return 350;
+      default:
+        return 150;
+    }
+  }
+
+  void _applySeekDelta() {
+    _seekThrottleTimer = null;
+    _lastSeekApply = DateTime.now();
+    final delta = _pendingSeekDelta;
+    _pendingSeekDelta = 0;
+    if (delta == 0) return;
+    final total = vodDuration.value;
+    var target = vodPosition.value + delta;
+    if (target < 0) target = 0;
+    if (total > 0 && target > total) target = total;
+    try {
+      player.seek(Duration(seconds: target));
+      vodPosition.value = target;
+    } catch (_) {}
+  }
+
+  static String formatVodTime(int seconds) {
+    final d = Duration(seconds: seconds < 0 ? 0 : seconds);
+    final h = d.inHours;
+    final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return h > 0 ? '$h:$m:$s' : '$m:$s';
+  }
+
+  /// 探测到明确的**总时长**（点播特征）时回调。
+  ///
+  /// 基类空实现，直播间控制器按需覆写，用于把"直播态"升级成"点播态"。
+  /// 只在第三方投屏没有类型标记时才需要，自有投屏与影视库都会显式带 isVod。
+  void onDurationDetected(int seconds) {}
+
+  /// 播放/暂停切换。
+  ///
+  /// 点播（影视库/投屏影视）的确认键走这里——主流 TV 播放器（云视听、极光、
+  /// 当贝播放器）全是"确认 = 播放/暂停"。直播不接这个键：直播暂停后画面
+  /// 停在旧帧、恢复还要重新追帧，误触代价太大。
+  Future<void> togglePlayPause() async {
+    try {
+      if (player.state.playing) {
+        await player.pause();
+      } else {
+        await player.play();
+      }
+    } catch (_) {}
+  }
+
+  /// 音量步进（点播场景的上下键）。返回调整后的音量（0~100），便于提示。
+  ///
+  /// 点播没有"上一个/下一个频道"的概念（影视库选集在详情页完成），
+  /// 上下键空着不如按主流播放器做成音量。直播保持切频道不变。
+  Future<int> adjustVolume(int delta) async {
+    final next = (player.state.volume + delta).clamp(0.0, 100.0);
+    try {
+      await player.setVolume(next);
+    } catch (_) {}
+    return next.round();
   }
 
   void mediaEnd() {}

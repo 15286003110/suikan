@@ -32,6 +32,37 @@ jobs:
         working-directory: suikan_app
         run: flutter build ios --release --no-codesign
 
+      # ⚠️ 关键步骤，缺了它 iOS 端就搜不到投屏设备。
+      #
+      # `--no-codesign` 只是跳过签名，**不会把 Runner.entitlements 嵌入 app**。
+      # 而 iOS 14+ 发送 IP 多播必须带 com.apple.developer.networking.multicast
+      # —— DLNA/UPnP 的 SSDP 发现（239.255.255.250:1900）就是多播，没这个权限
+      # 系统会**静默丢弃**多播包：不报错、不崩溃、本地网络弹窗也照弹，
+      # 但设备列表永远为空。
+      #
+      # 这里用 **ad-hoc 签名**（codesign -s -）把 entitlements 注入。ad-hoc 不需要
+      # Apple 证书，CI 上就能跑；TrollStore 安装时重新签名会保留 app 已有的
+      # entitlements，于是权限最终生效。
+      - name: Inject entitlements (ad-hoc sign)
+        working-directory: suikan_app
+        run: |
+          set -e
+          APP="build/ios/Release-iphoneos/Runner.app"
+          ENT="ios/Runner/Runner.entitlements"
+          if [ ! -f "$ENT" ]; then
+            echo "!! $ENT 缺失，跳过 entitlements 注入"
+            exit 0
+          fi
+          # 顺序不能反：先签内嵌的 framework / 动态库，最后签主 app。
+          # 反过来的话外层签名会被内层的改动破坏，导致 TrollStore 装不上。
+          if [ -d "$APP/Frameworks" ]; then
+            find "$APP/Frameworks" -maxdepth 1 \( -name "*.framework" -o -name "*.dylib" \) \
+              -exec codesign -f -s - {} \; 2>/dev/null || true
+          fi
+          codesign -f -s - --entitlements "$ENT" "$APP"
+          echo "=== 校验注入结果（应能看到 com.apple.developer.networking.multicast） ==="
+          codesign -d --entitlements - "$APP" 2>&1 | head -30 || true
+
       # 把编译产物打成 ipa（TrollStore 直接吃未签名 ipa 并重新签名）
       - name: Package IPA
         working-directory: suikan_app

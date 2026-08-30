@@ -95,6 +95,10 @@ class GlobalSearchController extends GetxController {
     _debounce?.cancel();
     keyword = kw.trim();
     if (keyword.isEmpty) return;
+    // 用户主动发起新搜索：清掉上一次失败的冷却记录。
+    // 冷却只应作用于"同一次搜索内的自动重试"，否则上一次某平台失败后
+    // 3 秒内再搜，该平台会直接显示"限流冷却中"——表现为"两次搜索结果不一致"。
+    _failCooldown.clear();
     final gen = ++_generation;
     searching.value = true;
     sections.clear();
@@ -178,9 +182,23 @@ class GlobalSearchController extends GetxController {
     } catch (e) {
       if (gen != _generation) return;
       section.status.value = 2;
-      section.errorMsg.value = '搜索失败';
+      // 显示真实原因（如"需要配置 Cookie"），而不是笼统的"搜索失败"——
+      // 否则用户分不清是平台没结果还是被风控拦截。
+      section.errorMsg.value = _friendlyError(e);
       _failCooldown[site.id] = DateTime.now();
     }
+  }
+
+  static String _friendlyError(Object e) {
+    var msg = e.toString();
+    for (final prefix in const ['Exception: ', 'CoreError: ']) {
+      if (msg.startsWith(prefix)) msg = msg.substring(prefix.length);
+    }
+    msg = msg.trim();
+    if (msg.length > 60) {
+      msg = '${msg.substring(0, 60)}…';
+    }
+    return msg.isEmpty ? '搜索失败' : msg;
   }
 
   /// 本地内容搜索（直播源频道 + 影视库，全局搜索同时搜两者）

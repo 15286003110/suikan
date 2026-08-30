@@ -65,6 +65,8 @@ class DlnaCastService {
     // - iOS 必须绑定具体网卡（发组播硬性要求，否则 No route to host）
     // - WIN 也绑定具体网卡（anyIPv4 下 joinMulticast 可能失败导致收不到响应）
     // - Android 走 anyIPv4（原生 MulticastLock 已申请，系统选默认路由）
+    // 网卡选择：过滤 loopback / link-local（169.254，如 iOS 的 awdl0 隧道），
+    // 优先 WiFi 网卡（en* / wlan* / eth*）——绑到蜂窝/虚拟网卡组播发不出去。
     RawDatagramSocket socket;
     if (!Platform.isAndroid) {
       try {
@@ -72,13 +74,33 @@ class DlnaCastService {
           type: InternetAddressType.IPv4,
           includeLoopback: false,
         );
+        InternetAddress? pick(NetworkInterface i) {
+          for (final a in i.addresses) {
+            if (a.type != InternetAddressType.IPv4) continue;
+            if (a.isLoopback || a.isLinkLocal) continue;
+            return a;
+          }
+          return null;
+        }
+
         RawDatagramSocket? bound;
+        InternetAddress? chosen;
         for (final iface in interfaces) {
-          if (iface.addresses.isEmpty) continue;
-          final addr = iface.addresses.first;
-          if (addr.isLoopback) continue;
-          bound = await RawDatagramSocket.bind(addr, 0);
-          break;
+          final a = pick(iface);
+          if (a == null) continue;
+          final n = iface.name.toLowerCase();
+          if (n.startsWith('en') ||
+              n.contains('wlan') ||
+              n.contains('eth')) {
+            chosen = a;
+            break;
+          }
+        }
+        chosen ??= interfaces
+            .map(pick)
+            .firstWhere((a) => a != null, orElse: () => null);
+        if (chosen != null) {
+          bound = await RawDatagramSocket.bind(chosen, 0);
         }
         socket = bound ??
             await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0);
@@ -173,6 +195,128 @@ class DlnaCastService {
     sendTimer.cancel();
     socket.close();
     await completer.future.timeout(const Duration(seconds: 1), onTimeout: () {});
+
+    // 多播一条都没捞到 → 单播兜底扫描。iOS 未取得 multicast 授权、路由器
+    // AP 隔离、安卓 ROM 限制等情况下多播包会被**静默丢弃**（不报错，就是没响应），
+    // 这时只有单播这条路能救回来。成功找到设备时不会走这里，不增加耗时。
+    if (devices.isEmpty) {
+      final found =
+          await _discoverByUnicast(timeout: const Duration(seconds: 4));
+      for (final d in found) {
+        final key = d.location;
+        if (key != null) devices[key] = d;
+      }
+    }
+    return devices.values.toList();
+  }
+
+  /// 单播兜底扫描：多播一条鱼都没捞到时，逐个 IP 发**单播** M-SEARCH。
+  ///
+  /// 为什么需要它：
+  /// - iOS 14+ 发送 IP 多播必须声明 `com.apple.developer.networking.multicast`
+  ///   （Apple 受限权限）。没拿到时系统会**静默丢弃**多播包 —— 不报错、不崩溃、
+  ///   权限弹窗也照弹，但设备永远搜不到。这正是 iOS 端投屏列表为空的头号原因。
+  /// - 另外家用路由器的 AP 隔离 / IGMP 设置、部分安卓 ROM 也会拦多播。
+  ///
+  /// 单播 M-SEARCH 走普通 UDP，**不需要多播权限**，只受本地网络权限约束
+  /// （那个只需 NSLocalNetworkUsageDescription，已配）。这是 iOS 上最可靠的
+  /// DLNA 发现路径，CocoaUPnP 一类成熟库在 iOS 上都这么干。
+  /// 代价是要扫 254 个地址，分批发送 + 短超时，实际一秒多就能出结果。
+  Future<List<DlnaDevice>> _discoverByUnicast({
+    Duration timeout = const Duration(seconds: 4),
+  }) async {
+    final devices = <String, DlnaDevice>{};
+    // 本机 IPv4：优先 Wi-Fi 网卡，排除 loopback / link-local
+    final interfaces = await NetworkInterface.list(
+      type: InternetAddressType.IPv4,
+      includeLoopback: false,
+    );
+    InternetAddress? local;
+    for (final iface in interfaces) {
+      final n = iface.name.toLowerCase();
+      if (!(n.startsWith('en') || n.contains('wlan') || n.contains('eth'))) {
+        continue;
+      }
+      for (final a in iface.addresses) {
+        if (a.type == InternetAddressType.IPv4 &&
+            !a.isLoopback &&
+            !a.isLinkLocal) {
+          local = a;
+          break;
+        }
+      }
+      if (local != null) break;
+    }
+    if (local == null) return const [];
+    // 闭包内无法对可空局部变量做提升，这里固化成非空值供 IIFE 使用
+    final self = local;
+
+    // 家用网络基本都是 /24：取前三段。Dart 的 NetworkInterface **不暴露子网
+    // 掩码**，无法精确计算网段，按 /24 扫是最实用的近似。
+    final parts = self.address.split('.');
+    if (parts.length != 4) return const [];
+    final prefix = '${parts[0]}.${parts[1]}.${parts[2]}';
+
+    RawDatagramSocket socket;
+    try {
+      socket = await RawDatagramSocket.bind(local, 0);
+    } catch (_) {
+      return const [];
+    }
+
+    final completer = Completer<void>();
+    socket.listen(
+      (event) async {
+        if (event == RawSocketEvent.read) {
+          while (true) {
+            final dg = socket.receive();
+            if (dg == null) break;
+            final data = String.fromCharCodes(dg.data);
+            final location = _headerValue(data, 'LOCATION');
+            if (location != null && !devices.containsKey(location)) {
+              final dev = await _parseDevice(location);
+              if (dev != null) devices[location] = dev;
+            }
+          }
+        }
+      },
+      onDone: () {
+        if (!completer.isCompleted) completer.complete();
+      },
+      onError: (_) {
+        if (!completer.isCompleted) completer.complete();
+      },
+    );
+
+    // 分批发送：一口气泼 254 个包容易触发本地缓冲丢包 / 被路由器限速，
+    // 每 50 个让出 30ms。用 IIFE 异步跑，不阻塞上面的响应监听。
+    () async {
+      final message = utf8.encode(
+        'M-SEARCH * HTTP/1.1\r\n'
+        'HOST: $prefix.255:$_ssdpPort\r\n'
+        'MAN: "ssdp:discover"\r\n'
+        'MX: 2\r\n'
+        'ST: ssdp:all\r\n'
+        'USER-AGENT: Suikan/2.1 DLNADOC/1.50\r\n'
+        '\r\n',
+      );
+      for (var i = 1; i <= 254; i++) {
+        final target = '$prefix.$i';
+        if (target == self.address) continue;
+        try {
+          socket.send(message, InternetAddress(target), _ssdpPort);
+        } catch (_) {}
+        // 只扫 1~254，跳过 .0（网络号）与 .255（广播地址）
+        if (i % 50 == 0) {
+          await Future<void>.delayed(const Duration(milliseconds: 30));
+        }
+      }
+    }();
+
+    await Future<void>.delayed(timeout);
+    socket.close();
+    await completer.future
+        .timeout(const Duration(milliseconds: 500), onTimeout: () {});
     return devices.values.toList();
   }
 
@@ -270,6 +414,7 @@ class DlnaCastService {
     String url, {
     Map<String, String>? headers,
     String? title,
+    bool isVod = false,
   }) async {
     var pushUrl = url;
     final needsProxy = headers != null &&
@@ -281,10 +426,29 @@ class DlnaCastService {
       );
     }
     final metadata = _buildMetadata(title ?? '随看直播', pushUrl);
+    // 请求头必须一并投给接收端。
+    // 旧逻辑认为 referer/UA"接收端能按域名自己补"，于是不传——但随看TV 的
+    // 按域名补头只认虎牙/斗鱼/B站/抖音/快手，自定义直播源（IPTV、私人 M3U）
+    // 一个都匹配不上 → TV 端裸请求被源站拒绝 → 表现为"自定义源一投屏就出错"，
+    // 而平台直播正常（它们本就在白名单里）。
+    // 只在**直推原 URL** 时携带：走本机代理时头已由代理加上，再传会重复。
+    final headersXml =
+        (!needsProxy && headers != null && headers.isNotEmpty)
+            // Base64 而非裸 JSON：JSON 里的引号经 XML 转义后，接收端用正则取
+            // 出来是未解码的 &quot;，jsonDecode 会直接失败。Base64 只含
+            // A-Za-z0-9+/=，不碰任何 XML 特殊字符。
+            ? '<SuikanHeaders>'
+                '${base64Encode(utf8.encode(jsonEncode(headers)))}'
+                '</SuikanHeaders>'
+            : '';
     await _soap(
       device.avTransportUrl,
       'SetAVTransportURI',
       '<InstanceID>0</InstanceID>'
+      // 自定义扩展：告诉随看TV 这次是点播还是直播（点播才出进度条/允许拖动）。
+      // 标准 UPnP 设备会忽略未知元素，不影响第三方接收端。
+      '<SuikanCastType>${isVod ? 'vod' : 'live'}</SuikanCastType>'
+      '$headersXml'
       '<CurrentURI>${_esc(pushUrl)}</CurrentURI>'
       '<CurrentURIMetaData>${_esc(metadata)}</CurrentURIMetaData>',
     );

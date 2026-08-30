@@ -185,22 +185,53 @@ class LiveRoomController extends PlayerController
   Map<String, String>? get currentPlayHeaders => playHeaders;
 
   /// 弹出投屏到设备面板（DLNA 局域网推流）
-  void showCastSheet() {
+  void showCastSheet() async {
     final url = currentPlayUrl;
     if (url == null || url.isEmpty) {
       SmartDialog.showToast("暂无可投屏的播放地址");
       return;
     }
+    // 为接收端单独申请一份播放地址：斗鱼/虎牙等带签名的直播直链不允许
+    // 两个客户端同时使用——手机正在播时把同一条地址投给电视，CDN 会把
+    // 其中一个踢掉（表现为投屏播 1~2 秒就停）。申请新地址后两端各用各的，
+    // 互不干扰，本机播放也不会被中断。
+    var castUrl = url;
+    var castHeaders = currentPlayHeaders;
+    final fresh = await _fetchFreshPlayUrl();
+    if (fresh != null) {
+      castUrl = fresh.url;
+      castHeaders = fresh.headers;
+    }
+    if (!Get.isRegistered<LiveRoomController>()) return;
     showModalBottomSheet(
       context: Get.context!,
       isScrollControlled: true,
       useSafeArea: true,
       builder: (context) => CastSheet(
-        url: url,
-        headers: currentPlayHeaders,
+        url: castUrl,
+        headers: castHeaders,
         title: detail.value?.title ?? "随看直播",
+        isVod: isVod,
       ),
     );
+  }
+
+  /// 重新向平台申请一条播放直链（不影响当前播放）。
+  Future<({String url, Map<String, String>? headers})?> _fetchFreshPlayUrl() async {
+    try {
+      if (detail.value == null || currentQuality < 0) return null;
+      if (currentQuality >= qualites.length) return null;
+      final result = await site.liveSite.getPlayUrls(
+        detail: detail.value!,
+        quality: qualites[currentQuality],
+      );
+      if (result.urls.isEmpty) return null;
+      final first = result.urls.first;
+      if (first.isEmpty || first == currentPlayUrl) return null;
+      return (url: first, headers: result.headers);
+    } catch (_) {
+      return null;
+    }
   }
 
   /// 自动退出倒计时，单位秒

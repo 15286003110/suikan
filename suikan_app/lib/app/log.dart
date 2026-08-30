@@ -104,6 +104,17 @@ class Log {
     }
   }
 
+  /// 关键日志（数据安全相关，如 Hive 箱的打开/备份/兜底）：**发行版也要输出**。
+  /// logPrint 只在 debug 打印，导致线上丢数据时 logcat 一片空白、无从查证
+  /// （2026-08-30 覆盖安装清空关注列表就是这么盲查的）。
+  static void logAlways(dynamic obj, [bool writeFile = true]) {
+    addDebugLog(obj.toString(), Colors.red);
+    if (writeFile) {
+      writeLog(obj, Level.info);
+    }
+    debugPrint('[Suikan] $obj');
+  }
+
   static String get _currentTime => Utils.timeFormat.format(DateTime.now());
 }
 

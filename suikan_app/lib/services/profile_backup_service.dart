@@ -480,7 +480,16 @@ class ProfileBackupService extends GetxService {
     bool overwrite,
     SyncProgressCallback? onProgress,
   ) async {
-    if (overwrite) {
+    // 仅当包里确实带屏蔽词才清空本机（raw 或 keywords 任一非空），
+    // 防止"清空后无内容回填"导致本机屏蔽词被同步清掉。
+    final rawValuesList =
+        rawShield is Map && rawShield["raw"] is List ? rawShield["raw"] as List : null;
+    final keywordsList = rawShield is Map && rawShield["keywords"] is List
+        ? rawShield["keywords"] as List
+        : null;
+    final hasShieldData =
+        (rawValuesList?.isNotEmpty ?? false) || (keywordsList?.isNotEmpty ?? false);
+    if (overwrite && hasShieldData) {
       await AppSettingsControllerSafe.clearShieldValues();
     }
     if (rawShield is Map) {
@@ -526,11 +535,12 @@ class ProfileBackupService extends GetxService {
     ProfileImportSummary summary,
     bool overwrite,
   ) async {
+    // 空数据/非数组都不动本机：避免"先清空却发现没有可导入的内容"。
+    if (rawPresets is! List || rawPresets.isEmpty) {
+      return;
+    }
     if (overwrite) {
       await LocalStorageService.instance.shieldPresetBox.clear();
-    }
-    if (rawPresets is! List) {
-      return;
     }
     for (final item in rawPresets) {
       if (item is! Map) {

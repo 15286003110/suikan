@@ -57,10 +57,20 @@ class LiveRoomPage extends GetView<LiveRoomController> {
       requestExitPlayer();
       return KeyEventResult.handled;
     }
-    // 点击OK、Enter、Select键时显示/隐藏控制器
+    // 点击OK、Enter、Select键
     if (key.logicalKey == LogicalKeyboardKey.select ||
         key.logicalKey == LogicalKeyboardKey.enter ||
         key.logicalKey == LogicalKeyboardKey.space) {
+      // 点播（影视库/投屏影视）：确认键按主流 TV 播放器做成**两级**——
+      //   控制条没出来 → 呼出控制条（看进度）；
+      //   控制条已出来 → 播放/暂停。
+      // 直播保持原样（只切换控制条）：直播暂停后画面停在旧帧、恢复还要重新
+      // 追帧，误触代价太大，且用户没要求。
+      if (controller.isVod && controller.showControlsState.value) {
+        unawaited(controller.togglePlayPause());
+        controller.resetHideControlsTimer();
+        return KeyEventResult.handled;
+      }
       if (!controller.showControlsState.value) {
         controller.showControls();
       } else {
@@ -71,6 +81,46 @@ class LiveRoomPage extends GetView<LiveRoomController> {
 
     if (controller.handleKeyboardShortcut(key.logicalKey)) {
       return KeyEventResult.handled;
+    }
+
+    // 点播（影视库/投屏影视）遥控器键位，按主流 TV 播放器规范：
+    //   左右  快退/快进（按**按住时长**分级：10 → 30 → 60 → 120 秒）
+    //   上下  音量 ±5
+    //   确认  播放/暂停（见上）
+    //   菜单  设置
+    //
+    // 这里**不要求控制条已呼出**。旧实现要求 showControlsState 为 true 才接管，
+    // 结果用户投屏完按左右键 → 控制条是隐藏的 → 左键开了关注列表、右键开了设置，
+    // 快进快退一次都没触发，功能等于不存在。
+    // 点播场景下"关注列表/切频道"优先级远低于拖进度，且投屏内容根本没有这些概念；
+    // 设置仍可用菜单键打开。直播行为完全不变（左右仍是设置/关注，上下仍是切频道）。
+    if (controller.isVod) {
+      if (key.logicalKey == LogicalKeyboardKey.arrowLeft) {
+        controller.seekRelative(-10);
+        controller.showControls(); // 保持控制条显示，便于连续调整
+        return KeyEventResult.handled;
+      }
+      if (key.logicalKey == LogicalKeyboardKey.arrowRight) {
+        controller.seekRelative(10);
+        controller.showControls();
+        return KeyEventResult.handled;
+      }
+      // 上下键：点播没有"上一个/下一个频道"的概念（影视库选集在详情页完成），
+      // 按主流播放器做成音量调节，别让两个键空着。直播仍走频道切换。
+      if (key.logicalKey == LogicalKeyboardKey.arrowUp) {
+        unawaited(controller.adjustVolume(5).then((v) {
+          SmartDialog.showToast("音量 $v%");
+        }));
+        controller.showControls();
+        return KeyEventResult.handled;
+      }
+      if (key.logicalKey == LogicalKeyboardKey.arrowDown) {
+        unawaited(controller.adjustVolume(-5).then((v) {
+          SmartDialog.showToast("音量 $v%");
+        }));
+        controller.showControls();
+        return KeyEventResult.handled;
+      }
     }
 
     // 点击Menu打开/关闭设置

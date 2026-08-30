@@ -327,21 +327,33 @@ class KuaishouSite extends LiveSite {
     String keyword, {
     int page = 1,
   }) async {
+    Object? primaryError;
     try {
       var result = await _searchLiveStreams(keyword, page: page);
       if (result.items.isNotEmpty || page > 1) {
         return result;
       }
-    } catch (_) {}
+    } catch (e) {
+      // 主接口被风控/报错：记下原因，备用接口也没有结果时再抛给用户，
+      // 避免"被拦截"被静默显示成 0 个结果。
+      primaryError = e;
+    }
 
     if (page > 1) {
       return LiveSearchRoomResult(hasMore: false, items: <LiveRoomItem>[]);
     }
 
     try {
-      return await _searchRoomsByOverview(keyword);
-    } catch (_) {
-      return LiveSearchRoomResult(hasMore: false, items: <LiveRoomItem>[]);
+      final fallback = await _searchRoomsByOverview(keyword);
+      if (fallback.items.isEmpty && primaryError != null) {
+        throw primaryError;
+      }
+      return fallback;
+    } catch (e) {
+      if (primaryError != null) {
+        throw primaryError;
+      }
+      rethrow;
     }
   }
 
@@ -356,8 +368,16 @@ class KuaishouSite extends LiveSite {
     );
 
     var data = result["data"];
-    if (data is! Map || data["result"] != 1) {
-      return LiveSearchRoomResult(hasMore: false, items: <LiveRoomItem>[]);
+    if (data is! Map) {
+      throw Exception("快手搜索返回数据异常");
+    }
+    if (data["result"] != 1) {
+      // 风控/未登录会返回 result!=1（如 result=10「服务器繁忙，请稍后再试」）。
+      // 以前这里静默返回空列表，用户只看到"0 个结果"却不知道是被拦截，
+      // 现在把原因抛出去，界面才能提示需要配置 Cookie。
+      final err = (data["error_msg"] ?? "").toString().trim();
+      final hint = err.isNotEmpty ? "（$err）" : "";
+      throw Exception("快手搜索被拦截$hint，请在账号管理中配置快手 Cookie 后重试");
     }
 
     var list = (data["list"] as List?) ?? [];

@@ -909,6 +909,13 @@ class SettingsPage extends GetView<SettingsController> {
             subtitle: "v${Utils.packageInfo.version}",
             onTap: () => {},
           ),
+          AppStyle.vGap24,
+          HighlightListTile(
+            focusNode: AppFocusNode(),
+            title: "导出诊断包",
+            subtitle: "把本地数据文件（含损坏备份）复制到外部存储，用于排查数据丢失",
+            onTap: controller.exportDiagnose,
+          ),
         ],
       ),
     );

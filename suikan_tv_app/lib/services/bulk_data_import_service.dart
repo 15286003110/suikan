@@ -161,10 +161,16 @@ class BulkDataImportService {
         verb: "解析",
       );
     }
-    if (overwrite) {
-      await DBService.runExclusive(() => DBService.instance.followBox.clear());
-    }
+    // 覆盖模式改成「先写后删」，顺序绝不能反：
+    // clear() 是 truncate(0)，一瞬间把箱清空；而后面几百条关注是**分批** putAll，
+    // 每批之间还要 await 让出事件循环，整个写入要跑几百毫秒～几秒。这中间被杀
+    // 进程 / 覆盖安装，箱就是空的 —— 三端互导配置包时极易撞上，正是
+    // "覆盖安装后关注列表清空"的直接原因。先写后删即使被打断，旧数据也还在。
+    // 包里是空数组时不删（对端数据已丢/未勾选该类），避免"清了没有回填"。
     await _putFollows(users, policy, onProgress: onProgress);
+    if (overwrite && users.isNotEmpty) {
+      await _pruneFollowsExcept(users);
+    }
     final result = BulkImportResult(
       total: rawUsers.length,
       imported: users.length,
@@ -196,9 +202,8 @@ class BulkDataImportService {
       total: rawHistories.length,
       message: "正在整理历史 0/${rawHistories.length}",
     ));
-    if (overwrite) {
-      await DBService.runExclusive(() => DBService.instance.historyBox.clear());
-    }
+    // 覆盖模式的"清空"移到写入之后执行（理由同关注导入：先清后写一旦中途被
+    // 杀就是空箱）。包里是空数组时也不删，避免"清了没有回填"。
     final existing = overwrite
         ? <String, History>{}
         : {
@@ -249,6 +254,9 @@ class BulkDataImportService {
       );
     }
     await _putHistories(pending.values, policy, onProgress: onProgress);
+    if (overwrite && pending.isNotEmpty) {
+      await _pruneHistoriesExcept(pending.keys.toSet());
+    }
     final result = BulkImportResult(
       total: rawHistories.length,
       imported: imported,
@@ -324,6 +332,20 @@ class BulkDataImportService {
     return result;
   }
 
+  /// 删除"本次导入包里没有"的旧关注项，完成覆盖语义。
+  /// **必须在 putAll 之后调用**：反过来的 clear→write 一旦在写入中途被杀就是空箱。
+  static Future<void> _pruneFollowsExcept(Iterable<FollowUser> users) async {
+    final keep = <String>{for (final u in users) u.id};
+    await DBService.runExclusive(() async {
+      final stale = DBService.instance.followBox.keys
+          .where((k) => !keep.contains(k.toString()))
+          .toList();
+      if (stale.isNotEmpty) {
+        await DBService.instance.followBox.deleteAll(stale);
+      }
+    });
+  }
+
   static Future<void> _putFollows(
     Iterable<FollowUser> users,
     BulkDataPolicy policy, {
@@ -361,6 +383,18 @@ class BulkDataImportService {
         force: true,
       );
     }
+  }
+
+  /// 删除"本次导入包里没有"的旧历史，完成覆盖语义（必须在写入之后调用）。
+  static Future<void> _pruneHistoriesExcept(Set<String> keep) async {
+    await DBService.runExclusive(() async {
+      final stale = DBService.instance.historyBox.keys
+          .where((k) => !keep.contains(k.toString()))
+          .toList();
+      if (stale.isNotEmpty) {
+        await DBService.instance.historyBox.deleteAll(stale);
+      }
+    });
   }
 
   static Future<void> _putHistories(

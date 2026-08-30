@@ -11,11 +11,24 @@ import 'package:simple_live_tv_app/app/controller/app_settings_controller.dart';
 import 'package:simple_live_tv_app/app/sites.dart';
 import 'package:simple_live_tv_app/app/utils.dart';
 import 'package:simple_live_tv_app/modules/live_room/live_room_controller.dart';
+import 'package:simple_live_tv_app/modules/live_room/player/player_controller.dart';
 import 'package:simple_live_tv_app/services/follow_user_service.dart';
 import 'package:simple_live_tv_app/widgets/button/highlight_button.dart';
 import 'package:simple_live_tv_app/widgets/card/anchor_card.dart';
 import 'package:simple_live_tv_app/widgets/settings_item_widget.dart';
 import 'package:simple_live_tv_app/widgets/status/app_empty_widget.dart';
+
+/// 控制条底部的按键说明条目（图标 + 文字）。
+Widget _keyHint(IconData icon, String text) {
+  return Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Icon(icon, color: Colors.white, size: 40.w),
+      if (text.isNotEmpty) AppStyle.hGap16,
+      if (text.isNotEmpty) Text(text, style: AppStyle.textStyleWhite),
+    ],
+  );
+}
 
 Widget playerControls(VideoState videoState, LiveRoomController controller) {
   return buildControls(videoState, controller);
@@ -133,6 +146,70 @@ Widget buildControls(VideoState videoState, LiveRoomController controller) {
             ),
             child: Column(
               children: [
+                // 点播（影视库/投屏影视）进度条：确认键呼出控制条后，
+                // 左右键即可快退/快进。
+                Obx(
+                  () {
+                    if (!controller.isVod) {
+                      return const SizedBox.shrink();
+                    }
+                    final pos = controller.vodPosition.value;
+                    final dur = controller.vodDuration.value;
+                    final pct = dur > 0 ? (pos / dur).clamp(0.0, 1.0) : 0.0;
+                    return Padding(
+                      padding: EdgeInsets.only(bottom: 16.w),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Row(
+                            children: [
+                              Text(
+                                PlayerController.formatVodTime(pos),
+                                style: AppStyle.textStyleWhite,
+                              ),
+                              Expanded(
+                                child: Container(
+                                  margin: EdgeInsets.symmetric(horizontal: 16.w),
+                                  height: 8.w,
+                                  decoration: BoxDecoration(
+                                    color: Colors.white24,
+                                    borderRadius: BorderRadius.circular(4.w),
+                                  ),
+                                  child: Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: FractionallySizedBox(
+                                      widthFactor: pct,
+                                      heightFactor: 1,
+                                      child: Container(
+                                        decoration: BoxDecoration(
+                                          color: Colors.redAccent,
+                                          borderRadius:
+                                              BorderRadius.circular(4.w),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              Text(
+                                dur > 0
+                                    ? PlayerController.formatVodTime(dur)
+                                    : "--:--",
+                                style: AppStyle.textStyleWhite,
+                              ),
+                            ],
+                          ),
+                          SizedBox(height: 8.w),
+                          Text(
+                            "左右键 快退/快进（按住越久跳得越远）　确认键 播放/暂停",
+                            style: AppStyle.textStyleWhite
+                                .copyWith(fontSize: 20.w),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
                 Row(
                   children: [
                     //清晰度
@@ -169,43 +246,38 @@ Widget buildControls(VideoState videoState, LiveRoomController controller) {
                   ],
                 ),
                 AppStyle.vGap12,
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.arrow_circle_up_rounded,
-                      color: Colors.white,
-                      size: 40.w,
-                    ),
-                    AppStyle.hGap16,
-                    Text("上一频道", style: AppStyle.textStyleWhite),
-                    AppStyle.hGap32,
-                    Icon(
-                      Icons.arrow_circle_down_rounded,
-                      color: Colors.white,
-                      size: 40.w,
-                    ),
-                    AppStyle.hGap16,
-                    Text("下一频道", style: AppStyle.textStyleWhite),
-                    AppStyle.hGap32,
-                    Icon(
-                      Icons.arrow_circle_left_outlined,
-                      color: Colors.white,
-                      size: 40.w,
-                    ),
-                    AppStyle.hGap16,
-                    Text("关注列表", style: AppStyle.textStyleWhite),
-                    AppStyle.hGap32,
-                    Icon(
-                      Icons.arrow_circle_right_outlined,
-                      color: Colors.white,
-                      size: 40.w,
-                    ),
-                    AppStyle.hGap16,
-                    Icon(Icons.menu, color: Colors.white, size: 44.w),
-                    AppStyle.hGap16,
-                    Text("设置", style: AppStyle.textStyleWhite),
-                  ],
+                // 按键说明：点播与直播的键位**完全不同**，必须分别说明。
+                // 投屏影视时确认键是播放/暂停、左右快进快退、上下音量，
+                // 而这里原本写死成"上一频道/下一频道/关注列表"——用户按确认键
+                // 弹出的就是这套无关说明，等于什么都没告诉他。
+                Obx(
+                  () => Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: controller.isVod
+                        ? [
+                            _keyHint(Icons.radio_button_checked,
+                                "确认 播放/暂停"),
+                            AppStyle.hGap32,
+                            _keyHint(Icons.fast_rewind, "左右 快退/快进"),
+                            AppStyle.hGap32,
+                            _keyHint(Icons.volume_up, "上下 音量"),
+                            AppStyle.hGap32,
+                            _keyHint(Icons.menu, "菜单 设置"),
+                          ]
+                        : [
+                            _keyHint(Icons.arrow_circle_up_rounded, "上一频道"),
+                            AppStyle.hGap32,
+                            _keyHint(
+                                Icons.arrow_circle_down_rounded, "下一频道"),
+                            AppStyle.hGap32,
+                            _keyHint(
+                                Icons.arrow_circle_left_outlined, "关注列表"),
+                            AppStyle.hGap32,
+                            _keyHint(Icons.arrow_circle_right_outlined, ""),
+                            AppStyle.hGap16,
+                            _keyHint(Icons.menu, "设置"),
+                          ],
+                  ),
                 ),
               ],
             ),

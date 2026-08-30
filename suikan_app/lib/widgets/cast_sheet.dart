@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:simple_live_app/app/dlna/dlna_cast_service.dart';
@@ -8,11 +10,15 @@ class CastSheet extends StatefulWidget {
   final Map<String, String>? headers;
   final String title;
 
+  /// 点播（影视库）投屏：接收端需要进度条与拖动能力。
+  final bool isVod;
+
   const CastSheet({
     super.key,
     required this.url,
     this.headers,
     required this.title,
+    this.isVod = false,
   });
 
   @override
@@ -73,6 +79,7 @@ class CastSheetState extends State<CastSheet> {
         widget.url,
         headers: widget.headers,
         title: widget.title,
+        isVod: widget.isVod,
       );
       SmartDialog.dismiss();
       if (mounted) setState(() => castingDevice = d);
@@ -135,13 +142,15 @@ class CastSheetState extends State<CastSheet> {
               ),
             )
           else if (devices.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(24),
+            Padding(
+              padding: const EdgeInsets.all(24),
               child: Center(
                 child: Text(
-                  "未发现可用设备\n请确保手机/电脑与电视在同一局域网，且电视已开启投屏接收",
+                  Platform.isIOS
+                      ? "未发现可用设备\n若刚才弹出\"随看\"想要查找并连接本地网络的设备？请点\"允许\"，然后点右上角刷新重新搜索\n请确保手机与电视在同一局域网，且电视已开启投屏接收"
+                      : "未发现可用设备\n请确保手机/电脑与电视在同一局域网，且电视已开启投屏接收",
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.grey),
+                  style: const TextStyle(color: Colors.grey),
                 ),
               ),
             )
