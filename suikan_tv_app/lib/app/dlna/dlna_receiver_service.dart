@@ -1,10 +1,11 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:shelf/shelf.dart' as shelf;
 import 'package:shelf/shelf_io.dart' as shelf_io;
+import 'package:simple_live_tv_app/app/controller/app_settings_controller.dart';
 import 'package:simple_live_tv_app/app/custom_source/custom_m3u_site.dart';
 import 'package:simple_live_tv_app/app/sites.dart';
 import 'package:simple_live_tv_app/modules/live_room/live_room_controller.dart';
@@ -18,8 +19,9 @@ import 'package:simple_live_tv_app/routes/app_navigation.dart';
 /// - SOAP 控制：SetAVTransportURI / Play / Pause / Stop / Seek /
 ///   GetTransportInfo / GetPositionInfo / GetMediaInfo /
 ///   ConnectionManager（GetProtocolInfo 等）/ RenderingControl（音量/静音）
-/// - SSDP：响应局域网内所有投屏端（B站/抖音/爱奇艺/飞牛影视/各家播放器）的
-///   M-SEARCH（含 uuid 精确匹配），周期 NOTIFY alive，停止时 byebye
+/// - SSDP：经 Android 原生 MulticastSocket（共享 UDP 1900，盒子系统服务
+///   已占用该端口）响应局域网内所有投屏端（B站/抖音/爱奇艺/飞牛影视/各家
+///   播放器）的 M-SEARCH（含 uuid 精确匹配），周期 NOTIFY alive，停止时 byebye
 ///
 /// 收到 URL 后复用 CustomM3uSite 播放链路（roomId=URL 直接播），
 /// 控制动作真实映射到 media_kit 播放器（play/pause/seek/音量/进度回读）。
@@ -28,6 +30,11 @@ class DlnaReceiverService extends GetxService {
 
   static const String _ssdpAddress = '239.255.255.250';
   static const int _ssdpPort = 1900;
+
+  /// 与原生层（DlnaReceiverChannel.kt）通信的通道
+  static const MethodChannel _channel = MethodChannel(
+    'simple_live_tv/dlna_receiver',
+  );
 
   /// 设备唯一标识（盒子固定，投屏端靠它记忆设备）
   static const String _uuid = 'uuid:5333d8a0-9c8f-4b2e-8f2e-1a2b3c4d5e6f';
@@ -38,7 +45,6 @@ class DlnaReceiverService extends GetxService {
   static const String _rcType = 'urn:schemas-upnp-org:service:RenderingControl:1';
 
   HttpServer? _httpServer;
-  RawDatagramSocket? _ssdpSocket;
   Timer? _notifyTimer;
   Timer? _subTimer;
 
@@ -76,29 +82,35 @@ class DlnaReceiverService extends GetxService {
       0,
     );
 
-    // 2) SSDP：绑定 1900 端口（标准），响应 M-SEARCH
-    _ssdpSocket = await RawDatagramSocket.bind(
-      InternetAddress.anyIPv4,
-      _ssdpPort,
-    );
-    _ssdpSocket!.multicastHops = 4;
-    try {
-      _ssdpSocket!.joinMulticast(InternetAddress(_ssdpAddress));
-    } catch (_) {}
-    _ssdpSocket!.listen((event) async {
-      if (event == RawSocketEvent.read) {
-        while (true) {
-          final dg = _ssdpSocket!.receive();
-          if (dg == null) break;
-          final data = String.fromCharCodes(dg.data);
-          if (data.contains('M-SEARCH')) {
-            await _replySsdp(dg);
-          }
+    // 2) SSDP：原生 MulticastSocket 共享 UDP 1900（盒子系统服务已占用该端口，
+    //    Dart 层 RawDatagramSocket 无法 bind）。原生收到 M-SEARCH 后回调 onSearch，
+    //    由 Dart 构造响应再经原生 send() 回包。
+    _channel.setMethodCallHandler((call) async {
+      if (call.method == 'onSearch') {
+        final st = call.arguments['st'] as String?;
+        final ip = call.arguments['ip'] as String?;
+        final port = call.arguments['port'] as int?;
+        if (st != null && ip != null && port != null) {
+          _replySsdp(st, ip, port);
         }
+      } else if (call.method == 'onError') {
+        // 原生 1900 绑定失败（系统服务独占且无法共享）——回退开关并提示
+        final msg = call.arguments['message'] as String? ?? '未知错误';
+        if (Get.isRegistered<AppSettingsController>()) {
+          Get.find<AppSettingsController>().dlnaReceiverEnable.value = false;
+        }
+        // ignore: avoid_print
+        print('DLNA 接收端启动失败: $msg');
       }
+      return null;
     });
+    try {
+      await _channel.invokeMethod('start');
+    } catch (e) {
+      // 原生通道不可用（非常规平台），忽略——HTTP 仍可用作手动投屏。
+    }
 
-    // 3) 周期 NOTIFY alive（rootdevice / uuid / MediaRenderer 三条）
+    // 3) 周期 NOTIFY alive（rootdevice / uuid / MediaRenderer 三条，经原生组播发出）
     _notifyTimer = Timer.periodic(const Duration(seconds: 10), (_) {
       _sendNotify();
     });
@@ -116,9 +128,9 @@ class DlnaReceiverService extends GetxService {
     } catch (_) {}
     _httpServer = null;
     try {
-      _ssdpSocket?.close();
+      _channel.setMethodCallHandler(null);
+      await _channel.invokeMethod('stop');
     } catch (_) {}
-    _ssdpSocket = null;
   }
 
   // ---------- HTTP ----------
@@ -855,27 +867,23 @@ class DlnaReceiverService extends GetxService {
 
   // ---------- SSDP ----------
 
-  Future<void> _replySsdp(Datagram dg) async {
-    final st = _header(dg.data, 'ST');
-    if (st == null) return;
+  /// 原生收到 M-SEARCH 后回调：构造标准响应并经原生 socket 回包。
+  void _replySsdp(String st, String ip, int port) {
     final respSt = _matchSearchTarget(st);
     if (respSt == null) return;
-    final usn = respSt == _uuid
-        ? _uuid
-        : '$_uuid::$respSt';
-    final response = utf8.encode(
-      'HTTP/1.1 200 OK\r\n'
-      'CACHE-CONTROL: max-age=1800\r\n'
-      'DATE: ${HttpDate.format(DateTime.now().toUtc())}\r\n'
-      'EXT:\r\n'
-      'LOCATION: $_localUrlBase/device.xml\r\n'
-      'SERVER: ${_serverHeader()}\r\n'
-      'ST: $respSt\r\n'
-      'USN: $usn\r\n'
-      'BOOTID.UPNP.ORG: 1\r\n'
-      '\r\n',
-    );
-    _ssdpSocket?.send(response, dg.address, dg.port);
+    final usn = respSt == _uuid ? _uuid : '$_uuid::$respSt';
+    final body =
+        'HTTP/1.1 200 OK\r\n'
+        'CACHE-CONTROL: max-age=1800\r\n'
+        'DATE: ${HttpDate.format(DateTime.now().toUtc())}\r\n'
+        'EXT:\r\n'
+        'LOCATION: $_localUrlBase/device.xml\r\n'
+        'SERVER: ${_serverHeader()}\r\n'
+        'ST: $respSt\r\n'
+        'USN: $usn\r\n'
+        'BOOTID.UPNP.ORG: 1\r\n'
+        '\r\n';
+    _channelSend(ip, port, body);
   }
 
   /// 判断 M-SEARCH 的 ST 是否命中本设备；命中返回应响应的 ST，未命中返回 null。
@@ -894,6 +902,15 @@ class DlnaReceiverService extends GetxService {
     return null;
   }
 
+  void _channelSend(String ip, int port, String body) {
+    try {
+      _channel.invokeMethod(
+        'send',
+        {'ip': ip, 'port': port, 'data': body},
+      );
+    } catch (_) {}
+  }
+
   Future<void> _sendNotify() async {
     const nts = 'ssdp:alive';
     final targets = <String>[
@@ -903,25 +920,22 @@ class DlnaReceiverService extends GetxService {
     ];
     for (final nt in targets) {
       final usn = nt == _uuid ? _uuid : '$_uuid::$nt';
-      final data = utf8.encode(
-        'NOTIFY * HTTP/1.1\r\n'
-        'HOST: $_ssdpAddress:$_ssdpPort\r\n'
-        'CACHE-CONTROL: max-age=1800\r\n'
-        'LOCATION: $_localUrlBase/device.xml\r\n'
-        'NT: $nt\r\n'
-        'NTS: $nts\r\n'
-        'SERVER: ${_serverHeader()}\r\n'
-        'USN: $usn\r\n'
-        'BOOTID.UPNP.ORG: 1\r\n'
-        '\r\n',
-      );
-      _ssdpSocket?.send(data, InternetAddress(_ssdpAddress), _ssdpPort);
+      final body =
+          'NOTIFY * HTTP/1.1\r\n'
+          'HOST: $_ssdpAddress:$_ssdpPort\r\n'
+          'CACHE-CONTROL: max-age=1800\r\n'
+          'LOCATION: $_localUrlBase/device.xml\r\n'
+          'NT: $nt\r\n'
+          'NTS: $nts\r\n'
+          'SERVER: ${_serverHeader()}\r\n'
+          'USN: $usn\r\n'
+          'BOOTID.UPNP.ORG: 1\r\n'
+          '\r\n';
+      _channelSend(_ssdpAddress, _ssdpPort, body);
     }
   }
 
   Future<void> _sendByebye() async {
-    final socket = _ssdpSocket;
-    if (socket == null) return;
     const nts = 'ssdp:byebye';
     final targets = <String>[
       'upnp:rootdevice',
@@ -930,24 +944,16 @@ class DlnaReceiverService extends GetxService {
     ];
     for (final nt in targets) {
       final usn = nt == _uuid ? _uuid : '$_uuid::$nt';
-      final data = utf8.encode(
-        'NOTIFY * HTTP/1.1\r\n'
-        'HOST: $_ssdpAddress:$_ssdpPort\r\n'
-        'NT: $nt\r\n'
-        'NTS: $nts\r\n'
-        'SERVER: ${_serverHeader()}\r\n'
-        'USN: $usn\r\n'
-        '\r\n',
-      );
-      socket.send(data, InternetAddress(_ssdpAddress), _ssdpPort);
+      final body =
+          'NOTIFY * HTTP/1.1\r\n'
+          'HOST: $_ssdpAddress:$_ssdpPort\r\n'
+          'NT: $nt\r\n'
+          'NTS: $nts\r\n'
+          'SERVER: ${_serverHeader()}\r\n'
+          'USN: $usn\r\n'
+          '\r\n';
+      _channelSend(_ssdpAddress, _ssdpPort, body);
     }
-  }
-
-  String? _header(List<int> data, String key) {
-    final s = String.fromCharCodes(data);
-    final m = RegExp('$key:\\s*([^\\r\\n]+)', caseSensitive: false)
-        .firstMatch(s);
-    return m?.group(1)?.trim();
   }
 
   // ---------- 工具 ----------

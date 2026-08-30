@@ -16,6 +16,7 @@ class MainActivity : FlutterActivity() {
     private var lastWindowState: Map<String, Any>? = null
     private var backChannel: MethodChannel? = null
     private var volumeChannel: MethodChannel? = null
+    private var dlnaReceiverChannel: DlnaReceiverChannel? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -93,6 +94,9 @@ class MainActivity : FlutterActivity() {
                 else -> result.notImplemented()
             }
         }
+        // 【DLNA 投屏接收】原生 MulticastSocket 共享 1900 端口（系统服务已占用），
+        // 收 M-SEARCH → 回调 Dart 构造响应；Dart 通过 send() 回包/发 NOTIFY
+        DlnaReceiverChannel(flutterEngine, this).also { dlnaReceiverChannel = it }.register()
         emitWindowState(force = true)
     }
 
@@ -138,6 +142,8 @@ class MainActivity : FlutterActivity() {
         volumeChannel = null
         appWindowChannel?.setMethodCallHandler(null)
         appWindowChannel = null
+        dlnaReceiverChannel?.unregister()
+        dlnaReceiverChannel = null
         super.onDestroy()
     }
 
