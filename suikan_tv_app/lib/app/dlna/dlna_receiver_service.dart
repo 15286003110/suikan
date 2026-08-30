@@ -138,6 +138,7 @@ class DlnaReceiverService extends GetxService {
   // ---------- HTTP ----------
 
   Future<shelf.Response> _handleHttp(shelf.Request request) async {
+    _logRequest(request.method, request.url.path, request.headers['soapaction'] ?? '');
     // GENA 事件订阅：部分严格投屏端先 SUBSCRIBE 订阅状态变化再投屏，
     // 不实现会被判设备不可用（Cling 系完整接收端都有）。
     if (request.method == 'SUBSCRIBE') {
@@ -216,6 +217,17 @@ class DlnaReceiverService extends GetxService {
   }
 
   String _serverHeader() => 'SuikanTV/2.1 UPnP/1.0 SuikanTV-DLNADOC/1.50';
+
+  /// 请求诊断日志（写 /sdcard/Download，盒子 logcat 不稳，投屏排查用）。
+  void _logRequest(String method, String path, String extra) {
+    try {
+      final f = File('/sdcard/Download/suikan_dlna.log');
+      f.writeAsStringSync(
+        '${DateTime.now().toIso8601String()} $method $path $extra\n',
+        mode: FileMode.append,
+      );
+    } catch (_) {}
+  }
 
   // ---------- GENA 事件订阅 ----------
 
@@ -651,6 +663,7 @@ class DlnaReceiverService extends GetxService {
   Future<shelf.Response> _handleControl(String soapAction, String body) async {
     final action = _soapActionName(soapAction, body);
     final service = _soapService(soapAction, body);
+    _logRequest('SOAP', action ?? '?', body.substring(0, body.length > 200 ? 200 : body.length));
     try {
       switch (action) {
         // ---- AVTransport ----
