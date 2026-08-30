@@ -290,11 +290,16 @@ Future initServices([String? hivePath]) async {
   Get.put(ProfileBackupService());
 
   // 自定义源 / 飞牛影视库仅依赖 DBService（已就绪）且互相独立，并行初始化。
+  // 单服务失败绝不阻断启动（否则 initServices 中断 → runApp 前白屏卡死）。
   Log.d("Init CustomSource + FnOs (并行)");
-  await Future.wait([
-    Get.put(CustomSourceService()).init(),
-    Get.put(FnOsService()).init(),
-  ]);
+  try {
+    await Future.wait([
+      Get.put(CustomSourceService()).init(),
+      Get.put(FnOsService()).init(),
+    ]);
+  } catch (e) {
+    Log.e("自定义源/影视库初始化失败（已容错继续）：$e", StackTrace.current);
+  }
 
   if (DesktopStartupArgs.isSecondaryDesktopInstance) {
     Log.i("Skip SyncService for TV-Windows secondary player instance");

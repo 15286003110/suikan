@@ -32,29 +32,41 @@ class DBService extends GetxService {
   Future init({String? hivePath}) async {
     _hiveDir = hivePath;
     // 整体容错：任何箱失败都不抛（否则 initServices 中断 → 白屏）。
-    // 内部 _openBoxResilient 已有"超时/异常 → 删除重建 → 临时空箱"兜底，
-    // 这里再包一层保险，保证 DBService 一定能用。
-    try {
-      historyBox = await _openBoxResilient<History>("TVHostiry");
-      followBox = await _openBoxResilient<FollowUser>("TVFollowUser");
-      customSourceBox = await _openBoxResilient<String>("CustomSource");
-      fnOsBox = await _openBoxResilient<String>("FnOsServer");
-    } catch (e) {
-      Log.logPrint("DBService.init 兜底失败，改用临时目录空箱：$e");
-      final fallbackDir = p.join(Directory.systemTemp.path, 'suikan_box_fallback');
-      historyBox = await _openFallbackBox<History>("TVHostiry", fallbackDir);
-      followBox = await _openFallbackBox<FollowUser>("TVFollowUser", fallbackDir);
-      customSourceBox =
-          await _openFallbackBox<String>("CustomSource", fallbackDir);
-      fnOsBox = await _openFallbackBox<String>("FnOsServer", fallbackDir);
-    }
+    // 注意：**每个箱单独 try/catch**，一个失败绝不能中断其它箱赋值
+    // （否则 late 字段未初始化，后续服务访问抛 LateInitializationError）。
+    historyBox = await _openBoxSafely<History>("TVHostiry");
+    followBox = await _openBoxSafely<FollowUser>("TVFollowUser");
+    customSourceBox = await _openBoxSafely<String>("CustomSource");
+    fnOsBox = await _openBoxSafely<String>("FnOsServer");
     // 异步压缩各箱（删除操作留下的空洞会随使用膨胀，压缩可保持读写速度）；
     // 不阻塞启动，失败静默。记录 future 供退出时 flush 等待。
     _compactFuture = _compactAllBoxes();
   }
 
-  Future<Box<T>> _openFallbackBox<T>(String name, String dir) async {
-    return Hive.openBox<T>('${name}_fb', path: dir);
+  /// 单个箱的终极安全打开：正常 → 兜底 → 空箱路径，任何情况都不抛。
+  Future<Box<T>> _openBoxSafely<T>(String name) async {
+    try {
+      return await _openBoxResilient<T>(name);
+    } catch (_) {
+      Log.logPrint("[$name] 打开异常，使用独立临时目录空箱（该箱数据将为空）");
+      try {
+        final dir = p.join(
+          Directory.systemTemp.path,
+          'suikan_box_fallback',
+          '${name}_${DateTime.now().millisecondsSinceEpoch}',
+        );
+        final future = Hive.openBox<T>(name, path: dir);
+        unawaited(future.then((_) {}, onError: (Object _) {}));
+        return await future.timeout(const Duration(seconds: 5));
+      } catch (_) {
+        // 最后的最后：换个随机路径再来一次，几乎不可能失败
+        final dir = p.join(
+          Directory.systemTemp.path,
+          'suikan_box_mem_${DateTime.now().microsecondsSinceEpoch}',
+        );
+        return Hive.openBox<T>(name, path: dir);
+      }
+    }
   }
 
   /// 等待所有挂起写入排空（退出前调用，避免 Hive.close 关掉正在写的箱 → 箱损坏白屏）。
