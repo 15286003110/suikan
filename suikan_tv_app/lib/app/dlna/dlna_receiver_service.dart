@@ -10,7 +10,6 @@ import 'package:simple_live_tv_app/app/dlna/cast_receiver_site.dart';
 import 'package:simple_live_tv_app/app/sites.dart';
 import 'package:simple_live_tv_app/modules/live_room/live_room_controller.dart';
 import 'package:simple_live_tv_app/routes/app_navigation.dart';
-import 'package:simple_live_tv_app/routes/route_path.dart';
 
 /// DLNA/UPnP 投屏接收端服务（标准 MediaRenderer）。
 ///
@@ -919,38 +918,28 @@ class DlnaReceiverService extends GetxService {
   // ---------- 播放对接 ----------
 
   void _play(String url, {String title = ''}) {
-    // 同一 URL 已在播：不重复跳转（避免重置进度/抖动）
+    _currentUrl = url;
+    currentUrl.value = url;
+    _transportState = 'PLAYING';
+    // 已有投屏页面（本页或其它投屏端投的）在播：原地切换播放——
+    // 同一播放器换源，新投屏全面顶掉旧投屏（旧流先 stop，不会双声音）。
     final c = _liveRoom();
-    if (c != null && c.roomId == url) {
-      _transportState = 'PLAYING';
-      unawaited(c.player.play());
+    if (c != null) {
+      unawaited(c.switchRoom(url));
       return;
     }
+    // 无投屏页面：新建直播间页开播
     final site = Site(
       id: 'cast_receiver',
       name: '投屏接收',
       logo: '',
       liveSite: CastReceiverSite(),
     );
-    _transportState = 'PLAYING';
-    if (c != null) {
-      // 已有投屏页面（可能是别的 App/别的 URL 在播）：顶替切换——
-      // 用 offNamed 替换当前直播间页，避免栈上叠新页、旧播放残留。
-      Get.offNamed(
-        RoutePath.kLiveRoomDetail,
-        arguments: site,
-        parameters: {
-          'roomId': url,
-          'isVod': 'true',
-        },
-      );
-    } else {
-      AppNavigator.toLiveRoomDetail(
-        site: site,
-        roomId: url,
-        isVod: true,
-      );
-    }
+    AppNavigator.toLiveRoomDetail(
+      site: site,
+      roomId: url,
+      isVod: true,
+    );
   }
 
   // ---------- SSDP ----------

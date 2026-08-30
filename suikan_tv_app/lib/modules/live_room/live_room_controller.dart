@@ -763,6 +763,32 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
     }
   }
 
+  /// 投屏接收专用：同一页面/同一播放器原地切换播放源（新投屏顶掉旧投屏）。
+  ///
+  /// 不能走"导航替换页面"（Get.offNamed）：替换期间新旧 controller 并存，
+  /// 后续 SOAP Play/查询动作可能命中旧 controller，旧播放器不停 → 双声音。
+  /// 这里直接复用当前 controller：先停旧流 → 改 roomId → loadData 重新拉取播放。
+  Future<void> switchRoom(String newRoomId) async {
+    if (roomId == newRoomId) {
+      // 同一 URL 重复投屏：恢复播放即可（不重置进度/不重拉流）
+      try {
+        await player.play();
+      } catch (_) {}
+      return;
+    }
+    // 先停旧流，确保换源瞬间没有新旧两个声音
+    try {
+      await player.stop();
+    } catch (_) {}
+    rxRoomId.value = newRoomId;
+    currentLineIndex = -1;
+    playUrls.clear();
+    currentQuality = -1;
+    qualites.clear();
+    liveStatus.value = false;
+    loadData();
+  }
+
   /// 初始化播放器
   Future<void> getPlayQualites() async {
     playbackLoadError.value = "";
