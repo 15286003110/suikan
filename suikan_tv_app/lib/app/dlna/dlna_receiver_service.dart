@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:shelf/shelf.dart' as shelf;
 import 'package:shelf/shelf_io.dart' as shelf_io;
 import 'package:simple_live_tv_app/app/controller/app_settings_controller.dart';
@@ -73,6 +74,7 @@ class DlnaReceiverService extends GetxService {
   Future<void> start() async {
     await stop();
     _cachedIp = await _localIp();
+    await _initLogDir();
     _transportState = 'STOPPED';
     // 1) HTTP 服务：设备描述 + SOAP 控制 + SCPD
     final handler = const shelf.Pipeline()
@@ -218,10 +220,20 @@ class DlnaReceiverService extends GetxService {
 
   String _serverHeader() => 'SuikanTV/2.1 UPnP/1.0 SuikanTV-DLNADOC/1.50';
 
-  /// 请求诊断日志（写 /sdcard/Download，盒子 logcat 不稳，投屏排查用）。
-  void _logRequest(String method, String path, String extra) {
+  /// 诊断日志目录（app 私有目录，无存储权限问题；盒子 logcat 不稳，投屏排查用）。
+  String _logDir = '';
+
+  Future<void> _initLogDir() async {
     try {
-      final f = File('/sdcard/Download/suikan_dlna.log');
+      final dir = await getApplicationSupportDirectory();
+      _logDir = dir.path;
+    } catch (_) {}
+  }
+
+  void _logRequest(String method, String path, String extra) {
+    if (_logDir.isEmpty) return;
+    try {
+      final f = File('$_logDir/suikan_dlna.log');
       f.writeAsStringSync(
         '${DateTime.now().toIso8601String()} $method $path $extra\n',
         mode: FileMode.append,
