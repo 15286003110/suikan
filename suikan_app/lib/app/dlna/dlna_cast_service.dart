@@ -57,6 +57,7 @@ class DlnaCastService {
     // - WIN 也绑定具体网卡（anyIPv4 下 joinMulticast 可能失败导致收不到响应）
     // - Android 走 anyIPv4（原生 MulticastLock 已申请，系统选默认路由）
     RawDatagramSocket socket;
+    InternetAddress? boundIface;
     if (!Platform.isAndroid) {
       try {
         final interfaces = await NetworkInterface.list(
@@ -69,6 +70,7 @@ class DlnaCastService {
           final addr = iface.addresses.first;
           if (addr.isLoopback) continue;
           bound = await RawDatagramSocket.bind(addr, 0);
+          boundIface = addr;
           break;
         }
         socket = bound ??
@@ -78,6 +80,14 @@ class DlnaCastService {
       }
     } else {
       socket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0);
+    }
+    // 组播出口/入组设置（multicastInterface 在新 Dart 未实现，绑定具体网卡
+    // 已保证发送出口与单播响应接收；join 失败仍可收到单播响应）：
+    try {
+      socket.multicastHops = 4;
+      socket.joinMulticast(InternetAddress(_ssdpAddress));
+    } catch (_) {
+      // join 失败仍可能收到单播响应（设备单播回源地址）
     }
 
     // 轮换多个 ST：部分设备只响应 ssdp:all 或 rootdevice，不响应 MediaRenderer。
