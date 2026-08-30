@@ -1250,7 +1250,7 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
       return;
     }
     final id = "${site.id}_$roomId";
-    var follow = DBService.instance.followBox.get(id);
+    var follow = DBService.instance.followBox.get(DBService.safeBoxKey(id));
     follow ??= FollowUser(
       id: id,
       roomId: roomId,

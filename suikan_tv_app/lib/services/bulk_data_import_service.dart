@@ -363,7 +363,7 @@ class BulkDataImportService {
   /// 删除"本次导入包里没有"的旧关注项，完成覆盖语义。
   /// **必须在 putAll 之后调用**：反过来的 clear→write 一旦在写入中途被杀就是空箱。
   static Future<void> _pruneFollowsExcept(Iterable<FollowUser> users) async {
-    final keep = <String>{for (final u in users) u.id};
+    final keep = <String>{for (final u in users) DBService.safeBoxKey(u.id)};
     await DBService.runExclusive(() async {
       final stale = DBService.instance.followBox.keys
           .where((k) => !keep.contains(k.toString()))
@@ -383,7 +383,7 @@ class BulkDataImportService {
     final total = users.length;
     var written = 0;
     for (final user in users) {
-      buffer[user.id] = user;
+      buffer[DBService.safeBoxKey(user.id)] = user;
       if (buffer.length >= policy.dbBatchSize) {
         await DBService.runExclusive(() => DBService.instance.followBox.putAll(buffer));
         written += buffer.length;
@@ -415,9 +415,10 @@ class BulkDataImportService {
 
   /// 删除"本次导入包里没有"的旧历史，完成覆盖语义（必须在写入之后调用）。
   static Future<void> _pruneHistoriesExcept(Set<String> keep) async {
+    final safeKeep = <String>{for (final k in keep) DBService.safeBoxKey(k)};
     await DBService.runExclusive(() async {
       final stale = DBService.instance.historyBox.keys
-          .where((k) => !keep.contains(k.toString()))
+          .where((k) => !safeKeep.contains(k.toString()))
           .toList();
       if (stale.isNotEmpty) {
         await DBService.instance.historyBox.deleteAll(stale);
@@ -434,7 +435,7 @@ class BulkDataImportService {
     final total = histories.length;
     var written = 0;
     for (final history in histories) {
-      buffer[history.id] = history;
+      buffer[DBService.safeBoxKey(history.id)] = history;
       if (buffer.length >= policy.dbBatchSize) {
         await DBService.runExclusive(() => DBService.instance.historyBox.putAll(buffer));
         written += buffer.length;

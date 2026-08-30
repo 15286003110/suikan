@@ -441,7 +441,7 @@ class FollowUserController extends BasePageController<FollowUser> {
       tag.userId.remove(item.id);
       updateTag(tag);
     }
-    await DBService.runExclusive(() => DBService.instance.followBox.delete(item.id));
+    await DBService.runExclusive(() => DBService.instance.followBox.delete(DBService.safeBoxKey(item.id)));
     refreshData();
   }
 
@@ -539,7 +539,7 @@ class FollowUserController extends BasePageController<FollowUser> {
   Future<void> removeTag(FollowUserTag tag) async {
     // 将tag下的所有follow设置为全部
     for (var i in tag.userId) {
-      var follow = DBService.instance.followBox.get(i);
+      var follow = DBService.instance.followBox.get(DBService.safeBoxKey(i));
       if (follow != null) {
         follow.tag = "全部";
         updateItem(follow);
@@ -577,7 +577,7 @@ class FollowUserController extends BasePageController<FollowUser> {
     updateTag(newTag);
     // update item's tag when update tagName
     for (var i in newTag.userId) {
-      var follow = DBService.instance.followBox.get(i);
+      var follow = DBService.instance.followBox.get(DBService.safeBoxKey(i));
       if (follow != null) {
         follow.tag = newTagName;
         updateItem(follow);

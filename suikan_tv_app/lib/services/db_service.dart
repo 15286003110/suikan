@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
 import 'package:get/get.dart';
 import 'package:hive/hive.dart';
 import 'package:path/path.dart' as p;
@@ -637,8 +639,17 @@ class DBService extends GetxService {
     return true;
   }
 
+  /// Hive 2.x 的 writeKey 用 1 字节存 key 长度（上限 255）——关注自定义源时
+  /// FollowUser.id = "${siteId}_$roomId" 可能是完整 m3u8 URL（数百字节），
+  /// 超长 key 写入会长度溢出（501 & 0xFF = 245）→ 帧错位 → 整个箱判损坏 → 数据全丢。
+  /// 超长 key 统一转成"长度_摘要"（幂等、可逆：完整 id 存在 value 里），正常 key 原样。
+  static String safeBoxKey(String raw) {
+    if (raw.length <= 180) return raw;
+    return 'k${raw.length}_${sha1.convert(utf8.encode(raw)).toString().substring(0, 20)}';
+  }
+
   bool getFollowExist(String id) {
-    return followBox.containsKey(id);
+    return followBox.containsKey(safeBoxKey(id));
   }
 
   List<FollowUser> getFollowList() {
@@ -646,28 +657,29 @@ class DBService extends GetxService {
   }
 
   Future addFollow(FollowUser follow) async {
-    await followBox.put(follow.id, follow);
+    await followBox.put(safeBoxKey(follow.id), follow);
   }
 
   Future addFollows(Iterable<FollowUser> follows) async {
     await followBox.putAll({
-      for (final follow in follows) follow.id: follow,
+      for (final follow in follows) safeBoxKey(follow.id): follow,
     });
   }
 
   Future deleteFollow(String id) async {
-    await followBox.delete(id);
+    await followBox.delete(safeBoxKey(id));
   }
 
   History? getHistory(String id) {
-    if (historyBox.containsKey(id)) {
-      return historyBox.get(id);
+    final key = safeBoxKey(id);
+    if (historyBox.containsKey(key)) {
+      return historyBox.get(key);
     }
     return null;
   }
 
   Future addOrUpdateHistory(History history) async {
-    await historyBox.put(history.id, history);
+    await historyBox.put(safeBoxKey(history.id), history);
   }
 
   List<History> getHistores() {

@@ -32,7 +32,7 @@ class HistoryController extends BasePageController<History> {
     if (!result) {
       return;
     }
-    await DBService.runExclusive(() => DBService.instance.historyBox.delete(item.id));
+    await DBService.runExclusive(() => DBService.instance.historyBox.delete(DBService.safeBoxKey(item.id)));
     refreshData();
   }
 }
