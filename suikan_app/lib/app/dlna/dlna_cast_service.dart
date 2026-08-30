@@ -57,7 +57,6 @@ class DlnaCastService {
     // - WIN 也绑定具体网卡（anyIPv4 下 joinMulticast 可能失败导致收不到响应）
     // - Android 走 anyIPv4（原生 MulticastLock 已申请，系统选默认路由）
     RawDatagramSocket socket;
-    InternetAddress? boundIface;
     if (!Platform.isAndroid) {
       try {
         final interfaces = await NetworkInterface.list(
@@ -70,7 +69,6 @@ class DlnaCastService {
           final addr = iface.addresses.first;
           if (addr.isLoopback) continue;
           bound = await RawDatagramSocket.bind(addr, 0);
-          boundIface = addr;
           break;
         }
         socket = bound ??
