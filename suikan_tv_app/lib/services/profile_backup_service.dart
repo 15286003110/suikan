@@ -411,7 +411,11 @@ class ProfileBackupService extends GetxService {
       return;
     }
     if (overwrite) {
-      await _clearImportableSettings();
+      // 🔴 只清「配置包里出现的 key」，绝不碰对方端特有的设置。
+      // TV 端 LocalStorageService 77 个设置 key、手机端 121 个，差异巨大。
+      // 旧逻辑清空整个 settingsBox：手机包覆盖导入 TV 会把 TV 特有设置
+      // （kDlnaReceiverEnable 等）全删回默认，反向同理（2026-08-31 排查确认）。
+      await _clearImportableSettings(rawSettings);
     }
     final values = <dynamic, dynamic>{};
     for (final entry in rawSettings.entries) {
@@ -425,9 +429,12 @@ class ProfileBackupService extends GetxService {
     summary.settings = values.length;
   }
 
-  Future<void> _clearImportableSettings() async {
+  Future<void> _clearImportableSettings(dynamic rawSettings) async {
+    if (rawSettings is! Map) return;
+    // 只删配置包里有的 key —— 它们反正马上要被 putAll 覆盖；
+    // 配置包里没有的 key（对方端特有）原样保留，不再误删。
     final keys = LocalStorageService.instance.settingsBox.keys
-        .where((key) => !_excludedSettings.contains(key.toString()))
+        .where((key) => rawSettings.containsKey(key.toString()))
         .toList();
     if (keys.isNotEmpty) {
       await LocalStorageService.instance.settingsBox.deleteAll(keys);

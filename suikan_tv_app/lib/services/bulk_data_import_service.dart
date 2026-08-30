@@ -201,6 +201,9 @@ class BulkDataImportService {
       overwriteGuarded: guarded,
     );
     Log.i("批量导入关注完成：${result.logSummary}");
+    // 🔴 强制落盘：Hive 写队列不 fsync，"导入完立刻关 App/被杀" → 半写帧损坏
+    // → 下次启动判定损坏重建空箱 = "导入后有关注、重启后空"（2026-08-31）
+    await DBService.instance.flushAll();
     return result;
   }
 
@@ -287,6 +290,7 @@ class BulkDataImportService {
       policy: policy,
     );
     Log.i("批量导入历史完成：${result.logSummary}");
+    await DBService.instance.flushAll();
     return result;
   }
 
@@ -352,6 +356,7 @@ class BulkDataImportService {
       policy: policy,
     );
     Log.i("批量导入屏蔽词完成：${result.logSummary}");
+    await DBService.instance.flushAll();
     return result;
   }
 

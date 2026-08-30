@@ -106,6 +106,23 @@ class DBService extends GetxService {
     }
   }
 
+  /// 强制所有箱落盘（Hive 写队列 flush）。
+  ///
+  /// 必须在**批量导入 / 配置包导入 / 同步接收**完成后调用：
+  /// Hive 的 putAll/deleteAll 返回时数据还在写队列里，并未 fsync。
+  /// "导入完看一眼 → 马上关 App / 覆盖安装 / 进程被杀" → 写队列没落盘 →
+  /// 文件留下半写帧 → 下次启动判定损坏 → 重建空箱
+  /// （2026-08-31 实测 39KB 损坏帧，"导入后有关注、重启后空"）。
+  Future<void> flushAll() async {
+    for (final box in <Box?>[historyBox, followBox, customSourceBox, fnOsBox]) {
+      try {
+        await box?.flush();
+      } catch (_) {
+        // 单个箱 flush 失败不影响其余
+      }
+    }
+  }
+
   /// Hive 数据目录。绝不能为 null（为 null 时所有备份/回滚/兜底逻辑都会空转）。
   String? _hiveDir;
 
@@ -403,8 +420,20 @@ class DBService extends GetxService {
         if (!await src.exists()) continue;
         final dst = File(p.join(dir, '$name.hive'));
         if (await dst.exists()) {
-          // 主箱文件还在 → 不覆盖，交给上层流程判断
-          return false;
+          // 🔴 走到这里 = 主箱文件还在但**已判定损坏**（帧错位/解析失败）。
+          // 绝不能因为"文件存在"就放弃恢复 —— 那正是"每次启动都重建空箱、
+          // 关注列表永远为空"的直接原因（2026-08-31 手机端实测：39KB 文件
+          // 帧损坏，恢复逻辑被 `dst.exists()` 拦住，backup 里的好数据干瞪眼）。
+          // 把损坏文件改名留档（不删除），再让备份接管。
+          try {
+            final corrupt =
+                '$name.corrupt_${DateTime.now().millisecondsSinceEpoch}.hive';
+            await dst.rename(p.join(dir, corrupt));
+            Log.logAlways("[$name] 损坏主箱已留档为 $corrupt，用备份恢复");
+          } catch (_) {
+            // 改名失败（文件被占用等）就放弃这轮恢复，等下一份备份
+            return false;
+          }
         }
         await src.copy(dst.path);
         Log.logAlways("[$name] 已从 suikan_box_backup 恢复历史数据");

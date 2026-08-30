@@ -48,12 +48,10 @@ class ProfileBackupController extends BaseController {
         SmartDialog.showToast("没有存储权限");
         return;
       }
-      final overwrite = await Utils.showAlertDialog(
-        "是否覆盖本地数据？选择“不覆盖”会合并导入，保留本机已有数据。",
-        title: "导入配置包",
-        confirm: "覆盖",
-        cancel: "不覆盖",
-      );
+      // ⚠️ 顺序很关键：**先选文件**，才能把配置包里的条数摆给用户看。
+      // 原先在这里就弹"是否覆盖"，那时还不知道包里有多少条，用户等于蒙着眼睛
+      // 做决定 —— 拿一份 51 条的旧备份覆盖掉本机两百来条较新的关注就是这样
+      // 发生的（2026-08-31）。改成：选文件 → 预览条数 → 再问覆盖。
       final picked = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: ["json"],
@@ -61,8 +59,16 @@ class ProfileBackupController extends BaseController {
       if (picked == null || picked.files.single.path == null) {
         return;
       }
-      SyncProgressDialog.show(const SyncProgress(stage: "正在导入配置包"));
       final content = await File(picked.files.single.path!).readAsString();
+      final overwrite = await Utils.showAlertDialog(
+        ProfileBackupService.instance.buildImportPrompt(
+          ProfileBackupService.instance.previewProfile(content),
+        ),
+        title: "导入配置包",
+        confirm: "覆盖",
+        cancel: "不覆盖",
+      );
+      SyncProgressDialog.show(const SyncProgress(stage: "正在导入配置包"));
       final summary = await ProfileBackupService.instance.importProfileJson(
         content,
         overwrite: overwrite,

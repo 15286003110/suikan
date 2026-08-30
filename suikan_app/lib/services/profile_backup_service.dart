@@ -451,7 +451,12 @@ class ProfileBackupService extends GetxService {
       return;
     }
     if (overwrite) {
-      await _clearImportableSettings();
+      // 🔴 只清「配置包里出现的 key」，绝不碰对方端特有的设置。
+      // 手机端 121 个设置 key、TV 端 77 个，差异巨大（投屏接收开关
+      // kDlnaReceiverEnable 等只在 TV 端存在）。旧逻辑清空整个 settingsBox，
+      // 手机包覆盖导入 TV 会把 TV 特有设置全删回默认，反向同理
+      // （2026-08-31 排查确认）。
+      await _clearImportableSettings(rawSettings);
     }
     final values = <dynamic, dynamic>{};
     for (final entry in rawSettings.entries) {
@@ -465,9 +470,12 @@ class ProfileBackupService extends GetxService {
     summary.settings = values.length;
   }
 
-  Future<void> _clearImportableSettings() async {
+  Future<void> _clearImportableSettings(dynamic rawSettings) async {
+    if (rawSettings is! Map) return;
+    // 只删配置包里有的 key —— 它们反正马上要被 putAll 覆盖；
+    // 配置包里没有的 key（对方端特有）原样保留，不再误删。
     final keys = LocalStorageService.instance.settingsBox.keys
-        .where((key) => !_excludedSettings.contains(key.toString()))
+        .where((key) => rawSettings.containsKey(key.toString()))
         .toList();
     if (keys.isNotEmpty) {
       await LocalStorageService.instance.settingsBox.deleteAll(keys);
@@ -717,6 +725,74 @@ class ProfileBackupService extends GetxService {
     return null;
   }
 
+  /// 只读预览配置包：解析出各类数据的条数，**不写入任何数据**。
+  ///
+  /// 存在的理由（2026-08-31）：导入的确认框原本在**选文件之前**就弹了，
+  /// 用户回答"要不要覆盖"时根本不知道包里有多少条。于是有人拿着一份旧的
+  /// 51 条备份，覆盖掉了本机两百来条较新的关注 —— 覆盖是按预期执行的，
+  /// 但用户完全不知情，反馈就是"导入配置文件后关注列表丢失"。
+  /// 改成先选文件 → 预览条数 → 再问覆盖，让代价看得见。
+  ProfilePreview previewProfile(String jsonContent) {
+    try {
+      final decoded = json.decode(jsonContent);
+      if (decoded is! Map) return const ProfilePreview();
+      final raw = decoded["data"] ?? decoded;
+      if (raw is! Map) return const ProfilePreview();
+      final payload = Map<String, dynamic>.from(raw);
+
+      int countOf(List<String> keys) {
+        final v = _readPayloadList(payload, keys);
+        return v is List ? v.length : 0;
+      }
+
+      var follows = countOf(["followUsers", "follows", "favorites"]);
+      var tags = countOf(["followUserTags", "tags"]);
+      var histories = countOf(["histories", "history"]);
+
+      // 旧格式：整个 data 就是一个 List，只能按首项字段判断它属于哪一类
+      final legacy = payload["data"];
+      if (legacy is List && legacy.isNotEmpty) {
+        final first = legacy.whereType<Map>().firstOrNull;
+        if (first != null) {
+          if (first.containsKey("roomId") || first.containsKey("siteId")) {
+            follows = legacy.length;
+          } else if (first.containsKey("userId") || first.containsKey("tag")) {
+            tags = legacy.length;
+          } else if (first.containsKey("updateTime")) {
+            histories = legacy.length;
+          }
+        }
+      }
+      return ProfilePreview(
+        follows: follows,
+        tags: tags,
+        histories: histories,
+      );
+    } catch (_) {
+      // 解析不了就当空包，导入流程自身的错误处理会兜底
+      return const ProfilePreview();
+    }
+  }
+
+  /// 生成导入确认文案：把「本机 N 条 vs 配置包 M 条」讲清楚，让覆盖的代价可见。
+  /// 放在 service 里供两个导入入口（设置-其他、同步-配置包）共用，
+  /// 免得两处文案各写一份、日后走样。
+  String buildImportPrompt(ProfilePreview p) {
+    final local = DBService.instance.followBox.length;
+    final buf = StringBuffer();
+    buf.write("配置包内容：关注 ${p.follows} 条、标签 ${p.tags} 条、"
+        "观看记录 ${p.histories} 条。");
+    if (local > p.follows) {
+      buf.write("\n\n本机现有关注 $local 条，比配置包多 ${local - p.follows} 条。");
+      buf.write("\n选「覆盖」后本机将只剩这 ${p.follows} 条，多出来的会被删除。");
+      buf.write("\n如果只是想找回丢失的关注，请选「不覆盖」合并导入。");
+    } else {
+      buf.write("\n\n选「覆盖」会用配置包内容替换本机同类数据；"
+          "选「不覆盖」则合并导入、保留本机已有数据。");
+    }
+    return buf.toString();
+  }
+
   Future<void> _importLegacyDataList(
     dynamic rawList,
     ProfileImportSummary summary,
@@ -786,6 +862,19 @@ class ProfileImportOptions {
     this.shieldPresets = true,
     this.follows = true,
     this.histories = true,
+  });
+}
+
+/// 配置包的**只读预览**：各类数据的条数，不含内容本身。
+class ProfilePreview {
+  final int follows;
+  final int tags;
+  final int histories;
+
+  const ProfilePreview({
+    this.follows = 0,
+    this.tags = 0,
+    this.histories = 0,
   });
 }
 

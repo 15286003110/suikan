@@ -219,8 +219,12 @@ class OtherSettingsController extends BaseController {
       var content = await File(filePath).readAsString();
       var data = jsonDecode(content);
       if (ProfileBackupService.instance.isSupportedProfileMap(data)) {
+        // 顺序：先选文件 → 预览包内条数 → 再问是否覆盖。
+        // 原来只问"是否覆盖"却不告诉用户包里有多少条，等于让人蒙着眼睛做决定。
         var overwrite = await Utils.showAlertDialog(
-          "是否覆盖本地数据？选择“不覆盖”会合并导入，保留本机已有数据。",
+          ProfileBackupService.instance.buildImportPrompt(
+            ProfileBackupService.instance.previewProfile(content),
+          ),
           title: "导入配置包",
           confirm: "覆盖",
           cancel: "不覆盖",
