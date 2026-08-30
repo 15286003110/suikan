@@ -230,6 +230,7 @@ class _LocalResultCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cover = result.cover;
+    final isChannel = result.kind == LocalSearchResult.kChannel;
     return InkWell(
       onTap: onTap,
       borderRadius: AppStyle.radius8,
@@ -250,11 +251,23 @@ class _LocalResultCard extends StatelessWidget {
                           size: 40,
                         ),
                       )
-                    : NetImage(
-                        cover,
-                        fit: BoxFit.cover,
-                        httpHeaders: result.httpHeaders,
-                      ),
+                    : isChannel
+                        // 直播源频道：cover 是台标 logo，等比完整显示（不裁剪）
+                        ? Container(
+                            color: Colors.black26,
+                            alignment: Alignment.center,
+                            child: NetImage(
+                              cover,
+                              fit: BoxFit.contain,
+                              httpHeaders: result.httpHeaders,
+                            ),
+                          )
+                        // 影视海报：封面铺满裁剪
+                        : NetImage(
+                            cover,
+                            fit: BoxFit.cover,
+                            httpHeaders: result.httpHeaders,
+                          ),
               ),
             ),
           ),

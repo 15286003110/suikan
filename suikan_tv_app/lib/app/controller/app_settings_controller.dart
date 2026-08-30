@@ -141,7 +141,7 @@ class AppSettingsController extends GetxController {
     hardwareDecode.value = LocalStorageService.instance
         .getValue(LocalStorageService.kHardwareDecode, true);
     dlnaReceiverEnable.value = LocalStorageService.instance
-        .getValue(LocalStorageService.kDlnaReceiverEnable, false);
+        .getValue(LocalStorageService.kDlnaReceiverEnable, true);
     chatTextSize.value = LocalStorageService.instance
         .getValue(LocalStorageService.kChatTextSize, 14.0);
 
@@ -328,8 +328,8 @@ class AppSettingsController extends GetxController {
         .setValue(LocalStorageService.kHardwareDecode, e);
   }
 
-  /// 投屏接收（DLNA MediaRenderer）
-  var dlnaReceiverEnable = false.obs;
+  /// 投屏接收（DLNA MediaRenderer）——默认开启
+  var dlnaReceiverEnable = true.obs;
   void setDlnaReceiverEnable(bool e) {
     dlnaReceiverEnable.value = e;
     LocalStorageService.instance
