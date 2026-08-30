@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:canvas_danmaku/canvas_danmaku.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:simple_live_tv_app/app/controller/base_controller.dart';
 import 'package:get/get.dart';
 import 'package:media_kit/media_kit.dart';
@@ -275,7 +276,15 @@ class PlayerController extends BaseController
 
   void mediaEnd() {}
 
-  void mediaError(String error) {}
+  /// 播放器错误：记录日志 + 弹提示（投屏/播放失败时用户能直接看到原因，
+  /// 如 403/超时/格式不支持——此前静默只有黑屏，无法定位）。
+  void mediaError(String error) {
+    Log.e("播放器错误：$error", StackTrace.current);
+    // 播放失败时用 SmartDialog 提示（错误文本即 mpv 原因，便于反馈定位）
+    try {
+      SmartDialog.showToast("播放失败：$error");
+    } catch (_) {}
+  }
 
   @override
   void onClose() async {
