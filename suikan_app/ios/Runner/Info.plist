@@ -37,6 +37,10 @@
 	</dict>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>用于在同一局域网内发现并连接其他随看设备进行数据同步</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_ssdp._udp</string>
+	</array>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>

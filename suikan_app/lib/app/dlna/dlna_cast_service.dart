@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/services.dart';
+import 'package:network_info_plus/network_info_plus.dart';
 import 'package:simple_live_app/app/dlna/dlna_proxy_server.dart';
 
 /// 局域网 DLNA / UPnP 投屏（把当前直播直链推送到电视/盒子上的渲染设备）。
@@ -52,6 +53,14 @@ class DlnaCastService {
     Duration timeout = const Duration(seconds: 5),
   }) async {
     final devices = <String, DlnaDevice>{};
+    // iOS 14+ 本地网络权限：未授权时所有局域网 UDP 被系统静默丢弃 → 搜不到
+    // 任何设备。先访问 WiFi 信息触发权限弹窗（network_info_plus 方案，
+    // 参考 rusty_dlna）；Info.plist 已配 NSLocalNetworkUsageDescription + Bonjour。
+    if (Platform.isIOS) {
+      try {
+        await NetworkInfo().getWifiName();
+      } catch (_) {}
+    }
     // 绑定策略：
     // - iOS 必须绑定具体网卡（发组播硬性要求，否则 No route to host）
     // - WIN 也绑定具体网卡（anyIPv4 下 joinMulticast 可能失败导致收不到响应）
