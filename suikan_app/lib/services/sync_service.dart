@@ -321,7 +321,9 @@ class SyncService extends GetxService {
 
       if (chunk.isLastChunk) {
         SmartDialog.showToast(
-          '已同步关注用户列表（${chunk.itemTotal > 0 ? chunk.itemTotal : result.imported} 条）',
+          result.overwriteGuarded
+              ? '对端关注数据明显少于本地，已按合并处理（本地数据已保留）'
+              : '已同步关注用户列表（${chunk.itemTotal > 0 ? chunk.itemTotal : result.imported} 条）',
         );
         EventBus.instance.emit(Constant.kUpdateFollow, 0);
         SyncProgressDialog.dismiss();

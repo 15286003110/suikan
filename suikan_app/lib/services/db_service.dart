@@ -41,11 +41,22 @@ class DBService extends GetxService {
     // 快照永远建不起来 → 覆盖安装必清空关注/历史（2026-08-30 事故真因）。
     _hiveDir = await _resolveHiveDir(hivePath);
     Log.logAlways('Hive 数据目录=$_hiveDir');
-    historyBox = await _openBoxResilient<History>("History");
-    followBox = await _openBoxResilient<FollowUser>("FollowUser");
-    tagBox = await _openBoxResilient<FollowUserTag>("FollowUserTag");
-    customSourceBox = await _openBoxResilient<String>("CustomSource");
-    fnOsBox = await _openBoxResilient<String>("FnOsServer");
+    // ⚠️ 五个箱互相独立（不同文件、不同锁），必须**并行**打开。
+    // 串行 await 时最坏情况是 5 × 15s 超时 = 75s；并行后总耗时 = 最慢的那一个 ≤ 15s。
+    // 正常路径下也能把 5 次"读文件 + 解析帧"压成一轮，启动肉眼可见变快。
+    // 写法上先全部发起、再统一等待：Future 已完成时 await 立即返回，
+    // 类型安全，不需要 as 强转。
+    final fHistory = _openBoxResilient<History>("History");
+    final fFollow = _openBoxResilient<FollowUser>("FollowUser");
+    final fTag = _openBoxResilient<FollowUserTag>("FollowUserTag");
+    final fCustom = _openBoxResilient<String>("CustomSource");
+    final fFnOs = _openBoxResilient<String>("FnOsServer");
+    await Future.wait([fHistory, fFollow, fTag, fCustom, fFnOs]);
+    historyBox = await fHistory;
+    followBox = await fFollow;
+    tagBox = await fTag;
+    customSourceBox = await fCustom;
+    fnOsBox = await fFnOs;
     // 异步压缩各箱（删除操作留下的空洞会随使用膨胀，压缩可保持读写速度）；
     // 不阻塞启动，失败静默。
     unawaited(_compactAllBoxes());
@@ -155,7 +166,17 @@ class DBService extends GetxService {
         // 「覆盖安装后关注列表空了」。这里在启动阶段把备份数据搬回来，
         // 让老用户装一次新版就能把数据找回来。主箱非空时完全不动作。
         if (box.isEmpty) {
-          await _restoreIntoEmptyBox<T>(box, name);
+          // ⚠️ 自救失败**绝不能**被当成"箱损坏"：外层 catch 一旦把它判成
+          // corrupted，就会走"备份移除 + 重建"——每启动一次就往
+          // suikan_box_backup/ 多丢一份备份，备份越积越多，下次自救要扫的
+          // 目录也越多，启动越来越慢，最终卡成白屏（2026-08-31 事故：
+          // 该目录下 7 份 FollowUser + 7 份 History，每份损坏各等 10s 超时）。
+          // 主箱本身是好的，自救只是锦上添花，失败静默跳过即可。
+          try {
+            await _restoreIntoEmptyBox<T>(box, name);
+          } catch (_) {
+            // 自救失败不影响主箱可用性
+          }
         }
         unawaited(_saveSnapshotLater(name));
         await _clearDegraded(name);
@@ -383,11 +404,28 @@ class DBService extends GetxService {
   ///    `isBoxOpen(name)` 为真时会直接返回**主箱自己**（此时它还是空的），
   ///    于是"捞回"读到的永远是自己 → 永远 count==0，看着正常其实什么也没干。
   ///    必须复制成临时文件名再打开。
+  ///    ⚠️ 这不只是"无效"，是**破坏性**的：拿到手的是主箱自己，后续一旦
+  ///    调用 `close()` 就把主箱关了，App 之后对该箱的所有读写直接抛
+  ///    `HiveError: Box has already been closed`（2026-08-31 用
+  ///    `tool/verify_empty_box_rescue.dart` 实测复现，对照组 identical(src, box)=true）。
+  ///    别为了"少一次文件拷贝"把它改回同名写法。
   /// 3. **搬完不删备份**，失败还有原件可查。
   /// 4. 用 Hive API 读出来再 putAll，不做文件覆盖 —— 避开与主箱锁的竞争。
+  /// 🔴 空箱自救的**时间预算**：自救只是锦上添花，绝不能拖慢启动。
+  /// 每份备份都可能损坏，而 Hive.openBox 遇到损坏帧是**挂起不抛异常**的，
+  /// 只能靠超时兜底 —— 没有预算的话，备份越多启动越慢。
+  /// 实测：7 份 FollowUser + 7 份 History，每份损坏各等 10s → 140s 白屏
+  /// （2026-08-31 事故）。
+  static const Duration _restoreBudget = Duration(seconds: 8);
+  /// 一次启动最多尝试几份备份（最新的优先）。够用了，不值得为更旧的备份
+  /// 继续拖慢启动。
+  static const int _restoreMaxTries = 3;
+
   Future<void> _restoreIntoEmptyBox<T>(Box<T> box, String name) async {
     final dir = _hiveDir;
     if (dir == null || dir.isEmpty) return;
+    // 所有备份共享这一个时间池，先到先得
+    final deadline = DateTime.now().add(_restoreBudget);
     try {
       final root = Directory(p.join(dir, 'suikan_box_backup'));
       if (!await root.exists()) return;
@@ -409,9 +447,22 @@ class DBService extends GetxService {
       await tmpRoot.create(recursive: true);
       final tmpName = '${name}_restore_tmp';
 
+      var tried = 0;
       for (final d in mine) {
+        // 双重闸门：试够份数就停，时间花完也停
+        if (tried >= _restoreMaxTries) break;
+        if (DateTime.now().isAfter(deadline)) {
+          Log.logAlways(
+              "[$name] 自救已用满 ${_restoreBudget.inSeconds}s，停止扫描剩余备份");
+          break;
+        }
         final srcFile = File(p.join(d.path, '$name.hive'));
         if (!await srcFile.exists()) continue;
+        // 空壳文件（只写了箱头的空箱，通常 <128B）直接跳过，省一次 openBox
+        final size = await srcFile.length().catchError((_) => 0);
+        if (size < 128) continue;
+
+        tried++;
 
         // 复制成临时箱再打开（见约束 2）
         final tmpFile = File(p.join(tmpRoot.path, '$tmpName.hive'));
@@ -425,18 +476,25 @@ class DBService extends GetxService {
         }
 
         Box<T>? src;
-        Map<dynamic, T> data = const {};
+        Map<dynamic, T> data = <dynamic, T>{};
         try {
           final future = Hive.openBox<T>(tmpName, path: tmpRoot.path);
           unawaited(future.then((_) {}, onError: (Object _) {}));
-          src = await future.timeout(const Duration(seconds: 10));
+          // 用**剩余预算**当超时，而不是固定值：多份备份共享同一个时间池，
+          // 第一份耗掉的时间要从后面几份的额度里扣
+          var remain = deadline.difference(DateTime.now());
+          if (remain <= Duration.zero) {
+            remain = const Duration(milliseconds: 200);
+          }
+          src = await future.timeout(remain);
           data = src.toMap();
         } catch (e) {
           Log.logAlways("[$name] 备份 ${p.basename(d.path)} 打不开，跳过: $e");
         }
         if (src != null) {
           try {
-            await src.close();
+            // close 也要限时：它内部会 flush 写队列，磁盘异常时同样可能挂住
+            await src.close().timeout(const Duration(seconds: 3));
           } catch (_) {}
         }
         try {

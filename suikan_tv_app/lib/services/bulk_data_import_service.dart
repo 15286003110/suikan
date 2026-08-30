@@ -49,15 +49,22 @@ class BulkImportResult {
   final int skipped;
   final BulkDataPolicy policy;
 
+  /// 覆盖被"保护"拦截了：对端数据量明显少于本地，为防丢数据自动降级为合并。
+  /// 调用方**必须**据此提示用户 —— 否则用户会以为覆盖成功了，
+  /// 但打开一看本地数据还在，反而不知所措。
+  final bool overwriteGuarded;
+
   const BulkImportResult({
     required this.total,
     required this.imported,
     required this.skipped,
     required this.policy,
+    this.overwriteGuarded = false,
   });
 
   String get logSummary =>
-      "total=$total imported=$imported skipped=$skipped scale=${policy.label}";
+      "total=$total imported=$imported skipped=$skipped scale=${policy.label}"
+      "${overwriteGuarded ? ' [覆盖已拦截]' : ''}";
 }
 
 class BulkDataImportService {
@@ -168,14 +175,30 @@ class BulkDataImportService {
     // "覆盖安装后关注列表清空"的直接原因。先写后删即使被打断，旧数据也还在。
     // 包里是空数组时不删（对端数据已丢/未勾选该类），避免"清了没有回填"。
     await _putFollows(users, policy, onProgress: onProgress);
+    // 🔴 覆盖保护（2026-08-31）：用"明显更少"的数据覆盖本地，等同丢数据。
+    // 典型事故：某端因为覆盖安装丢了关注（变空或只剩几条），用户又拿这一端
+    // 去覆盖别的端 —— 空数据就在各端之间来回传染，最后所有端都空了。
+    //
+    // 判据：对端有效条数的 3 倍还不到本地现有条数 → 宁可不覆盖。
+    // 此时上面的写入**已经完成**，所以拦截 prune 的效果就是"合并"：
+    // 对端的数据照样进来，本地原有的一条不少。代价只是留下冗余项。
+    var guarded = false;
     if (overwrite && users.isNotEmpty) {
-      await _pruneFollowsExcept(users);
+      final localCount = DBService.instance.followBox.length;
+      if (localCount > 0 && users.length * 3 < localCount) {
+        guarded = true;
+        Log.logAlways("关注导入：对端 ${users.length} 条 < 本地 $localCount 条的 1/3，"
+            "拦截覆盖、保留本地数据（等价于合并）");
+      } else {
+        await _pruneFollowsExcept(users);
+      }
     }
     final result = BulkImportResult(
       total: rawUsers.length,
       imported: users.length,
       skipped: skipped,
       policy: policy,
+      overwriteGuarded: guarded,
     );
     Log.i("批量导入关注完成：${result.logSummary}");
     return result;

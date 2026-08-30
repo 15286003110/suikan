@@ -497,14 +497,15 @@ Future initServices([String? hivePath]) async {
   Hive.registerAdapter(HistoryAdapter());
   Hive.registerAdapter(FollowUserTagAdapter());
 
-  //包信息
-  Utils.packageInfo = await PackageInfo.fromPlatform();
-  //本地存储 + 数据库并行初始化（两者独立 Hive 箱，串行等待无必要）
-  Log.d("Init LocalStorage + DBService (并行)");
-  await Future.wait([
-    Get.put(LocalStorageService()).init(),
-    Get.put(DBService()).init(hivePath: hivePath),
-  ]);
+  // 包信息（走平台通道，有 IO 开销）与本地存储、数据库三者互相独立，一起并行。
+  // Utils.packageInfo 只在日志 / 我的页 / 同步服务里读，db_service 与
+  // local_storage_service 都不依赖它，并发安全。
+  Log.d("Init PackageInfo + LocalStorage + DBService (并行)");
+  final fPackageInfo = PackageInfo.fromPlatform();
+  final fLocalStorage = Get.put(LocalStorageService()).init();
+  final fDB = Get.put(DBService()).init(hivePath: hivePath);
+  Utils.packageInfo = await fPackageInfo;
+  await Future.wait([fLocalStorage, fDB]);
   // 自定义源 / 飞牛影视库必须在 runApp 之前完成注册：
   // 否则首页/分类按 Sites.browseSites 构建标签时站点尚未就绪，
   // 且 IndexedController 启动自动恢复“上次直播间”会找不到 custom_/fnos_ 站点。
