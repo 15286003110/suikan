@@ -51,7 +51,11 @@ class DlnaReceiverChannel(
                     val ip = call.argument<String>("ip") ?: ""
                     val port = call.argument<Int>("port") ?: 1900
                     val data = call.argument<String>("data") ?: ""
-                    send(ip, port, data)
+                    // MethodChannel handler 跑在主线程，UDP 发送必须移到工作线程
+                    // （Android 8+ 主线程网络操作直接抛 NetworkOnMainThreadException）
+                    Thread {
+                        send(ip, port, data)
+                    }.start()
                     result.success(true)
                 }
 
