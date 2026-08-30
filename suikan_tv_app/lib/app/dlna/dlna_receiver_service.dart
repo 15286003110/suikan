@@ -6,10 +6,11 @@ import 'package:get/get.dart';
 import 'package:shelf/shelf.dart' as shelf;
 import 'package:shelf/shelf_io.dart' as shelf_io;
 import 'package:simple_live_tv_app/app/controller/app_settings_controller.dart';
-import 'package:simple_live_tv_app/app/custom_source/custom_m3u_site.dart';
+import 'package:simple_live_tv_app/app/dlna/cast_receiver_site.dart';
 import 'package:simple_live_tv_app/app/sites.dart';
 import 'package:simple_live_tv_app/modules/live_room/live_room_controller.dart';
 import 'package:simple_live_tv_app/routes/app_navigation.dart';
+import 'package:simple_live_tv_app/routes/route_path.dart';
 
 /// DLNA/UPnP 投屏接收端服务（标准 MediaRenderer）。
 ///
@@ -929,14 +930,27 @@ class DlnaReceiverService extends GetxService {
       id: 'cast_receiver',
       name: '投屏接收',
       logo: '',
-      liveSite: CustomM3uSite(channels: []),
+      liveSite: CastReceiverSite(),
     );
     _transportState = 'PLAYING';
-    AppNavigator.toLiveRoomDetail(
-      site: site,
-      roomId: url,
-      isVod: true,
-    );
+    if (c != null) {
+      // 已有投屏页面（可能是别的 App/别的 URL 在播）：顶替切换——
+      // 用 offNamed 替换当前直播间页，避免栈上叠新页、旧播放残留。
+      Get.offNamed(
+        RoutePath.kLiveRoomDetail,
+        arguments: site,
+        parameters: {
+          'roomId': url,
+          'isVod': 'true',
+        },
+      );
+    } else {
+      AppNavigator.toLiveRoomDetail(
+        site: site,
+        roomId: url,
+        isVod: true,
+      );
+    }
   }
 
   // ---------- SSDP ----------

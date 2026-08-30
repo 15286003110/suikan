@@ -271,10 +271,15 @@ Future initServices([String? hivePath]) async {
   Utils.packageInfo = await PackageInfo.fromPlatform();
   //本地存储 + 数据库并行初始化（两者独立 Hive 箱，串行等待无必要）
   Log.d("Init LocalStorage + DBService (并行)");
-  await Future.wait([
-    Get.put(LocalStorageService()).init(),
-    Get.put(DBService()).init(hivePath: hivePath),
-  ]);
+  // 单个服务失败绝不阻断启动（否则 initServices 中断 → runApp 前白屏卡死）
+  try {
+    await Future.wait([
+      Get.put(LocalStorageService()).init(),
+      Get.put(DBService()).init(hivePath: hivePath),
+    ]);
+  } catch (e) {
+    Log.e("本地存储/数据库初始化失败（已容错继续）：$e", StackTrace.current);
+  }
   Get.put(CurrentRoomService());
   //初始化设置控制器
   Get.put(AppSettingsController());

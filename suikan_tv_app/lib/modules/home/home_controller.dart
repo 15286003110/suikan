@@ -8,6 +8,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 
 import 'package:simple_live_tv_app/app/app_style.dart';
 import 'package:simple_live_tv_app/app/controller/base_controller.dart';
+import 'package:simple_live_tv_app/services/db_service.dart';
 
 import 'package:simple_live_tv_app/routes/route_path.dart';
 
@@ -86,8 +87,12 @@ class HomeController extends BaseController {
         ),
       );
       if (result == true) {
-        // 退出前关闭 Hive，确保数据完整落盘（避免播放中退出导致写入不完整，
-        // 二次打开读到未完成数据而白屏/卡死——2.1.21 用户实测"退出后再打开页面为空"）。
+        // 退出前先排空写队列再关 Hive：Hive.close() 不等挂起写入，若退出时
+        // 有关注刷新/源刷新/异步 compact 在写，close 会关掉正在写的箱 →
+        // 帧交错损坏 → 二次打开 HiveError/白屏（2.1.21/2.1.22 用户实测）。
+        try {
+          await DBService.instance.flush();
+        } catch (_) {}
         try {
           await Hive.close();
         } catch (_) {}

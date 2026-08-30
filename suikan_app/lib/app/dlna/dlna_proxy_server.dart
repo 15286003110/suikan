@@ -19,7 +19,9 @@ class DlnaProxyServer {
 
   bool get running => _server != null;
 
-  /// 启动代理，返回本地代理地址（如 http://127.0.0.1:41234/）
+  /// 启动代理，返回局域网可访问的代理地址（如 http://192.168.1.5:41234/）。
+  /// ⚠️ 必须绑定 anyIPv4 并返回局域网 IP：投屏设备访问的是"我们"，
+  /// 若绑定/返回 127.0.0.1，设备会去访问它自己 → 连接失败（历史踩坑）。
   Future<String> start({
     required String targetUrl,
     Map<String, String>? headers,
@@ -28,10 +30,28 @@ class DlnaProxyServer {
     _targetUrl = targetUrl;
     _targetHeaders = headers;
 
-    final handler = const Pipeline().addMiddleware(logRequests()).addHandler(_proxy);
-    _server = await shelf_io.serve(handler, InternetAddress.loopbackIPv4, 0);
+    final handler =
+        const Pipeline().addMiddleware(logRequests()).addHandler(_proxy);
+    _server = await shelf_io.serve(handler, InternetAddress.anyIPv4, 0);
     final port = _server!.port;
-    return 'http://127.0.0.1:$port/';
+    final ip = await _localIp();
+    return 'http://$ip:$port/';
+  }
+
+  Future<String> _localIp() async {
+    try {
+      final interfaces = await NetworkInterface.list(
+        type: InternetAddressType.IPv4,
+        includeLoopback: false,
+      );
+      for (final iface in interfaces) {
+        if (iface.addresses.isEmpty) continue;
+        final addr = iface.addresses.first;
+        if (addr.isLoopback) continue;
+        return addr.address;
+      }
+    } catch (_) {}
+    return '127.0.0.1';
   }
 
   /// 转发请求：把设备的请求转发到目标 URL，带上目标 headers。

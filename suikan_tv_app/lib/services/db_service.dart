@@ -31,14 +31,41 @@ class DBService extends GetxService {
 
   Future init({String? hivePath}) async {
     _hiveDir = hivePath;
-    historyBox = await _openBoxResilient<History>("TVHostiry");
-    followBox = await _openBoxResilient<FollowUser>("TVFollowUser");
-    customSourceBox = await _openBoxResilient<String>("CustomSource");
-    fnOsBox = await _openBoxResilient<String>("FnOsServer");
+    // 整体容错：任何箱失败都不抛（否则 initServices 中断 → 白屏）。
+    // 内部 _openBoxResilient 已有"超时/异常 → 删除重建 → 临时空箱"兜底，
+    // 这里再包一层保险，保证 DBService 一定能用。
+    try {
+      historyBox = await _openBoxResilient<History>("TVHostiry");
+      followBox = await _openBoxResilient<FollowUser>("TVFollowUser");
+      customSourceBox = await _openBoxResilient<String>("CustomSource");
+      fnOsBox = await _openBoxResilient<String>("FnOsServer");
+    } catch (e) {
+      Log.logPrint("DBService.init 兜底失败，改用临时目录空箱：$e");
+      final fallbackDir = p.join(Directory.systemTemp.path, 'suikan_box_fallback');
+      historyBox = await _openFallbackBox<History>("TVHostiry", fallbackDir);
+      followBox = await _openFallbackBox<FollowUser>("TVFollowUser", fallbackDir);
+      customSourceBox =
+          await _openFallbackBox<String>("CustomSource", fallbackDir);
+      fnOsBox = await _openFallbackBox<String>("FnOsServer", fallbackDir);
+    }
     // 异步压缩各箱（删除操作留下的空洞会随使用膨胀，压缩可保持读写速度）；
-    // 不阻塞启动，失败静默。
-    unawaited(_compactAllBoxes());
+    // 不阻塞启动，失败静默。记录 future 供退出时 flush 等待。
+    _compactFuture = _compactAllBoxes();
   }
+
+  Future<Box<T>> _openFallbackBox<T>(String name, String dir) async {
+    return Hive.openBox<T>('${name}_fb', path: dir);
+  }
+
+  /// 等待所有挂起写入排空（退出前调用，避免 Hive.close 关掉正在写的箱 → 箱损坏白屏）。
+  Future<void> flush() async {
+    await _writeChain;
+    try {
+      await _compactFuture?.timeout(const Duration(seconds: 3));
+    } catch (_) {}
+  }
+
+  Future<void>? _compactFuture;
 
   Future<void> _compactAllBoxes() async {
     await Future<void>.delayed(const Duration(seconds: 5));
@@ -84,7 +111,18 @@ class DBService extends GetxService {
     } catch (_) {
       Log.logPrint("打开[$name]箱失败，改用临时空箱兜底（该箱数据将为空）");
       final fallbackDir = p.join(Directory.systemTemp.path, 'suikan_box_fallback');
-      return await Hive.openBox<T>('${name}_fb', path: fallbackDir);
+      try {
+        final future = Hive.openBox<T>('${name}_fb', path: fallbackDir);
+        unawaited(future.then((_) {}, onError: (Object _) {}));
+        return await future.timeout(const Duration(seconds: 5));
+      } catch (_) {
+        // 最后防线：内存空箱（Hive 无内存箱 API，用独立路径名重试一次）
+        Log.logPrint("兜底空箱也失败，[$name] 数据将不可用");
+        return await Hive.openBox<T>(
+          '${name}_mem',
+          path: p.join(fallbackDir, 'mem'),
+        );
+      }
     }
   }
 
