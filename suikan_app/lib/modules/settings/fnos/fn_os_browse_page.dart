@@ -402,7 +402,7 @@ class _FnOsBrowsePageState extends State<FnOsBrowsePage> {
   /// 影视海报网格：portrait 2:3 紧凑卡片（固定竖幅）。
   static const double _kGridPadding = 10;
   static const double _kGridSpacing = 10;
-  static const double _kMinCardWidth = 120;
+  static const double _kMinCardWidth = 100;
   static const int _kMinColumns = 2;
   static const int _kMaxColumns = 8;
 
