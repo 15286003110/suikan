@@ -46,8 +46,9 @@ class _FnOsBrowsePageState extends State<FnOsBrowsePage> {
   final List<FnOsMovie> _allMovies = [];
   final List<FnOsTvSeries> _allSeries = [];
 
-  /// 类型切换：0=全部 1=电影 2=电视剧（AppBar 右上角二级选择）。
+  /// 类型切换：0=全部 1=电影 2=电视剧 3=动漫（AppBar 中间平铺选择）。
   int _contentType = 0;
+  static const _kTypeLabels = ['全部', '电影', '电视剧', '动漫'];
 
   late final StreamSubscription<dynamic> _sourcesSub;
 
@@ -242,98 +243,29 @@ class _FnOsBrowsePageState extends State<FnOsBrowsePage> {
     return Scaffold(
       appBar: AppBar(
         automaticallyImplyLeading: widget.embedded ? false : true,
-        // 标题两行：服务器名 + 全局统计（与右侧「类型/刷新」按钮同一行展示）。
-        title: Column(
+        centerTitle: true,
+        // 中间：类型平铺（全部/电影/电视剧/动漫），代替原服务器名标题。
+        title: Row(
           mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(
-              widget.server.name.isEmpty ? 'NAS影视库' : widget.server.name,
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-            ),
-            if (_summaryText.isNotEmpty)
-              Text(
-                _summaryText,
-                style: TextStyle(
-                  fontSize: 11,
-                  color: Theme.of(context)
-                      .colorScheme
-                      .onSurfaceVariant,
+            for (var i = 0; i < _kTypeLabels.length; i++)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: ChoiceChip(
+                  label: Text(
+                    _kTypeLabels[i],
+                    style: const TextStyle(fontSize: 13),
+                  ),
+                  visualDensity: VisualDensity.compact,
+                  selected: _contentType == i,
+                  onSelected: (_) => setState(() => _contentType = i),
                 ),
               ),
           ],
         ),
         actions: [
-          // 类型二级选择：全部 / 电影 / 电视剧
-          PopupMenuButton<int>(
-            tooltip: '类型',
-            icon: const Icon(Icons.filter_list),
-            initialValue: _contentType,
-            onSelected: (v) => setState(() => _contentType = v),
-            itemBuilder: (_) => const [
-              PopupMenuItem(value: 0, child: Text('全部')),
-              PopupMenuItem(value: 1, child: Text('电影')),
-              PopupMenuItem(value: 2, child: Text('电视剧')),
-            ],
-          ),
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            tooltip: '刷新影视库',
-            onPressed: _refreshLibraries,
-          ),
-        ],
-      ),
-      body: _buildAllContent(),
-    );
-  }
-
-  /// 全部影视内容（按类型过滤展示）。
-  Widget _buildAllContent() {
-    if (_loadingLibs) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    if (_libsError != null) {
-      return _ErrorView(message: _libsError!, onRetry: _loadLibraries);
-    }
-    final movies = _sortedMovies();
-    final series = _sortedSeries();
-    if (movies.isEmpty && series.isEmpty) {
-      return const Center(child: Text('该服务器暂无影视内容'));
-    }
-    final showMovies = _contentType != 2;
-    final showSeries = _contentType != 1;
-    return CustomScrollView(
-      slivers: [
-        SliverToBoxAdapter(child: _buildContentToolbar()),
-        if (showMovies && movies.isNotEmpty) _buildMovieSliver(movies),
-        if (showSeries && series.isNotEmpty) _buildSeriesSliver(series),
-        const SliverToBoxAdapter(child: SizedBox(height: 24)),
-      ],
-    );
-  }
-
-  /// 全局统计文本：mediadb/sum 的 total/movie/tv（与飞牛 UI 精确一致），显示在标题副行。
-  String get _summaryText {
-    final total = _librarySummary['total'];
-    final movie = _librarySummary['movie'];
-    final tv = _librarySummary['tv'];
-    final parts = <String>[];
-    if (movie != null) parts.add('电影 $movie');
-    if (tv != null) parts.add('电视剧 $tv');
-    if (parts.isEmpty) return '';
-    return total != null
-        ? '共 $total 部 · ${parts.join(' · ')}'
-        : parts.join(' · ');
-  }
-
-
-  /// 影视库内容区顶部工具栏：排序（统计已上移标题栏，刷新在 AppBar）。
-  Widget _buildContentToolbar() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
-      child: Row(
-        children: [
-          const Spacer(),
+          // 排序（刷新影视库左边）
           PopupMenuButton<Object?>(
             tooltip: '排序',
             onSelected: (v) => setState(() {
@@ -393,13 +325,83 @@ class _FnOsBrowsePageState extends State<FnOsBrowsePage> {
               ),
             ],
             child: Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Text('$_sortByLabel${_sortAsc ? '↑' : '↓'}'),
                 const Icon(Icons.arrow_drop_down, size: 18),
               ],
             ),
           ),
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: '刷新影视库',
+            onPressed: _refreshLibraries,
+          ),
         ],
+      ),
+      body: _buildAllContent(),
+    );
+  }
+
+  /// 全部影视内容（按类型过滤展示）。
+  Widget _buildAllContent() {
+    if (_loadingLibs) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_libsError != null) {
+      return _ErrorView(message: _libsError!, onRetry: _loadLibraries);
+    }
+    var movies = _sortedMovies();
+    var series = _sortedSeries();
+    if (_contentType == 3) {
+      // 动漫：电影/剧集中 genres 含「动画」的条目。
+      movies = movies.where((m) => m.genres.contains('动画')).toList();
+      series = series.where((s) => s.genres.contains('动画')).toList();
+    }
+    if (movies.isEmpty && series.isEmpty) {
+      return const Center(child: Text('该服务器暂无影视内容'));
+    }
+    final showMovies = _contentType != 2;
+    final showSeries = _contentType != 1;
+    return CustomScrollView(
+      slivers: [
+        SliverToBoxAdapter(child: _buildContentToolbar()),
+        if (showMovies && movies.isNotEmpty) _buildMovieSliver(movies),
+        if (showSeries && series.isNotEmpty) _buildSeriesSliver(series),
+        const SliverToBoxAdapter(child: SizedBox(height: 24)),
+      ],
+    );
+  }
+
+  /// 全局统计文本：mediadb/sum 的 total/movie/tv（与飞牛 UI 精确一致），显示在标题副行。
+  String get _summaryText {
+    final total = _librarySummary['total'];
+    final movie = _librarySummary['movie'];
+    final tv = _librarySummary['tv'];
+    final parts = <String>[];
+    if (movie != null) parts.add('电影 $movie');
+    if (tv != null) parts.add('电视剧 $tv');
+    if (parts.isEmpty) return '';
+    return total != null
+        ? '共 $total 部 · ${parts.join(' · ')}'
+        : parts.join(' · ');
+  }
+
+
+  /// 内容区顶部工具栏：全局统计（排序已上移 AppBar，刷新在 AppBar 右侧）。
+  Widget _buildContentToolbar() {
+    final text = _summaryText;
+    if (text.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Text(
+          text,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+        ),
       ),
     );
   }
