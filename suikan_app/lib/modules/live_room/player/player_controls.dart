@@ -12,6 +12,7 @@ import 'package:simple_live_app/app/constant.dart';
 import 'package:simple_live_app/app/controller/app_settings_controller.dart';
 import 'package:simple_live_app/app/utils.dart';
 import 'package:simple_live_app/modules/live_room/live_room_controller.dart';
+import 'package:simple_live_app/modules/live_room/vod/vod_episode_panel.dart';
 import 'package:simple_live_app/widgets/superchat_card.dart';
 import 'package:simple_live_core/simple_live_core.dart';
 import 'package:window_manager/window_manager.dart';
@@ -652,6 +653,18 @@ Widget _buildNormalBottomBar(
                     style: const TextStyle(color: Colors.white, fontSize: 15),
                   ),
                 ),
+              ),
+            if (controller.isVod)
+              Obx(
+                () => controller.hasVodEpisodes.value
+                    ? TextButton(
+                        onPressed: () => showVodEpisodeSheet(controller),
+                        child: const Text(
+                          '选集',
+                          style: TextStyle(color: Colors.white, fontSize: 15),
+                        ),
+                      )
+                    : const SizedBox.shrink(),
               ),
             if (!Platform.isAndroid && !Platform.isIOS)
               IconButton(
@@ -1387,4 +1400,24 @@ class _PlayerSuperChatOverlayState extends State<PlayerSuperChatOverlay> {
       ],
     );
   }
+}
+
+/// 选集弹层：全屏时点「选集」按钮弹出季/集面板（复用集数 tab 组件）。
+void showVodEpisodeSheet(LiveRoomController controller) {
+  final child = SizedBox(
+    height: 360,
+    child: VodEpisodePanel(controller: controller),
+  );
+  if (controller.useBottomSheetPlayerMenus) {
+    Utils.showBottomSheet(
+      title: "选集",
+      child: child,
+    );
+    return;
+  }
+  Utils.showRightDialog(
+    title: "选集",
+    useSystem: true,
+    child: child,
+  );
 }

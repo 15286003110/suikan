@@ -8,6 +8,7 @@ import 'package:simple_live_core/simple_live_core.dart';
 import 'package:simple_live_app/app/controller/base_controller.dart';
 import 'package:simple_live_app/app/controller/app_settings_controller.dart';
 import 'package:simple_live_app/app/event_bus.dart';
+import 'package:simple_live_app/app/fnos/fn_os_service.dart';
 import 'package:simple_live_app/app/log.dart';
 import 'package:simple_live_app/app/platform_utils.dart';
 import 'package:simple_live_app/app/sites.dart';
@@ -511,13 +512,18 @@ class FollowUserController extends BasePageController<FollowUser> {
   Future<void> openFollowRoom(FollowUser item) async {
     final resolved =
         await FollowService.instance.resolveFollowBeforeEnter(item);
-    final site = Sites.allSites[resolved.siteId];
+    // 飞牛影视的 site 不在静态列表，需从 FnOsService 注册表取。
+    final site = Sites.allSites[resolved.siteId] ??
+        FnOsService.instance.siteForServer(resolved.siteId);
     if (site == null) {
       return;
     }
+    final isVod =
+        FnOsService.instance.serverForSiteId(resolved.siteId) != null;
     AppNavigator.toLiveRoomDetail(
       site: site,
       roomId: resolved.roomId,
+      isVod: isVod,
     );
   }
 

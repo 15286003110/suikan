@@ -18,6 +18,7 @@ import 'package:simple_live_app/app/custom_source/custom_m3u_site.dart';
 import 'package:simple_live_app/app/custom_source/custom_source_service.dart';
 import 'package:simple_live_app/app/desktop_startup_args.dart';
 import 'package:simple_live_app/app/event_bus.dart';
+import 'package:simple_live_app/app/fnos/fn_os_models.dart';
 import 'package:simple_live_app/app/fnos/fn_os_service.dart';
 import 'package:simple_live_app/app/log.dart';
 import 'package:simple_live_app/app/sites.dart';
@@ -57,12 +58,144 @@ class LiveRoomController extends PlayerController
   final bool initialDesktopSidePanelCollapsed;
   /// 是否为点播（如飞牛影视电影/电视剧），启用进度条/倍速等 VOD 控制。
   final bool isVod;
+  /// 剧集元数据基准 guid（剧集本身 guid）。入口传剧集 guid，切集后
+  /// 仍能以此拉取季/集列表；电影/自定义源为 null（用 roomId 兜底）。
+  final String? vodSeriesGuid;
   late LiveDanmaku liveDanmaku;
+
+  // ─── 点播（影视）元数据：信息页 / 集数页 / 自动连播 ─────────────
+  /// 当前影片原始详情 JSON（item 接口，含评分/年代/简介/视频流）。
+  Rx<Map<String, dynamic>> vodDetailJson = Rx<Map<String, dynamic>>({});
+  Rx<String> vodTitle = Rx<String>('');
+  Rx<String> vodPoster = Rx<String>('');
+  final RxBool hasVodEpisodes = false.obs;
+  final RxList<FnOsSeason> vodSeasons = RxList<FnOsSeason>();
+  bool _vodMetaLoaded = false;
+
+  FnOsServer? get fnOsServer {
+    if (!isVod) return null;
+    return FnOsService.instance.serverForSiteId(site.id);
+  }
+
+  /// 加载点播元数据：影片详情 + 剧集（决定"集数" tab 是否显示）。
+  Future<void> loadVodMeta() async {
+    if (!isVod || _vodMetaLoaded) return;
+    _vodMetaLoaded = true;
+    final server = fnOsServer;
+    if (server == null) return;
+    try {
+      final detail = await FnOsService.instance.getItemDetail(server, roomId);
+      vodDetailJson.value = detail;
+      final item = detail['item'];
+      if (item is Map) {
+        vodTitle.value = (item['title'] ?? '').toString();
+        vodPoster.value = (item['posters'] ?? '').toString();
+      }
+      if (vodTitle.value.isEmpty) vodTitle.value = (detail['title'] ?? '').toString();
+      if (vodPoster.value.isEmpty) vodPoster.value = (detail['posters'] ?? '').toString();
+      // 剧集 guid：入口传入优先；否则从当前集的 parent 链推导（关注/历史回播场景）。
+      String seriesGuid = vodSeriesGuid ?? '';
+      if (seriesGuid.isEmpty) {
+        seriesGuid = await _resolveSeriesGuid(server, roomId);
+      }
+      final seasons = await FnOsService.instance.getSeasons(server, seriesGuid);
+      if (seasons.isNotEmpty) {
+        vodSeasons.value = seasons;
+        hasVodEpisodes.value = true;
+        await _loadSeasonEpisodes(seasons.first);
+      }
+    } catch (e) {
+      Log.d('加载点播元数据失败: $e');
+    }
+  }
+
+  /// 从当前集 guid 推导剧集 guid：集 → 季（parent_guid）→ 剧集（季的 parent_guid）。
+  Future<String> _resolveSeriesGuid(FnOsServer server, String guid) async {
+    try {
+      final detail = await FnOsService.instance.getItemDetail(server, guid);
+      final item = detail['item'];
+      if (item is Map) {
+        final seasonGuid = (item['parent_guid'] ?? '').toString();
+        if (seasonGuid.isNotEmpty) {
+          final seasonDetail =
+              await FnOsService.instance.getItemDetail(server, seasonGuid);
+          final sItem = seasonDetail['item'];
+          if (sItem is Map) {
+            final series = (sItem['parent_guid'] ?? '').toString();
+            if (series.isNotEmpty) return series;
+          }
+          return seasonGuid;
+        }
+      }
+    } catch (_) {}
+    return guid;
+  }
+
+  Future<void> _loadSeasonEpisodes(FnOsSeason season) async {
+    final server = fnOsServer;
+    if (server == null) return;
+    try {
+      final eps = await FnOsService.instance.getEpisodes(server, season.guid);
+      final idx = vodSeasons.indexWhere((s) => s.guid == season.guid);
+      if (idx < 0) return;
+      final list = List<FnOsSeason>.from(vodSeasons);
+      list[idx] = FnOsSeason(
+        guid: season.guid,
+        title: season.title,
+        seasonNumber: season.seasonNumber,
+        overview: season.overview,
+        poster: season.poster,
+        airDate: season.airDate,
+        episodeCount: season.episodeCount,
+        episodes: eps,
+        rating: season.rating,
+      );
+      vodSeasons.value = list;
+    } catch (_) {
+      // 单季拉取失败不影响其它
+    }
+  }
+
+  /// 切换季（集数页点季时触发，预拉该季集列表）。
+  Future<void> selectVodSeason(FnOsSeason season) async {
+    if (season.episodes.isNotEmpty) return;
+    await _loadSeasonEpisodes(season);
+  }
+
+  /// 切播指定集：改 roomId 后完整重走加载（getRoomDetail→getPlayUrl→setPlayer）。
+  Future<void> playVodEpisode(FnOsEpisode ep) async {
+    if (rxRoomId.value == ep.guid) return;
+    rxRoomId.value = ep.guid;
+    loadData();
+  }
+
+  /// 当前集是否属于某个剧集（集数 tab 高亮用）。
+  bool get isVodEpisodeActive => isVod && hasVodEpisodes.value;
+
+  /// 查找下一集：同季内下一集，跨季继续；无则 null。
+  FnOsEpisode? _nextVodEpisode(String currentGuid) {
+    for (final season in vodSeasons) {
+      for (var i = 0; i < season.episodes.length; i++) {
+        if (season.episodes[i].guid == currentGuid) {
+          if (i + 1 < season.episodes.length) return season.episodes[i + 1];
+          final idx = vodSeasons.indexOf(season);
+          if (idx + 1 < vodSeasons.length &&
+              vodSeasons[idx + 1].episodes.isNotEmpty) {
+            return vodSeasons[idx + 1].episodes.first;
+          }
+          return null;
+        }
+      }
+    }
+    return null;
+  }
+
   LiveRoomController({
     required this.pSite,
     required this.pRoomId,
     this.initialDesktopSidePanelCollapsed = false,
     this.isVod = false,
+    this.vodSeriesGuid,
   }) {
     rxSite = pSite.obs;
     rxRoomId = pRoomId.obs;
@@ -1674,6 +1807,10 @@ class LiveRoomController extends PlayerController
         return;
       }
       detail.value = loadedDetail;
+      // 点播（影视）：异步加载影片详情与剧集（信息页/集数页数据源）。
+      if (isVod) {
+        unawaited(loadVodMeta());
+      }
 
       if (site.id == Constant.kDouyin) {
         // 1.6.0 之前收藏的是 WebRid，中间一版收藏的是 RoomID，
@@ -2165,6 +2302,19 @@ class LiveRoomController extends PlayerController
       return;
     }
     super.mediaEnd();
+    // 点播（影视）：播放结束 → 自动连播下一集；无下一集则停在结束态，
+    // 不走直播的"刷新重试/切线路/切下一房间"逻辑。
+    if (isVod && hasVodEpisodes.value) {
+      final next = _nextVodEpisode(roomId);
+      if (next != null) {
+        Log.i("自动连播下一集：${next.displayTitle}");
+        await playVodEpisode(next);
+      } else {
+        Log.i("点播播放结束（无下一集）");
+        liveStatus.value = false;
+      }
+      return;
+    }
     if (mediaErrorRetryCount < 2) {
       Log.d("播放结束，尝试第${mediaErrorRetryCount + 1}次刷新");
       if (mediaErrorRetryCount == 1) {

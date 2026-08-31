@@ -5,7 +5,6 @@ import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/get.dart';
 import 'package:lottie/lottie.dart';
 import 'package:media_kit_video/media_kit_video.dart';
-import 'package:path/path.dart' as p;
 import 'package:remixicon/remixicon.dart';
 import 'package:simple_live_app/app/app_style.dart';
 import 'package:simple_live_app/app/constant.dart';
@@ -13,6 +12,8 @@ import 'package:simple_live_app/app/controller/app_settings_controller.dart';
 import 'package:simple_live_app/app/utils.dart';
 import 'package:simple_live_app/modules/live_room/live_room_controller.dart';
 import 'package:simple_live_app/modules/live_room/player/player_controls.dart';
+import 'package:simple_live_app/modules/live_room/vod/vod_episode_panel.dart';
+import 'package:simple_live_app/modules/live_room/vod/vod_info_panel.dart';
 import 'package:simple_live_app/modules/live_room/widgets/live_contribution_rank_panel.dart';
 import 'package:simple_live_app/widgets/keep_alive_wrapper.dart';
 import 'package:simple_live_app/widgets/net_image.dart';
@@ -901,8 +902,18 @@ class LiveRoomPage extends GetView<LiveRoomController> {
     );
   }
 
+  /// 五大平台直播：走原有聊天/关注/动态/设置 tab；其余（影视库/自定义源）走点播布局。
+  bool _isLegacyLiveSite(String siteId) {
+    return siteId == Constant.kBiliBili ||
+        siteId == Constant.kDouyu ||
+        siteId == Constant.kHuya ||
+        siteId == Constant.kDouyin ||
+        siteId == Constant.kKuaishou;
+  }
+
   Widget buildMessageArea() {
     return Obx(() {
+      final isVodLayout = !_isLegacyLiveSite(controller.site.id);
       final hasSuperChatTab = controller.site.id == Constant.kBiliBili ||
           controller.site.id == Constant.kHuya;
       final tabs = <Widget>[];
@@ -977,8 +988,26 @@ class LiveRoomPage extends GetView<LiveRoomController> {
         }
       }
 
-      for (final key in AppSettingsController.instance.liveRoomTabSort) {
-        addTab(key);
+      if (isVodLayout) {
+        // 点播布局（影视库/自定义直播源）：信息(默认) | 集数(有剧集时) | 关注 | 设置
+        keys.add("vod_info");
+        tabs.add(const Tab(text: "信息"));
+        pages.add(VodInfoPanel(controller: controller));
+        if (controller.hasVodEpisodes.value) {
+          keys.add("vod_episodes");
+          tabs.add(const Tab(text: "集数"));
+          pages.add(VodEpisodePanel(controller: controller));
+        }
+        keys.add("follow");
+        tabs.add(const Tab(text: "关注"));
+        pages.add(buildFollowList());
+        keys.add("settings");
+        tabs.add(const Tab(text: "设置"));
+        pages.add(buildSettings());
+      } else {
+        for (final key in AppSettingsController.instance.liveRoomTabSort) {
+          addTab(key);
+        }
       }
       if (tabs.isEmpty) {
         keys.add("chat");

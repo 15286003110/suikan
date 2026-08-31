@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:simple_live_app/app/app_style.dart';
+import 'package:simple_live_app/app/fnos/fn_os_service.dart';
 import 'package:simple_live_app/app/sites.dart';
 import 'package:simple_live_app/app/utils.dart';
 import 'package:simple_live_app/modules/mine/history/history_controller.dart';
@@ -40,7 +41,11 @@ class HistoryPage extends GetView<HistoryController> {
         firstRefresh: true,
         itemBuilder: (_, i) {
           var item = controller.list[i];
-          var site = Sites.allSites[item.siteId]!;
+          var site = Sites.allSites[item.siteId] ??
+              FnOsService.instance.siteForServer(item.siteId);
+          if (site == null) {
+            return const SizedBox.shrink();
+          }
           return Dismissible(
             key: ValueKey(item.id),
             direction: DismissDirection.endToStart,
@@ -102,7 +107,12 @@ class HistoryPage extends GetView<HistoryController> {
                   });
                   return;
                 }
-                AppNavigator.toLiveRoomDetail(site: site, roomId: item.roomId);
+                AppNavigator.toLiveRoomDetail(
+                  site: site,
+                  roomId: item.roomId,
+                  isVod:
+                      FnOsService.instance.serverForSiteId(item.siteId) != null,
+                );
               },
               onLongPress: () async {
                 var result =

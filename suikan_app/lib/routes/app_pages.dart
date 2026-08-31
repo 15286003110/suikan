@@ -134,11 +134,15 @@ class AppPages {
             args["initialDesktopSidePanelCollapsed"] == true;
         final isVod =
             args is Map<String, dynamic> && args["isVod"] == true;
+        final vodSeriesGuid = args is Map<String, dynamic>
+            ? (args["vodSeriesGuid"] as String?)
+            : null;
         return LiveRoomController(
           pSite: site,
           pRoomId: Get.parameters["roomId"] ?? "",
           initialDesktopSidePanelCollapsed: initialCollapsed,
           isVod: isVod,
+          vodSeriesGuid: vodSeriesGuid,
         );
       }),
     ),

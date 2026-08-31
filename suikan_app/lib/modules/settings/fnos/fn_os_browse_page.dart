@@ -2,12 +2,12 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:get/get.dart';
+import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 
 import 'package:simple_live_app/app/event_bus.dart';
 import 'package:simple_live_app/app/fnos/fn_os_models.dart';
 import 'package:simple_live_app/app/fnos/fn_os_service.dart';
-import 'package:simple_live_app/modules/settings/fnos/fn_os_detail_page.dart';
+import 'package:simple_live_app/routes/app_navigation.dart';
 import 'package:simple_live_app/services/local_storage_service.dart';
 import 'package:simple_live_app/widgets/net_image.dart';
 import 'package:simple_live_app/widgets/shadow_card.dart';
@@ -129,11 +129,38 @@ class _FnOsBrowsePageState extends State<FnOsBrowsePage> {
   }
 
   void _openMovie(FnOsMovie movie) {
-    Get.to(() => FnOsDetailPage(movie: movie, server: widget.server));
+    // 电影：直接进播放页（信息 tab 承担详情职能）。
+    final site = FnOsService.instance.siteForServer(widget.server.id);
+    if (site == null) return;
+    AppNavigator.toLiveRoomDetail(site: site, roomId: movie.guid, isVod: true);
   }
 
-  void _openSeries(FnOsTvSeries series) {
-    Get.to(() => FnOsDetailPage(series: series, server: widget.server));
+  Future<void> _openSeries(FnOsTvSeries series) async {
+    // 电视剧：解析第一季第一集后直接进播放页；剧集 guid 传给播放页拉季/集列表。
+    final site = FnOsService.instance.siteForServer(widget.server.id);
+    if (site == null) return;
+    try {
+      final detail =
+          await FnOsService.instance.fetchTvSeriesDetail(widget.server, series);
+      if (detail.seasons.isEmpty) {
+        SmartDialog.showToast("该剧暂无剧集");
+        return;
+      }
+      final eps = await FnOsService.instance
+          .getEpisodes(widget.server, detail.seasons.first.guid);
+      if (eps.isEmpty) {
+        SmartDialog.showToast("该剧暂无剧集");
+        return;
+      }
+      AppNavigator.toLiveRoomDetail(
+        site: site,
+        roomId: eps.first.guid,
+        isVod: true,
+        vodSeriesGuid: series.guid,
+      );
+    } catch (e) {
+      SmartDialog.showToast("无法打开播放：$e");
+    }
   }
 
   // ─────────────── 排序/筛选/布局 ───────────────
