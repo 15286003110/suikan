@@ -37,8 +37,8 @@ jobs:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
         run: |
           if [[ -n "$KEYSTORE_BASE64" && -n "$STORE_PASSWORD" && -n "$KEY_PASSWORD" && -n "$KEY_ALIAS" ]]; then
-            printf '%s' "$KEYSTORE_BASE64" | openssl base64 -d -A > simple_live_app/android/release-keystore.jks
-            printf 'storeFile=../release-keystore.jks\nstorePassword=%s\nkeyPassword=%s\nkeyAlias=%s\n' "$STORE_PASSWORD" "$KEY_PASSWORD" "$KEY_ALIAS" > simple_live_app/android/key.properties
+            printf '%s' "$KEYSTORE_BASE64" | openssl base64 -d -A > suikan_app/android/release-keystore.jks
+            printf 'storeFile=../release-keystore.jks\nstorePassword=%s\nkeyPassword=%s\nkeyAlias=%s\n' "$STORE_PASSWORD" "$KEY_PASSWORD" "$KEY_ALIAS" > suikan_app/android/key.properties
           fi
 
       - name: Setup Java
@@ -56,14 +56,14 @@ jobs:
 
       - name: Restore Packages
         run: |
-          cd simple_live_app
+          cd suikan_app
           flutter pub get
 
       - name: Read app version
         id: app_version
         shell: bash
         run: |
-          app_version="$(grep '^version:' simple_live_app/pubspec.yaml | awk '{print $2}')"
+          app_version="$(grep '^version:' suikan_app/pubspec.yaml | awk '{print $2}')"
           echo "app_version=$app_version" >> "$GITHUB_OUTPUT"
 
       - name: Resolve ref info
@@ -83,15 +83,15 @@ jobs:
 
       - name: Build Android APK
         run: |
-          cd simple_live_app
+          cd suikan_app
           flutter build apk --release
 
       - name: Rename APK for release
         id: apk_asset
         shell: bash
         run: |
-          asset_path="simple_live_app/build/app/outputs/flutter-apk/simple_live_app-${{ steps.app_version.outputs.app_version }}-android.apk"
-          cp simple_live_app/build/app/outputs/flutter-apk/app-release.apk "$asset_path"
+          asset_path="suikan_app/build/app/outputs/flutter-apk/suikan_app-${{ steps.app_version.outputs.app_version }}-android.apk"
+          cp suikan_app/build/app/outputs/flutter-apk/app-release.apk "$asset_path"
           echo "asset_path=$asset_path" >> "$GITHUB_OUTPUT"
 
       - name: Upload APK to Artifacts
