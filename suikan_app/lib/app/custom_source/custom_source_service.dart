@@ -53,9 +53,12 @@ class CustomSourceService extends GetxService {
     return this;
   }
 
-  /// 频道唯一键：优先用 tvgId，否则用「名称+地址」避免同名多线路冲突。
+  /// 频道唯一键：tvgId + 播放地址组合。
+  /// 注意不能只用 tvgId —— 同一源里常见多条线路共用同一 tvgId（如
+  /// buez 源 CCTV3综艺 有 3 条线路），只按 tvgId 去重会把线路互相覆盖，
+  /// 刷新后所有线路的 url/logo 被最后一条顶替，台标随之错乱/消失。
   String _chanKey(M3uChannel c) {
-    if (c.tvgId != null && c.tvgId!.isNotEmpty) return 't:${c.tvgId}';
+    if (c.tvgId != null && c.tvgId!.isNotEmpty) return 't:${c.tvgId} ${c.url}';
     return 'n:${c.name} ${c.url}';
   }
 
