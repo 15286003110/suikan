@@ -7,6 +7,7 @@ import 'package:simple_live_app/app/log.dart';
 import 'package:simple_live_app/app/sites.dart';
 import 'package:simple_live_app/models/db/follow_user.dart';
 import 'package:simple_live_app/widgets/net_image.dart';
+import 'package:simple_live_core/simple_live_core.dart';
 
 enum FollowUserItemStyle {
   defaultList,
@@ -720,7 +721,17 @@ class FollowUserItem extends StatelessWidget {
     return parts.join("，");
   }
 
-  Site get _site => Sites.allSites[item.siteId]!;
+  /// 站点信息。关注里可能包含本地未注册的站点（如同步来的自定义源关注，
+  /// 源端有对应自定义源而本端没有）——此时返回兜底站点，避免渲染崩溃
+  /// （原实现 `Sites.allSites[item.siteId]!` 对 null 断言直接崩）。
+  Site get _site =>
+      Sites.allSites[item.siteId] ??
+      Site(
+        id: item.siteId,
+        name: item.siteId,
+        logo: 'assets/images/custom_source.png',
+        liveSite: LiveSite(),
+      );
 
   String get _coverImage {
     if (item.liveStatus.value != 2) {
