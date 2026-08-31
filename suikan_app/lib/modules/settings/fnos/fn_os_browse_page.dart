@@ -46,9 +46,9 @@ class _FnOsBrowsePageState extends State<FnOsBrowsePage> {
   final List<FnOsMovie> _allMovies = [];
   final List<FnOsTvSeries> _allSeries = [];
 
-  /// 类型切换：0=全部 1=电影 2=电视剧 3=动漫（AppBar 中间平铺选择）。
+  /// 类型切换：0=全部 1=电影 2=电视剧（AppBar 中间平铺选择）。
   int _contentType = 0;
-  static const _kTypeLabels = ['全部', '电影', '电视剧', '动漫'];
+  static const _kTypeLabels = ['全部', '电影', '电视剧'];
 
   late final StreamSubscription<dynamic> _sourcesSub;
 
@@ -225,19 +225,6 @@ class _FnOsBrowsePageState extends State<FnOsBrowsePage> {
     return filtered;
   }
 
-  String get _sortByLabel {
-    switch (_sortBy) {
-      case _SortBy.addDate:
-        return '添加日期';
-      case _SortBy.releaseDate:
-        return '发行日期';
-      case _SortBy.title:
-        return '标题';
-      case _SortBy.rating:
-        return '评分';
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -324,12 +311,10 @@ class _FnOsBrowsePageState extends State<FnOsBrowsePage> {
                 ),
               ),
             ],
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text('$_sortByLabel${_sortAsc ? '↑' : '↓'}'),
-                const Icon(Icons.arrow_drop_down, size: 18),
-              ],
+            child: Icon(
+              Icons.sort,
+              size: 22,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
           ),
           IconButton(
@@ -353,11 +338,6 @@ class _FnOsBrowsePageState extends State<FnOsBrowsePage> {
     }
     var movies = _sortedMovies();
     var series = _sortedSeries();
-    if (_contentType == 3) {
-      // 动漫：电影/剧集中 genres 含「动画」的条目。
-      movies = movies.where((m) => m.genres.contains('动画')).toList();
-      series = series.where((s) => s.genres.contains('动画')).toList();
-    }
     if (movies.isEmpty && series.isEmpty) {
       return const Center(child: Text('该服务器暂无影视内容'));
     }
