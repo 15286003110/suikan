@@ -16,6 +16,18 @@ class VodEpisodePanel extends StatefulWidget {
 
 class _VodEpisodePanelState extends State<VodEpisodePanel> {
   int _seasonIndex = 0;
+  /// 最近一次触发过"懒加载集列表"的季 guid（避免 build 反复请求）。
+  String? _requestedSeasonGuid;
+
+  /// 定位当前播放集所在的季；找不到（季集未加载完）返回 -1。
+  int _locateSeasonIndex(List<FnOsSeason> seasons, String currentGuid) {
+    for (var i = 0; i < seasons.length; i++) {
+      if (seasons[i].episodes.any((e) => e.guid == currentGuid)) {
+        return i;
+      }
+    }
+    return -1;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -24,9 +36,19 @@ class _VodEpisodePanelState extends State<VodEpisodePanel> {
       if (seasons.isEmpty) {
         return const Center(child: Text('暂无剧集'));
       }
-      if (_seasonIndex >= seasons.length) _seasonIndex = 0;
-      final season = seasons[_seasonIndex];
+      // 切集/进入时跟随当前播放集所在季；手动切季后保持手动选择。
+      final located = _locateSeasonIndex(seasons, widget.controller.roomId);
+      final displayIndex = located >= 0 ? located : _seasonIndex;
+      if (displayIndex >= seasons.length) _seasonIndex = 0;
+      final season = seasons[displayIndex];
       final episodes = season.episodes;
+      // 当前季集未加载 → 懒加载（进入时若当前集在其它季，保证能展开该季）。
+      if (episodes.isEmpty && _requestedSeasonGuid != season.guid) {
+        _requestedSeasonGuid = season.guid;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) widget.controller.selectVodSeason(season);
+        });
+      }
 
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -41,7 +63,7 @@ class _VodEpisodePanelState extends State<VodEpisodePanel> {
               separatorBuilder: (_, __) => const SizedBox(width: 8),
               itemBuilder: (_, i) {
                 final s = seasons[i];
-                final selected = i == _seasonIndex;
+                final selected = i == displayIndex;
                 return ChoiceChip(
                   label: Text(
                     s.title.isNotEmpty ? s.title : '第 ${s.seasonNumber} 季',
@@ -97,9 +119,12 @@ class _EpisodeCell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final label = episode.title.trim().isNotEmpty
-        ? episode.title.trim()
-        : '第 ${episode.episodeNumber} 集';
+    // 集格子显示纯集数（1/2/3…），与主流播放器一致；编号异常时退回标题。
+    final label = episode.episodeNumber > 0
+        ? '${episode.episodeNumber}'
+        : (episode.title.trim().isNotEmpty
+            ? episode.title.trim()
+            : '?');
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(8),
