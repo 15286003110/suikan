@@ -722,10 +722,9 @@ class FollowUserItem extends StatelessWidget {
   }
 
   /// 站点信息。关注里可能包含本地未注册的站点（如同步来的自定义源关注，
-  /// 源端有对应自定义源而本端没有）——此时返回兜底站点，避免渲染崩溃
-  /// （原实现 `Sites.allSites[item.siteId]!` 对 null 断言直接崩）。
+  /// 或源已被删除）——此时返回兜底站点，避免渲染崩溃。
   Site get _site =>
-      Sites.allSites[item.siteId] ??
+      Sites.siteForKey(item.siteId) ??
       Site(
         id: item.siteId,
         name: item.siteId,

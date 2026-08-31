@@ -1175,10 +1175,17 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
 
     _autoSwitchingRoom = true;
     try {
+      // 目标站点可能已被删除/未注册（自定义源/影视库被删后仍在关注列表里），
+      // 此时不能直接切（原 `Sites.allSites[...]!` 对 null 断言崩溃），跳过切换。
+      final targetSite = Sites.siteForKey(target.siteId);
+      if (targetSite == null) {
+        Log.d("自动切换直播间失败：站点未注册 siteId=${target.siteId}");
+        return;
+      }
       SmartDialog.showToast(
         reason == "live_end" ? "当前直播已结束，已切换到下一个直播间" : "当前直播播放失败，已切换到下一个直播间",
       );
-      resetRoom(Sites.allSites[target.siteId]!, target.roomId);
+      resetRoom(targetSite, target.roomId);
     } finally {
       _autoSwitchingRoom = false;
     }
@@ -1322,8 +1329,12 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
       index = 0;
     }
     var nextChannel = liveChannels[index];
-
-    resetRoom(Sites.allSites[nextChannel.siteId]!, nextChannel.roomId);
+    final nextSite = Sites.siteForKey(nextChannel.siteId);
+    if (nextSite == null) {
+      Log.d("切频道失败：站点未注册 siteId=${nextChannel.siteId}");
+      return;
+    }
+    resetRoom(nextSite, nextChannel.roomId);
   }
 
   void prevChannel() {
@@ -1344,8 +1355,12 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
       index = liveChannels.length - 1;
     }
     var nextChannel = liveChannels[index];
-
-    resetRoom(Sites.allSites[nextChannel.siteId]!, nextChannel.roomId);
+    final nextSite = Sites.siteForKey(nextChannel.siteId);
+    if (nextSite == null) {
+      Log.d("切频道失败：站点未注册 siteId=${nextChannel.siteId}");
+      return;
+    }
+    resetRoom(nextSite, nextChannel.roomId);
   }
 
   @override

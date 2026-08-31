@@ -14,9 +14,13 @@ class MultiRoomItem {
     required this.face,
   });
 
-  factory MultiRoomItem.fromFollow(FollowUser item) {
+  /// 站点已删除/未注册（自定义源/影视库被删后仍在关注列表里）时返回 null，
+  /// 由调用方过滤，避免 `Sites.allSites[...]!` 对 null 断言崩溃。
+  static MultiRoomItem? fromFollow(FollowUser item) {
+    final site = Sites.siteForKey(item.siteId);
+    if (site == null) return null;
     return MultiRoomItem(
-      site: Sites.allSites[item.siteId]!,
+      site: site,
       roomId: item.roomId,
       userName: item.userName,
       face: item.face,

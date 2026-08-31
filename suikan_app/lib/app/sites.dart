@@ -67,13 +67,15 @@ class Sites {
     final result = <Site>[];
     for (final key in order) {
       if (hidden.contains(key)) continue;
-      final site = _siteForKey(key);
+      final site = siteForKey(key);
       if (site != null) result.add(site);
     }
     return result;
   }
 
-  static Site? _siteForKey(String key) {
+  /// 按站点 id 解析站点：内置平台查 allSites；自定义源/影视库走动态服务
+  /// （源被删除/改名后注册表里没有，这里返回 null，调用方需兜底，禁止 `!`）。
+  static Site? siteForKey(String key) {
     if (key.startsWith('custom_')) {
       return CustomSourceService.instance.siteForSource(
         key.substring('custom_'.length),

@@ -70,6 +70,22 @@ class Sites {
         .toList();
     return [...builtin, ...custom, ...fnos];
   }
+
+  /// 按站点 id 解析站点：内置平台查 allSites；自定义源/影视库走动态服务。
+  /// 源被删除/改名后这里返回 null，调用方必须兜底，禁止 `!` 断言。
+  static Site? siteForKey(String key) {
+    if (key.startsWith('custom_')) {
+      return CustomSourceService.instance.siteForSource(
+        key.substring('custom_'.length),
+      );
+    }
+    if (key.startsWith('fnos_')) {
+      return FnOsService.instance.siteForServer(
+        key.substring('fnos_'.length),
+      );
+    }
+    return allSites[key];
+  }
 }
 
 class Site {

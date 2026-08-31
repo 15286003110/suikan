@@ -490,6 +490,7 @@ class FollowUserController extends BasePageController<FollowUser> {
             item.liveStatus.value == 2 &&
             Sites.allSites.containsKey(item.siteId))
         .map(MultiRoomItem.fromFollow)
+        .whereType<MultiRoomItem>()
         .toList();
     if (selected.length < 2) {
       SmartDialog.showToast("至少选择 2 个直播中的关注");

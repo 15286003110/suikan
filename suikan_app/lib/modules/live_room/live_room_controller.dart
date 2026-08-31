@@ -2424,10 +2424,17 @@ class LiveRoomController extends PlayerController
 
     _autoSwitchingRoom = true;
     try {
+      // 目标站点可能已被删除/未注册（自定义源/影视库被删后仍在关注列表里），
+      // 此时不能直接切（原 `Sites.allSites[...]!` 对 null 断言崩溃），跳过切换。
+      final targetSite = Sites.siteForKey(target.siteId);
+      if (targetSite == null) {
+        Log.d("自动切换直播间失败：站点未注册 siteId=${target.siteId}");
+        return;
+      }
       SmartDialog.showToast(
         reason == "live_end" ? "当前直播已结束，已切换到下一个直播间" : "当前直播播放失败，已切换到下一个直播间",
       );
-      resetRoom(Sites.allSites[target.siteId]!, target.roomId);
+      resetRoom(targetSite, target.roomId);
     } finally {
       _autoSwitchingRoom = false;
     }
@@ -3436,9 +3443,16 @@ class LiveRoomController extends PlayerController
         playing:
             rxSite.value.id == item.siteId && rxRoomId.value == item.roomId,
         onTap: () {
+          // 站点可能已删除/未注册（自定义源/影视库被删后仍在关注列表里），
+          // 点击进入时兜底处理，避免 `Sites.allSites[...]!` 对 null 断言崩溃。
+          final targetSite = Sites.siteForKey(item.siteId);
+          if (targetSite == null) {
+            SmartDialog.showToast("该直播间所属站点已不存在");
+            return;
+          }
           onClose();
           resetRoom(
-            Sites.allSites[item.siteId]!,
+            targetSite,
             item.roomId,
           );
         },

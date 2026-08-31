@@ -365,7 +365,13 @@ class FollowService extends GetxService {
       if (item.siteId == Constant.kDouyin && douyinLimiter != null) {
         await douyinLimiter.beforeRequest(workerIndex);
       }
-      var site = Sites.allSites[item.siteId]!;
+      var site = Sites.siteForKey(item.siteId);
+      // 站点已删除/未注册（自定义源/影视库被删后仍在关注列表里）：
+      // 刷新状态直接跳过，避免 `Sites.allSites[...]!` 对 null 断言崩溃。
+      if (site == null) {
+        return const _FollowRefreshItemResult(
+            _FollowRefreshItemOutcome.deferred);
+      }
       // 手动/自动关注刷新统一走状态优先，不在主链路同步补详情。
       var isLiving = await site.liveSite.getLiveStatus(roomId: item.roomId);
       if (generation != null && generation != _updateGeneration) {
