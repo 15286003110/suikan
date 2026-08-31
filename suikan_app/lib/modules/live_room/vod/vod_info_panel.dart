@@ -70,13 +70,30 @@ class VodInfoPanel extends StatelessWidget {
                   ),
                 )
               else if (!hasFnOs)
-                // 自定义直播源：台标（横向小方块；无台标时显示默认图）
+                // 自定义直播源：台标（横向小方块，与频道列表一致）；
+                // 无台标显示频道列表同款默认图（live_tv 图标）
                 ClipRRect(
                   borderRadius: BorderRadius.circular(6),
-                  child: NetImage(
-                    controller.detail.value?.userAvatar ?? '',
+                  child: SizedBox(
                     width: 96,
-                    height: 48,
+                    height: 54,
+                    child: ColoredBox(
+                      color: theme.colorScheme.surfaceContainerHighest,
+                      child:
+                          (controller.detail.value?.userAvatar ?? '').isNotEmpty
+                              ? SizedBox.expand(
+                                  child: NetImage(
+                                    controller.detail.value!.userAvatar,
+                                    fit: BoxFit.contain,
+                                  ),
+                                )
+                              : Icon(
+                                  Icons.live_tv,
+                                  size: 24,
+                                  color: theme.colorScheme.primary
+                                      .withAlpha(120),
+                                ),
+                    ),
                   ),
                 )
               else
