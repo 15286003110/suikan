@@ -183,6 +183,16 @@ class VodInfoPanel extends StatelessWidget {
           // ── 自定义源降级信息（无飞牛数据时）─────────────
           if (!hasFnOs) ...[
             AppStyle.vGap12,
+            // 台标：有频道 logo 显示台标，无则显示默认图；横向小方块
+            ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: NetImage(
+                controller.detail.value?.userAvatar ?? '',
+                width: 96,
+                height: 48,
+              ),
+            ),
+            AppStyle.vGap8,
             Text(
               '来源信息',
               style: theme.textTheme.titleSmall
