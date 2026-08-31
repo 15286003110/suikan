@@ -83,6 +83,15 @@ class _DanmakuScreenState extends State<DanmakuScreen>
   final Map<String, ui.Image> _emojiImageCache = {};
   final Set<String> _loadingEmojiImageUrls = {};
 
+  /// 弹幕稀疏时降低重绘频率（省电，2026-08-31 新增）
+  /// 屏幕上滚动弹幕 ≤ [_sparseThreshold] 条时，重绘间隔拉长到
+  /// [_sparseFrameInterval]（约 15fps），不再每帧重建 CustomPaint；
+  /// 超过阈值立即恢复全速。
+  static const int _sparseThreshold = 8;
+  static const Duration _sparseFrameInterval = Duration(milliseconds: 66);
+  Widget? _scrollPaintCache;
+  DateTime _lastScrollPaintAt = DateTime.fromMillisecondsSinceEpoch(0);
+
   @override
   void initState() {
     super.initState();
@@ -386,6 +395,8 @@ class _DanmakuScreenState extends State<DanmakuScreen>
       if (_animationController.isAnimating) {
         _animationController.stop();
       }
+      _scrollPaintCache = null;
+      _lastScrollPaintAt = DateTime.fromMillisecondsSinceEpoch(0);
       if (_stopwatch.isRunning) {
         _stopwatch.stop();
       }
@@ -506,6 +517,8 @@ class _DanmakuScreenState extends State<DanmakuScreen>
       _specialDanmakuItems.clear();
     });
     _animationController.stop();
+    _scrollPaintCache = null;
+    _lastScrollPaintAt = DateTime.fromMillisecondsSinceEpoch(0);
     _stopwatch.stop();
   }
 
@@ -648,7 +661,21 @@ class _DanmakuScreenState extends State<DanmakuScreen>
                     child: AnimatedBuilder(
                       animation: _animationController,
                       builder: (context, child) {
-                        return CustomPaint(
+                        // 弹幕稀疏时降频重绘：返回上次的 paint widget，
+                        // 不重建 CustomPaint，省去每帧 painter.paint 的 GPU 开销。
+                        // 位置由 _animationController.value 连续取值，
+                        // 低帧率下慢速弹幕视觉上依然连续。
+                        final activeScrollCount = _scrollDanmakuItems.length;
+                        if (activeScrollCount <= _sparseThreshold) {
+                          final now = DateTime.now();
+                          if (_scrollPaintCache != null &&
+                              now.difference(_lastScrollPaintAt) <
+                                  _sparseFrameInterval) {
+                            return _scrollPaintCache!;
+                          }
+                          _lastScrollPaintAt = now;
+                        }
+                        return _scrollPaintCache = CustomPaint(
                           painter: ScrollDanmakuPainter(
                             _animationController.value,
                             _scrollDanmakuItems,
