@@ -1847,6 +1847,7 @@ class PlayerController extends BaseController
     _playbackOpenFuture = opening;
     try {
       await opening;
+      _scheduleAudioOnlyProbe(loadGeneration, mediaGeneration);
       return _isPlaybackOwnerCurrent(
         loadGeneration,
         mediaGeneration,
@@ -1857,6 +1858,34 @@ class PlayerController extends BaseController
         _playbackOpenFuture = null;
       }
     }
+  }
+
+  /// 纯音频流探测：延迟 4 秒检查视频轨是否始终未出现。
+  /// 若 videoParams 为空但有音频轨 → 自动切 vid=no（音频链路，避免 mpv
+  /// 按视频流处理纯音频源导致卡顿）。收到视频参数或用户已手动纯音频则放弃。
+  void _scheduleAudioOnlyProbe(int loadGeneration, int mediaGeneration) {
+    _audioOnlyProbeTimer?.cancel();
+    _audioOnlyProbeTimer = Timer(const Duration(seconds: 4), () {
+      _audioOnlyProbeTimer = null;
+      if (!_isPlaybackOwnerCurrent(
+        loadGeneration,
+        mediaGeneration,
+        null,
+      )) {
+        return;
+      }
+      // 用户已手动开启纯音频，无需重复处理。
+      if (AppSettingsController.instance.audioOnlyBackground.value) {
+        return;
+      }
+      // 有视频尺寸（视频轨已出现）→ 正常视频流，不是纯音频。
+      if (player.state.videoParams.w != null) {
+        return;
+      }
+      Log.d("检测到纯音频流（无视频轨），自动切换音频模式");
+      SmartDialog.showToast("该源为纯音频流，已自动切换音频模式");
+      unawaited(setAudioOnlyMode(true));
+    });
   }
 
   Future<void> waitForPlaybackOpen() async {
@@ -1893,6 +1922,12 @@ class PlayerController extends BaseController
   int? _iosVideoSourceWidth;
   int? _iosVideoSourceHeight;
   bool _iosVideoOutputForceApply = false;
+
+  /// 纯音频流自动识别（2026-08-31 新增）：
+  /// 部分直播源本身只有音频轨（如 ifeng 的 _audio 流，TS 内无视频 PID），
+  /// mpv 按视频流对待会缓冲/解码错配导致卡顿。加载后延迟探测一次：
+  /// videoParams 始终为空且有音频轨 → 判定纯音频流 → 自动 vid=no 走音频链路。
+  Timer? _audioOnlyProbeTimer;
 
   String get videoOutputResolution {
     final output = _iosVideoOutputSize;
@@ -2180,9 +2215,12 @@ class PlayerController extends BaseController
       unawaited(refreshAutoPipOnVideoSize());
       unawaited(_syncAndroidExternalWindowLandscapeOrientation());
     });
-    _videoParamsSubscription = player.stream.videoParams.listen(
-      _handleVideoParamsForIosOutput,
-    );
+    _videoParamsSubscription = player.stream.videoParams.listen((params) {
+      // 出现视频参数说明有视频轨，纯音频探测作废。
+      _audioOnlyProbeTimer?.cancel();
+      _audioOnlyProbeTimer = null;
+      _handleVideoParamsForIosOutput(params);
+    });
 
     // Fix Issue #57: 启动Surface健康检查
     _startSurfaceHealthCheck();
@@ -2206,6 +2244,8 @@ class PlayerController extends BaseController
     _iosOriginalQualityPowerSavingWorker?.dispose();
     _iosOriginalQualityPowerSavingWorker = null;
     _iosVideoOutputSyncTimer = null;
+    _audioOnlyProbeTimer?.cancel();
+    _audioOnlyProbeTimer = null;
     _surfaceHealthCheckTimer = null;
     _surfaceRecoveryToken += 1;
     _surfaceRecoveryInFlight = false;
