@@ -194,6 +194,9 @@ class ProfileBackupService extends GetxService {
     }
     EventBus.instance.emit(Constant.kUpdateFollow, 0);
     EventBus.instance.emit(Constant.kUpdateHistory, 0);
+    // 配置导入后强制落盘：Hive putAll 返回时写队列未 fsync，
+    // 立即退出/被覆盖安装强杀 → 半写帧 → 下次启动判损坏重建空箱（关注列表丢失）。
+    await DBService.instance.flushAll();
     return summary;
   }
 
@@ -276,6 +279,9 @@ class ProfileBackupService extends GetxService {
     }
     EventBus.instance.emit(Constant.kUpdateFollow, 0);
     EventBus.instance.emit(Constant.kUpdateHistory, 0);
+    // 配置导入后强制落盘：Hive putAll 返回时写队列未 fsync，
+    // 立即退出/被覆盖安装强杀 → 半写帧 → 下次启动判损坏重建空箱（关注列表丢失）。
+    await DBService.instance.flushAll();
     return summary;
   }
 
@@ -315,6 +321,8 @@ class ProfileBackupService extends GetxService {
     }
     EventBus.instance.emit(Constant.kUpdateFollow, 0);
     EventBus.instance.emit(Constant.kUpdateHistory, 0);
+    // 配置导入后强制落盘（同 importProfileMap：防覆盖安装强杀导致半写帧损坏）。
+    await DBService.instance.flushAll();
     return summary;
   }
 

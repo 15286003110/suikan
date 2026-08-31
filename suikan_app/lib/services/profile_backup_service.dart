@@ -182,6 +182,8 @@ class ProfileBackupService extends GetxService {
     }
     EventBus.instance.emit(Constant.kUpdateFollow, 0);
     EventBus.instance.emit(Constant.kUpdateHistory, 0);
+    // 配置导入后强制落盘（同 TV 端：防覆盖安装强杀导致半写帧损坏、关注列表丢失）。
+    await DBService.instance.flushAll();
     return summary;
   }
 
@@ -271,6 +273,8 @@ class ProfileBackupService extends GetxService {
     }
     EventBus.instance.emit(Constant.kUpdateFollow, 0);
     EventBus.instance.emit(Constant.kUpdateHistory, 0);
+    // 配置导入后强制落盘（同 TV 端：防覆盖安装强杀导致半写帧损坏、关注列表丢失）。
+    await DBService.instance.flushAll();
     return summary;
   }
 
@@ -356,6 +360,8 @@ class ProfileBackupService extends GetxService {
     }
     EventBus.instance.emit(Constant.kUpdateFollow, 0);
     EventBus.instance.emit(Constant.kUpdateHistory, 0);
+    // 配置导入后强制落盘（同 TV 端：防覆盖安装强杀导致半写帧损坏、关注列表丢失）。
+    await DBService.instance.flushAll();
     return summary;
   }
 
