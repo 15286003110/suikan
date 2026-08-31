@@ -112,7 +112,13 @@ class VodInfoPanel extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      title.isNotEmpty ? title : controller.roomId,
+                      // 飞牛用影片标题；自定义直播源用频道名（台标右侧），地址兜底
+                      title.isNotEmpty
+                          ? title
+                          : ((controller.detail.value?.userName ?? '')
+                                  .isNotEmpty
+                              ? controller.detail.value!.userName
+                              : controller.roomId),
                       style: theme.textTheme.titleMedium
                           ?.copyWith(fontWeight: FontWeight.bold),
                       maxLines: 3,
