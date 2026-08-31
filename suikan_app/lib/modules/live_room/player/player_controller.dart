@@ -1863,10 +1863,15 @@ class PlayerController extends BaseController
   /// 纯音频流探测：延迟 4 秒检查视频轨是否始终未出现。
   /// 若 videoParams 为空但有音频轨 → 自动切 vid=no（音频链路，避免 mpv
   /// 按视频流处理纯音频源导致卡顿）。收到视频参数或用户已手动纯音频则放弃。
-  /// 直播纯音频源会周期性重连（如 ifeng audio 约 30s 一次），每次重连都会
-  /// 重新走 openPlaybackMedia → 重复探测。用 [_autoAudioOnlyActivated] 保证
-  /// **提示只弹一次**，后续重连只静默保持 vid=no，不再打扰用户。
+  /// **一旦识别为纯音频流（[_autoAudioOnlyActivated]）就锁定音频模式**：
+  /// 直播纯音频源周期性重连（ifeng audio 约 30s）时直接保持 vid=no，
+  /// 不再启动探测、不再弹提示（用户要求"只要是音频流就一直以音频流播放"）。
   void _scheduleAudioOnlyProbe(int loadGeneration, int mediaGeneration) {
+    // 本播放会话已识别为纯音频：不再探测，静默保持音频模式。
+    if (_autoAudioOnlyActivated) {
+      unawaited(setAudioOnlyMode(true));
+      return;
+    }
     _audioOnlyProbeTimer?.cancel();
     _audioOnlyProbeTimer = Timer(const Duration(seconds: 4), () {
       _audioOnlyProbeTimer = null;
@@ -1885,11 +1890,9 @@ class PlayerController extends BaseController
       if (player.state.videoParams.w != null) {
         return;
       }
-      Log.d("检测到纯音频流（无视频轨），自动切换音频模式");
-      if (!_autoAudioOnlyActivated) {
-        _autoAudioOnlyActivated = true;
-        SmartDialog.showToast("该源为纯音频流，已自动切换音频模式");
-      }
+      Log.d("检测到纯音频流（无视频轨），锁定音频模式");
+      _autoAudioOnlyActivated = true;
+      SmartDialog.showToast("该源为纯音频流，已自动切换音频模式");
       unawaited(setAudioOnlyMode(true));
     });
   }
