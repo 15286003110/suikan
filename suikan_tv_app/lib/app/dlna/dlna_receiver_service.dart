@@ -377,7 +377,7 @@ class DlnaReceiverService extends GetxService {
     <manufacturerURL>https://github.com/mobingchong/suikan</manufacturerURL>
     <modelDescription>Suikan TV DLNA Media Renderer</modelDescription>
     <modelName>Suikan TV</modelName>
-    <modelNumber>2.1.23</modelNumber>
+    <modelNumber>2.1.24</modelNumber>
     <modelURL>https://github.com/mobingchong/suikan</modelURL>
     <serialNumber>SuikanTV001</serialNumber>
     <UDN>$_uuid</UDN>

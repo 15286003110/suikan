@@ -1,5 +1,5 @@
 name: simple_live_app
-version: 2.1.23+20033
+version: 2.1.24+20034
 publish_to: none
 description: "随看 App"
 environment:
