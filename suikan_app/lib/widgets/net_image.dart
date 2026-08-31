@@ -16,6 +16,7 @@ class NetImage extends StatelessWidget {
   final Duration? cacheMaxAge;
   final bool cache;
   final Map<String, String>? httpHeaders;
+  final VoidCallback? onLoadFailed;
   const NetImage(this.picUrl,
       {this.width,
       this.height,
@@ -28,6 +29,7 @@ class NetImage extends StatelessWidget {
       this.cacheMaxAge,
       this.cache = true,
       this.httpHeaders,
+      this.onLoadFailed,
       Key? key})
       : super(key: key);
 
@@ -80,6 +82,9 @@ class NetImage extends StatelessWidget {
             );
           }
           if (e.extendedImageLoadState == LoadState.failed) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              onLoadFailed?.call();
+            });
             return const Icon(
               Icons.broken_image,
               color: Colors.grey,

@@ -520,7 +520,9 @@ class CustomSourceSortEditPage extends StatelessWidget {
 }
 
 /// 平台直播间同款网格卡片：封面（logo/占位）+ 频道名 + 分组 + 线路数徽标。
-class _ChannelCard extends StatelessWidget {
+/// 台标支持「线路级失败回退」：同一频道多条线路 logo 不同时（如 buez 源
+/// 部分线路 tvg-logo 加载失败），第一条失败自动尝试下一条，全部失败再显示占位。
+class _ChannelCard extends StatefulWidget {
   final M3uChannelGroup group;
   final VoidCallback onTap;
   final VoidCallback? onLongPress;
@@ -531,15 +533,39 @@ class _ChannelCard extends StatelessWidget {
   });
 
   @override
+  State<_ChannelCard> createState() => _ChannelCardState();
+}
+
+class _ChannelCardState extends State<_ChannelCard> {
+  /// 当前尝试的台标下标（-1 表示全部失败，显示占位）。
+  int _logoIndex = 0;
+
+  /// 该频道所有线路的去重台标（含空串排除）。
+  List<String> get _logoCandidates {
+    final seen = <String>{};
+    final list = <String>[];
+    for (final line in widget.group.lines) {
+      final logo = line.logo;
+      if (logo != null && logo.isNotEmpty && seen.add(logo)) {
+        list.add(logo);
+      }
+    }
+    return list;
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final hasLogo = group.logo?.isNotEmpty ?? false;
+    final candidates = _logoCandidates;
+    // group 数据更新（如刷新源）后收敛下标，避免越界。
+    final idx = candidates.isEmpty ? -1 : _logoIndex.clamp(0, candidates.length - 1);
+    final hasLogo = idx >= 0;
     return Semantics(
       button: true,
-      label: group.displayName,
+      label: widget.group.displayName,
       child: ShadowCard(
-        onTap: onTap,
-        onLongPress: onLongPress,
+        onTap: widget.onTap,
+        onLongPress: widget.onLongPress,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -555,8 +581,18 @@ class _ChannelCard extends StatelessWidget {
                   child: hasLogo
                       ? SizedBox.expand(
                           child: NetImage(
-                            group.logo!,
+                            candidates[idx],
                             fit: BoxFit.contain,
+                            onLoadFailed: () {
+                              // 当前台标加载失败 → 尝试该频道下一线路的台标；
+                              // 全部失败后 idx 收敛到 -1，显示占位图标。
+                              if (!mounted) return;
+                              if (_logoIndex < candidates.length - 1) {
+                                setState(() => _logoIndex++);
+                              } else {
+                                setState(() => _logoIndex = -1);
+                              }
+                            },
                           ),
                         )
                       : Center(
@@ -581,7 +617,7 @@ class _ChannelCard extends StatelessWidget {
                       children: [
                         Expanded(
                           child: Text(
-                            group.displayName,
+                            widget.group.displayName,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: theme.textTheme.titleSmall?.copyWith(
@@ -589,7 +625,7 @@ class _ChannelCard extends StatelessWidget {
                             ),
                           ),
                         ),
-                        if (group.multiLine)
+                        if (widget.group.multiLine)
                           Container(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 5,
@@ -600,7 +636,7 @@ class _ChannelCard extends StatelessWidget {
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: Text(
-                              '${group.lines.length} 线路',
+                              '${widget.group.lines.length} 线路',
                               style: theme.textTheme.labelSmall?.copyWith(
                                 color: theme.colorScheme.primary,
                                 fontSize: 10,
@@ -609,9 +645,9 @@ class _ChannelCard extends StatelessWidget {
                           ),
                       ],
                     ),
-                    if (group.group?.isNotEmpty ?? false)
+                    if (widget.group.group?.isNotEmpty ?? false)
                       Text(
-                        group.group!,
+                        widget.group.group!,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.bodySmall?.copyWith(
