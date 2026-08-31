@@ -1863,6 +1863,9 @@ class PlayerController extends BaseController
   /// 纯音频流探测：延迟 4 秒检查视频轨是否始终未出现。
   /// 若 videoParams 为空但有音频轨 → 自动切 vid=no（音频链路，避免 mpv
   /// 按视频流处理纯音频源导致卡顿）。收到视频参数或用户已手动纯音频则放弃。
+  /// 直播纯音频源会周期性重连（如 ifeng audio 约 30s 一次），每次重连都会
+  /// 重新走 openPlaybackMedia → 重复探测。用 [_autoAudioOnlyActivated] 保证
+  /// **提示只弹一次**，后续重连只静默保持 vid=no，不再打扰用户。
   void _scheduleAudioOnlyProbe(int loadGeneration, int mediaGeneration) {
     _audioOnlyProbeTimer?.cancel();
     _audioOnlyProbeTimer = Timer(const Duration(seconds: 4), () {
@@ -1883,7 +1886,10 @@ class PlayerController extends BaseController
         return;
       }
       Log.d("检测到纯音频流（无视频轨），自动切换音频模式");
-      SmartDialog.showToast("该源为纯音频流，已自动切换音频模式");
+      if (!_autoAudioOnlyActivated) {
+        _autoAudioOnlyActivated = true;
+        SmartDialog.showToast("该源为纯音频流，已自动切换音频模式");
+      }
       unawaited(setAudioOnlyMode(true));
     });
   }
@@ -1928,6 +1934,8 @@ class PlayerController extends BaseController
   /// mpv 按视频流对待会缓冲/解码错配导致卡顿。加载后延迟探测一次：
   /// videoParams 始终为空且有音频轨 → 判定纯音频流 → 自动 vid=no 走音频链路。
   Timer? _audioOnlyProbeTimer;
+  /// 已自动进入纯音频模式（本次播放会话内只提示一次，重连不再打扰）。
+  bool _autoAudioOnlyActivated = false;
 
   String get videoOutputResolution {
     final output = _iosVideoOutputSize;
@@ -2246,6 +2254,7 @@ class PlayerController extends BaseController
     _iosVideoOutputSyncTimer = null;
     _audioOnlyProbeTimer?.cancel();
     _audioOnlyProbeTimer = null;
+    _autoAudioOnlyActivated = false;
     _surfaceHealthCheckTimer = null;
     _surfaceRecoveryToken += 1;
     _surfaceRecoveryInFlight = false;
