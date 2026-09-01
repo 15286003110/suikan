@@ -17,11 +17,12 @@ import 'package:simple_live_tv_app/widgets/shadow_card.dart';
 /// 电影库展示电影海报，电视剧库展示「电视剧」海报（一部一海报），点进去进入详情页，
 /// 详情页内再选集/点击播放，不会一进就直接播。
 class FnOsBrowsePage extends StatefulWidget {
-  final FnOsServer server;
+  /// 单个服务器浏览时传 server；null 表示聚合所有服务器（「电影电视」首页入口）。
+  final FnOsServer? server;
   final bool embedded; // 作为首页/分类标签页嵌入时不显示返回箭头
   const FnOsBrowsePage({
     Key? key,
-    required this.server,
+    this.server,
     this.embedded = false,
   }) : super(key: key);
 
@@ -47,6 +48,10 @@ class _FnOsBrowsePageState extends State<FnOsBrowsePage> {
   final List<FnOsMovie> _allMovies = [];
   final List<FnOsTvSeries> _allSeries = [];
 
+  /// 聚合模式（server==null）下，记录每个内容所属的服务器（guid → server）。
+  final Map<String, FnOsServer> _movieServer = {};
+  final Map<String, FnOsServer> _seriesServer = {};
+
   /// 类型切换：0=全部 1=电影 2=电视剧（AppBar 右上角二级选择）。
   int _contentType = 0;
 
@@ -54,6 +59,12 @@ class _FnOsBrowsePageState extends State<FnOsBrowsePage> {
 
   _SortBy _sortBy = _SortBy.addDate;
   bool _sortAsc = true;
+
+  /// 内容所属服务器：单服务器模式返回 widget.server，聚合模式按 guid 查映射。
+  FnOsServer? _serverForMovie(FnOsMovie m) =>
+      widget.server ?? _movieServer[m.guid];
+  FnOsServer? _serverForSeries(FnOsTvSeries s) =>
+      widget.server ?? _seriesServer[s.guid];
 
   /// 排序记忆（跨平台、跨页面保持，不随切换恢复默认）。
   void _restoreSortPrefs() {
@@ -95,6 +106,7 @@ class _FnOsBrowsePageState extends State<FnOsBrowsePage> {
   }
 
   /// 拉取全部影视库内容并合并（电影 + 剧集），一次展示。
+  /// 聚合模式（server==null）下遍历所有服务器并合并，记录每个内容的来源服务器。
   Future<void> _loadLibraries({bool showLoading = true}) async {
     if (showLoading) {
       setState(() {
@@ -103,21 +115,42 @@ class _FnOsBrowsePageState extends State<FnOsBrowsePage> {
       });
     }
     try {
-      final libs = await FnOsService.instance.getLibraries(widget.server);
+      final servers = widget.server != null
+          ? <FnOsServer>[widget.server!]
+          : List<FnOsServer>.from(FnOsService.instance.servers);
       _allMovies.clear();
       _allSeries.clear();
-      for (final lib in libs) {
-        final content =
-            await FnOsService.instance.getLibraryContent(widget.server, lib);
-        _allMovies.addAll(content.movies);
-        _allSeries.addAll(content.series);
+      _movieServer.clear();
+      _seriesServer.clear();
+      final summary = <String, int>{};
+      for (final server in servers) {
+        try {
+          final libs = await FnOsService.instance.getLibraries(server);
+          for (final lib in libs) {
+            final content =
+                await FnOsService.instance.getLibraryContent(server, lib);
+            _allMovies.addAll(content.movies);
+            _allSeries.addAll(content.series);
+            for (final m in content.movies) {
+              _movieServer[m.guid] = server;
+            }
+            for (final s in content.series) {
+              _seriesServer[s.guid] = server;
+            }
+          }
+        } catch (_) {
+          // 单个服务器失败不影响其余
+        }
+        try {
+          final s = await FnOsService.instance.getLibrarySummary(server);
+          s.forEach((k, v) {
+            summary[k] = (summary[k] ?? 0) + v;
+          });
+        } catch (_) {
+          // 统计失败不影响内容展示
+        }
       }
-      try {
-        _librarySummary =
-            await FnOsService.instance.getLibrarySummary(widget.server);
-      } catch (_) {
-        _librarySummary = {};
-      }
+      _librarySummary = summary;
     } catch (e) {
       _libsError = e.toString();
     } finally {
@@ -130,11 +163,15 @@ class _FnOsBrowsePageState extends State<FnOsBrowsePage> {
   }
 
   void _openMovie(FnOsMovie movie) {
-    Get.to(() => FnOsDetailPage(movie: movie, server: widget.server));
+    final server = _serverForMovie(movie);
+    if (server == null) return;
+    Get.to(() => FnOsDetailPage(movie: movie, server: server));
   }
 
   void _openSeries(FnOsTvSeries series) {
-    Get.to(() => FnOsDetailPage(series: series, server: widget.server));
+    final server = _serverForSeries(series);
+    if (server == null) return;
+    Get.to(() => FnOsDetailPage(series: series, server: server));
   }
 
   // ─────────────── 排序/筛选/布局 ───────────────
@@ -222,7 +259,11 @@ class _FnOsBrowsePageState extends State<FnOsBrowsePage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              widget.server.name.isEmpty ? 'NAS影视库' : widget.server.name,
+              widget.server == null
+                  ? '电影电视'
+                  : (widget.server!.name.isEmpty
+                      ? 'NAS影视库'
+                      : widget.server!.name),
               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
             ),
             if (_summaryText.isNotEmpty)
@@ -485,7 +526,8 @@ class _FnOsBrowsePageState extends State<FnOsBrowsePage> {
   }
 
   Widget _buildPortraitMovieCard(FnOsMovie m) {
-    final poster = FnOsService.instance.posterUrl(widget.server, m.poster);
+    final server = _serverForMovie(m)!;
+    final poster = FnOsService.instance.posterUrl(server, m.poster);
     final hasPoster = poster.isNotEmpty;
     final theme = Theme.of(context);
     return ShadowCard(
@@ -503,7 +545,7 @@ class _FnOsBrowsePageState extends State<FnOsBrowsePage> {
                     ? NetImage(poster,
                         fit: BoxFit.cover,
                         width: double.infinity,
-                        httpHeaders: FnOsService.instance.imageHeaders(widget.server),
+                        httpHeaders: FnOsService.instance.imageHeaders(server),
                         )
                     : Center(
                         child: Icon(Icons.movie_outlined,
@@ -588,7 +630,8 @@ class _FnOsBrowsePageState extends State<FnOsBrowsePage> {
   }
 
   Widget _buildPortraitSeriesCard(FnOsTvSeries s) {
-    final poster = FnOsService.instance.posterUrl(widget.server, s.poster);
+    final server = _serverForSeries(s)!;
+    final poster = FnOsService.instance.posterUrl(server, s.poster);
     final hasPoster = poster.isNotEmpty;
     final theme = Theme.of(context);
     return ShadowCard(
@@ -606,7 +649,7 @@ class _FnOsBrowsePageState extends State<FnOsBrowsePage> {
                     ? NetImage(poster,
                         fit: BoxFit.cover,
                         width: double.infinity,
-                        httpHeaders: FnOsService.instance.imageHeaders(widget.server),
+                        httpHeaders: FnOsService.instance.imageHeaders(server),
                         )
                     : Center(
                         child: Icon(Icons.tv_outlined,

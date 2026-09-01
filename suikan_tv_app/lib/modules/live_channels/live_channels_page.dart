@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/get.dart';
 import 'package:simple_live_tv_app/app/app_style.dart';
 import 'package:simple_live_tv_app/app/custom_source/custom_source_service.dart';
 import 'package:simple_live_tv_app/app/custom_source/m3u_models.dart';
+import 'package:simple_live_tv_app/app/event_bus.dart';
 import 'package:simple_live_tv_app/routes/app_navigation.dart';
 import 'package:simple_live_tv_app/services/local_storage_service.dart';
 import 'package:simple_live_tv_app/widgets/focus_card.dart';
@@ -67,6 +69,24 @@ class LiveChannelsController extends GetxController {
     return order
         .map((k) => AggregatedChannel(name: k, lines: map[k]!))
         .toList();
+  }
+
+  /// 刷新所有直播源（逐个重新拉取并合并频道），完成后通知一次。
+  Future<void> refreshAll() async {
+    SmartDialog.showLoading(msg: '正在刷新直播源…');
+    try {
+      for (final s
+          in List<M3uSource>.from(CustomSourceService.instance.sources)) {
+        await CustomSourceService.instance.refreshSource(s.id, notify: false);
+      }
+      EventBus.instance.emit(EventBus.kCustomSourcesChanged, null);
+      version.value++;
+      SmartDialog.dismiss();
+      SmartDialog.showToast('已刷新');
+    } catch (e) {
+      SmartDialog.dismiss();
+      SmartDialog.showToast('刷新失败：$e');
+    }
   }
 
   /// 点击频道：多线路时沿用上次线路（无记录则第一条），单线路直接第一条。
@@ -187,6 +207,13 @@ class LiveChannelsPage extends StatelessWidget {
       appBar: AppBar(
         automaticallyImplyLeading: false,
         title: const Text('电视直播'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: '刷新直播源',
+            onPressed: () => c.refreshAll(),
+          ),
+        ],
       ),
       body: Obx(() {
         c.version.value;
