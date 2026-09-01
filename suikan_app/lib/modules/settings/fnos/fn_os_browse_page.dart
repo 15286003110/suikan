@@ -502,11 +502,11 @@ class _FnOsBrowsePageState extends State<FnOsBrowsePage> {
               ColoredBox(
                 color: theme.colorScheme.surfaceContainerHighest,
                 child: hasPoster
-                    ? NetImage(poster,
-                        fit: BoxFit.cover,
-                        width: double.infinity,
-                        httpHeaders: FnOsService.instance.imageHeaders(widget.server),
-                        )
+                    ? NetImage.cover(
+                        url: poster,
+                        httpHeaders:
+                            FnOsService.instance.imageHeaders(widget.server),
+                      )
                     : Center(
                         child: Icon(Icons.movie_outlined,
                             size: 32,
@@ -605,11 +605,11 @@ class _FnOsBrowsePageState extends State<FnOsBrowsePage> {
               ColoredBox(
                 color: theme.colorScheme.surfaceContainerHighest,
                 child: hasPoster
-                    ? NetImage(poster,
-                        fit: BoxFit.cover,
-                        width: double.infinity,
-                        httpHeaders: FnOsService.instance.imageHeaders(widget.server),
-                        )
+                    ? NetImage.cover(
+                        url: poster,
+                        httpHeaders:
+                            FnOsService.instance.imageHeaders(widget.server),
+                      )
                     : Center(
                         child: Icon(Icons.tv_outlined,
                             size: 32,

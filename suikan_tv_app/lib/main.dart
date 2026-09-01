@@ -39,10 +39,13 @@ import 'package:simple_live_tv_app/services/kuaishou_account_service.dart';
 import 'package:simple_live_tv_app/services/local_storage_service.dart';
 import 'package:simple_live_tv_app/services/profile_backup_service.dart';
 import 'package:simple_live_tv_app/services/sync_service.dart';
+import 'package:simple_live_tv_app/widgets/net_image.dart';
 import 'package:window_manager/window_manager.dart';
 
 void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
+  // 图片缓存上限必须在 runApp 之前设好，否则第一屏已经用默认值解码过了
+  NetImage.configureImageCaches();
   DesktopStartupArgs.initialize(args);
   await writeDesktopStartupLog(
     "start args=${args.join(" ")} "

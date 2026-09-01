@@ -40,6 +40,7 @@ import 'package:simple_live_app/services/profile_backup_service.dart';
 import 'package:simple_live_app/services/sync_service.dart';
 import 'package:simple_live_app/app/custom_source/custom_source_service.dart';
 import 'package:simple_live_app/app/fnos/fn_os_service.dart';
+import 'package:simple_live_app/widgets/net_image.dart';
 import 'package:simple_live_app/widgets/status/app_loadding_widget.dart';
 import 'package:simple_live_core/simple_live_core.dart';
 import 'package:window_manager/window_manager.dart';
@@ -49,6 +50,8 @@ import 'package:dynamic_color/dynamic_color.dart';
 
 void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
+  // 图片缓存上限必须在 runApp 之前设好，否则第一屏已经用默认值解码过了
+  NetImage.configureImageCaches();
   DesktopStartupArgs.initialize(args);
   // 单实例锁：双开进程会交错写坏同一 Hive 数据文件（2026-08-28 实测事故根因），
   // 检测到已有实例运行直接提示退出。secondary 实例使用独立数据目录，放行。

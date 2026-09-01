@@ -45,11 +45,8 @@ class LiveRoomCard extends StatelessWidget {
                     ),
                     child: ColoredBox(
                       color: theme.colorScheme.surfaceContainerHighest,
-                      child: NetImage(
-                        item.cover,
-                        fit: BoxFit.cover,
-                        width: double.infinity,
-                      ),
+                      // 按卡片实际宽度解码封面，而不是按 1920x1080 原图
+                      child: NetImage.cover(url: item.cover),
                     ),
                   ),
                   Positioned(
