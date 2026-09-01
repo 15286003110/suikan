@@ -2231,6 +2231,8 @@ class LiveRoomController extends PlayerController
       ),
       loadGeneration: loadGeneration,
       mediaGeneration: mediaGeneration,
+      // 换直播间/换流：重置纯音频锁定，新直播间重新探测（2026-09-01）
+      resetAudioOnlyLock: true,
     );
     if (!opened) {
       return;

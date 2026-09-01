@@ -1814,6 +1814,10 @@ class PlayerController extends BaseController
     required int loadGeneration,
     required int mediaGeneration,
     bool Function()? isStillOwner,
+    // 换直播间/换流时为 true：重置纯音频锁定，让新直播间重新探测
+    // （否则从纯音频直播间切走会残留 vid=no 无画面）。
+    // 同一直播间重连（mediaError/surface 恢复）保持 false 不打扰（2026-09-01）。
+    bool resetAudioOnlyLock = false,
   }) async {
     while (true) {
       if (!_isPlaybackOwnerCurrent(
@@ -1843,6 +1847,12 @@ class PlayerController extends BaseController
     }
     _surfaceRecoveryGraceUntil =
         DateTime.now().add(_surfaceRecoveryGraceDuration);
+    // 换直播间时重置纯音频锁定（重新探测）；重连则保留锁定不打扰。
+    if (resetAudioOnlyLock) {
+      _autoAudioOnlyActivated = false;
+      _audioOnlyProbeTimer?.cancel();
+      _audioOnlyProbeTimer = null;
+    }
     final opening = Future<void>.microtask(() => player.open(media));
     _playbackOpenFuture = opening;
     try {
