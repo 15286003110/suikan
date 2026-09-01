@@ -16,6 +16,27 @@ class CategoryController extends BasePageController<AppLiveCategory> {
     super.onInit();
   }
 
+  @override
+  void onClose() {
+    _disposeCategoryFocusNodes();
+    super.onClose();
+  }
+
+  /// 释放当前列表里所有分类/子分类的焦点节点。
+  ///
+  /// 这些节点挂在**数据模型**上（AppLiveCategory.moreFocusNode、
+  /// LiveSubCategoryExt.focusNode），而 AppFocusNode 内部 addListener 且带一个
+  /// Rx —— 模型被丢弃时不会自动释放，会一直挂在 FocusManager 里。切平台会
+  /// 整批重建模型、下拉刷新也会，反复进出分类页就是持续累积。
+  void _disposeCategoryFocusNodes() {
+    for (final category in list) {
+      category.moreFocusNode.dispose();
+      for (final sub in category.childrenExt) {
+        sub.focusNode.dispose();
+      }
+    }
+  }
+
   Future<void> setSite(String id) async {
     if (siteId.value == id) return;
 
@@ -41,6 +62,9 @@ class CategoryController extends BasePageController<AppLiveCategory> {
       currentPage = 2;
       canLoadMore.value = false;
       pageEmpty.value = categories.isEmpty;
+      // 换掉列表前先释放旧模型上的焦点节点：这一批模型马上就没有引用了，
+      // 不释放的话每次切平台都泄漏一整批（几十个），比页面销毁那次更频繁。
+      _disposeCategoryFocusNodes();
       list.value = categories;
       if (scrollController.hasClients) {
         scrollController.jumpTo(0);
