@@ -20,7 +20,8 @@ class PageGridView extends StatelessWidget {
     required this.pageController,
     this.padding,
     this.firstRefresh = false,
-    this.showPageLoadding = false,
+    // 同手机端：首屏加载时给出反馈，而不是一块空白。
+    this.showPageLoadding = true,
     this.onLoginSuccess,
     this.crossAxisSpacing = 0.0,
     this.mainAxisSpacing = 0.0,

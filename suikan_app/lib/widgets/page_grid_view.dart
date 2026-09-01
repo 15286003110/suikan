@@ -27,7 +27,11 @@ class PageGridView extends StatelessWidget {
     required this.pageController,
     this.padding,
     this.firstRefresh = false,
-    this.showPageLoadding = false,
+    // 默认改为 true：首屏加载时给出反馈，而不是一块空白。
+    // 原来默认 false，全项目只有搜索页显式传了 true。
+    // 安全性：两端 BasePageController.loadData 都在 finally 里把
+    // pageLoadding 置回 false，不会出现一直转圈卡住的情况。
+    this.showPageLoadding = true,
     this.onLoginSuccess,
     this.crossAxisSpacing = 0.0,
     this.mainAxisSpacing = 0.0,

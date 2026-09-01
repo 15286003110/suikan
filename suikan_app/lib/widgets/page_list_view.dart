@@ -25,7 +25,8 @@ class PageListView extends StatelessWidget {
     required this.pageController,
     this.padding,
     this.firstRefresh = false,
-    this.showPageLoadding = false,
+    // 同 page_grid_view.dart：首屏加载时给出反馈，而不是一块空白。
+    this.showPageLoadding = true,
     this.showPCRefreshButton = true,
     this.separatorBuilder,
     this.onLoginSuccess,
