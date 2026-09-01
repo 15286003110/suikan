@@ -121,15 +121,29 @@ class MpvOptionsService {
     Player player, {
     bool isVod = false,
   }) async {
-    if (Platform.isIOS) {
-      return;
-    }
     if (player.platform is! NativePlayer) {
       return;
     }
     final options = Map<String, String>.from(effectiveOptions())
       ..remove("vo")
       ..remove("hwdec");
+    // iOS 不再整体跳过。查证过 media_kit 的 setProperty 是 FFI 直调
+    // mpv_set_property_string，对无效属性只返回错误码（Dart 侧忽略）、不会崩；
+    // 原作者让 iOS return 属保守/历史遗留。真正要避开的是 profile 及其派生的
+    // 一整套高质量缩放滤镜 —— 它们依赖 gpu-next vo 与硬件缩放，iOS 的 libmpv
+    // 没有这些，设置只会让 mpv 内部报错或无效回退。而缓冲/丢帧/字幕/网络超时
+    // 这些纯数据选项在 iOS 上同样有效，且正是发热/卡顿的关键。故 iOS 只剥掉
+    // profile 派生项，其余照常设置。
+    if (Platform.isIOS) {
+      options
+        ..remove("profile")
+        ..remove("scale")
+        ..remove("cscale")
+        ..remove("dscale")
+        ..remove("correct-downscaling")
+        ..remove("sigmoid-upscaling")
+        ..remove("deband");
+    }
     // 缓冲策略：直播小缓冲（低延迟）、点播大缓冲（不卡）。
     // 属性为 mpv 网络/解复用缓冲上限与预读时长，setProperty 失败静默忽略。
     options["demuxer-max-bytes"] = isVod ? "134217728" : "16777216";
