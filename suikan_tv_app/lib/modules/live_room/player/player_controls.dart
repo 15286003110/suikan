@@ -355,9 +355,10 @@ Widget buildDanmuView(VideoState videoState, LiveRoomController controller) {
       area: AppSettingsController.instance.danmuArea.value,
       lineHeight: 1.25,
       emojiScale: 1.4,
-      // TV 盒子 GPU 弱：关描边减半绘制；重绘驱动保持 vsync 全速（帧均匀，
-      // Timer 降频在安卓有抖动，弹幕少时反而更卡——2026-09-01 实测结论）。
+      // TV 盒子 GPU 弱：关描边（绘制减半）+ 30fps 平滑限帧（位置按时间推进保持
+      // 连续，只降重绘频率），单帧耗时回落、刷新率稳定（2026-09-01）。
       showStroke: false,
+      frameRate: 30,
       duration: AppSettingsController.instance.danmuSpeed.value.toInt(),
       opacity: AppSettingsController.instance.danmuOpacity.value,
     ),

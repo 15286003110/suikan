@@ -37,6 +37,10 @@ class _DanmakuScreenState extends State<DanmakuScreen>
   /// 弹幕动画控制器
   late AnimationController _animationController;
 
+  /// 滚动弹幕数量上限（屏幕内同时最多条数，超出丢弃新弹幕防绘制堆积）。
+  /// 低端设备（TV 盒子）配合 frameRate 降帧使用（2026-09-01）。
+  static const int _maxScrollDanmakuItems = 25;
+
   /// 滚动弹幕重绘驱动器（降帧用）：frameRate 非空时用 Timer 按目标帧率通知，
   /// 位置由 tick（stopwatch 时间）推进保持连续，只降重绘频率（2026-09-01）。
   final ValueNotifier<int> _scrollFrameNotifier = ValueNotifier(0);
@@ -45,14 +49,6 @@ class _DanmakuScreenState extends State<DanmakuScreen>
       ? const Duration(milliseconds: 16)
       : Duration(microseconds: (1000000 / _option.frameRate!).round());
   void _ensureScrollFrameTimer() {
-    if (_option.frameRate == null) {
-      // vsync 模式（默认）：与屏幕刷新对齐、帧均匀，由 _animationController 驱动。
-      // Timer 降频在安卓上有抖动（10-50ms 不均），弹幕少时反而更卡（2026-09-01 实测）。
-      if (!_animationController.isAnimating && _scrollDanmakuItems.isNotEmpty) {
-        _animationController.repeat();
-      }
-      return;
-    }
     if (_scrollFrameTimer != null || !_running || !mounted) return;
     _scrollFrameTimer = Timer.periodic(_scrollFrameInterval, (_) {
       if (!_running || !mounted || _scrollDanmakuItems.isEmpty) {
@@ -396,7 +392,13 @@ class _DanmakuScreenState extends State<DanmakuScreen>
         setState(() {});
         break;
       case DanmakuItemType.scroll:
-        // 滚动弹幕走重绘驱动器：frameRate 非空时 Timer 降频，否则 vsync 全速
+        // 弹幕数量上限：屏幕内滚动弹幕超限丢弃新弹幕（自己发的除外），
+        // 防止密集弹幕堆叠 → 每帧绘制量失控（低端盒子 GPU 卡顿元凶，2026-09-01）。
+        if (!content.selfSend &&
+            _scrollDanmakuItems.length >= _maxScrollDanmakuItems) {
+          break;
+        }
+        // 滚动弹幕走降频驱动器（frameRate 非空时 Timer 限帧，位置按 tick 连续）
         _ensureScrollFrameTimer();
         break;
       case DanmakuItemType.special:
@@ -628,9 +630,7 @@ class _DanmakuScreenState extends State<DanmakuScreen>
         if (_scrollDanmakuItems.isEmpty) {
           _stopScrollFrameTimer();
         }
-        if (_scrollDanmakuItems.isEmpty &&
-            _specialDanmakuItems.isEmpty &&
-            _animationController.isAnimating) {
+        if (_specialDanmakuItems.isEmpty && _animationController.isAnimating) {
           _animationController.stop();
         }
         final staticCount =
@@ -692,11 +692,9 @@ class _DanmakuScreenState extends State<DanmakuScreen>
                 children: [
                   RepaintBoundary(
                     child: AnimatedBuilder(
-                      // 滚动弹幕驱动：frameRate 非空 → Timer 降频；null → vsync 全速
-                      // （默认，与屏幕刷新对齐帧均匀）
-                      animation: _option.frameRate != null
-                          ? _scrollFrameNotifier
-                          : _animationController,
+                      // 滚动弹幕用降频驱动器（frameRate 非空时 Timer 限帧，
+                      // 位置由 painter 内 tick 连续推进，只降重绘频率）
+                      animation: _scrollFrameNotifier,
                       builder: (context, child) {
                         return CustomPaint(
                           painter: ScrollDanmakuPainter(
