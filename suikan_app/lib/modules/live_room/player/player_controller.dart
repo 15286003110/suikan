@@ -2151,6 +2151,26 @@ class PlayerController extends BaseController
   int _playbackStallRecoveryAttempts = 0;
   bool _playbackStallRecoveryInFlight = false;
 
+  // === 跨链路重连节流（P0-10）===
+  //
+  // 四套重连链路（流错误 / Surface / 停滞 / 业务层）原本互不知情，各自独立
+  // 计数，坏流时可以在很短时间内叠加触发多次「重开解码器」。这里只加一层
+  // 跨链路的**节奏约束**：把重开动作拉开间隔 + 让重试间隔指数增长。
+  //
+  // 刻意**不**做「四条共用一个重连预算」：那样会出现预算被别的链路用掉后
+  // 「该重试的没重试」，反而改变重试语义。这里只改节奏，每条链路该重试几次
+  // 还是几次，只是彼此之间不再挤在一起。
+  /// 最近一次破坏性重连（重开解码器 / 刷新播放地址 / 切线路）的时刻。
+  DateTime? _lastHeavyReconnectAt;
+  /// 连续重连次数，只用于计算退避时长，不参与任何「还能不能重试」的判断。
+  int _heavyReconnectStreak = 0;
+
+  /// 任意两次破坏性重连之间的最小间隔。
+  static const _heavyReconnectCooldown = Duration(seconds: 3);
+  /// 距上次重连这么久仍在正常播放，就认为流已恢复，连续计数归零。
+  static const _heavyReconnectResetAfter = Duration(seconds: 60);
+  static const _heavyReconnectBackoffCeilingStep = 3;
+
   static const _stablePlaybackDuration = Duration(seconds: 30);
   static const _surfaceRecoveryCooldown = Duration(seconds: 3);
   static const _surfaceRecoveryGraceDuration = Duration(seconds: 8);
@@ -2352,6 +2372,9 @@ class PlayerController extends BaseController
     _stallMediaUri = null;
     _playbackStallRecoveryAttempts = 0;
     _playbackStallRecoveryInFlight = false;
+    // 换流/销毁时跨链路重连计数一并归零：新的一条流不该背上前一条流的退避。
+    _lastHeavyReconnectAt = null;
+    _heavyReconnectStreak = 0;
   }
 
   // Fix Issue #57: 判断是否为流错误（网络/解码错误）
@@ -2404,13 +2427,21 @@ class PlayerController extends BaseController
     }
 
     _streamErrorRetryCount++;
+    // 先按「当前」连续次数算退避（第 1 次 = 0 → 等 1 秒），再累加计数，
+    // 顺序反了会让第一次重试就变成 2 秒。
+    final backoff = _heavyReconnectBackoff();
+    _noteHeavyReconnect(now);
     Log.w(
-      "检测到流错误，自动重试解码器 ($_streamErrorRetryCount/3): $error",
+      "检测到流错误，自动重试解码器 ($_streamErrorRetryCount/3)，"
+      "等待 ${backoff.inMilliseconds}ms: $error",
       false,
     );
 
-    // 等待1秒后重新打开当前流
-    await Future.delayed(const Duration(seconds: 1));
+    // 原来固定等 1 秒：坏流时会在 1s / 2s / 3s 连续三次重开解码器，这正是
+    // 方案里说的重连风暴——网络根本来不及恢复就又被推倒重来。改成指数退避
+    // （1→2→4→8 秒）后，三次重试分布在 1s / 3s / 7s。
+    // 第 1 次仍是 1 秒，所以瞬时抖动的恢复速度和原来完全一样。
+    await Future.delayed(backoff);
 
     try {
       if (!isPlaybackLoadGenerationCurrent(generation)) {
@@ -2525,6 +2556,14 @@ class PlayerController extends BaseController
         now.difference(_lastSurfaceRecoveryAt!) < _surfaceRecoveryCooldown) {
       return;
     }
+    // 跨链路冷却：别的链路刚重连过，本次先让路（P0-10）。
+    //
+    // 这里是 3 秒轮询，跳过本次后下个周期自然会再来，而且 _surfaceRecoveryAttempts
+    // 在跳过时不递增 —— 所以「最多尝试恢复 3 次」这个语义一点没变，只是间隔
+    // 被拉开，不再和流错误重试撞在一起。
+    if (_isHeavyReconnectCoolingDown(now)) {
+      return;
+    }
 
     final media = player.state.playlist.medias.isNotEmpty
         ? player.state.playlist.medias[player.state.playlist.index]
@@ -2571,6 +2610,9 @@ class PlayerController extends BaseController
         return;
       }
       Log.w("Surface恢复失败，重开当前媒体");
+      // 只有走到这一步才是真正的「重开解码器 + 重连网络」，上面那些
+      // pause/play 只是轻量试探，不计入跨链路重连计数。
+      _noteHeavyReconnect(DateTime.now());
       final reopened = await openPlaybackMedia(
         currentMedia!,
         loadGeneration: generation,
@@ -2732,6 +2774,9 @@ class PlayerController extends BaseController
     if (_stallLastPosition == null || position != _stallLastPosition) {
       _stallLastPosition = position;
       _stallLastProgressAt = now;
+      // 播放有进展 → 流还在动。距上次重连已超过阈值就认为彻底恢复，
+      // 连续重连计数归零（下次再出问题从 1 秒档重新开始，不会一直呆在 8 秒）。
+      _maybeResetHeavyReconnectStreak(now);
       if (_playbackStallRecoveryAttempts > 0 &&
           _playbackStallStableTimer == null) {
         _playbackStallStableTimer = Timer(_stablePlaybackDuration, () {
@@ -2763,6 +2808,12 @@ class PlayerController extends BaseController
                 _playbackStallCooldown)) {
       return;
     }
+    // 跨链路冷却：停滞判定是 3 秒采样一次，跳过本次后下个周期自然会再来
+    // （_stallLastProgressAt 没被重置，停滞条件仍成立），且不会消耗
+    // _playbackStallRecoveryAttempts，所以重试次数语义不变。
+    if (_isHeavyReconnectCoolingDown(now)) {
+      return;
+    }
     unawaited(_recoverPlaybackStall(generation, mediaUri));
   }
 
@@ -2772,10 +2823,14 @@ class PlayerController extends BaseController
         _stallMediaUri != mediaUri) {
       return;
     }
+    final now = DateTime.now();
     _playbackStallRecoveryInFlight = true;
     _playbackStallRecoveryAttempts += 1;
-    _lastPlaybackStallRecoveryAt = DateTime.now();
-    _stallLastProgressAt = DateTime.now();
+    _lastPlaybackStallRecoveryAt = now;
+    _stallLastProgressAt = now;
+    // 本链路的恢复动作会经 mediaError 走到业务层的 setPlayer（重建播放器），
+    // 属于破坏性重连，计入跨链路计数，让后续重试按退避节奏来。
+    _noteHeavyReconnect(now);
     Log.w(
       "检测到直播流长时间无进度，自动刷新播放 "
       "($_playbackStallRecoveryAttempts/$_maxSurfaceRecoveryAttempts)",
@@ -2794,6 +2849,52 @@ class PlayerController extends BaseController
     _stallLastProgressAt = null;
     _playbackStallStableTimer?.cancel();
     _playbackStallStableTimer = null;
+  }
+
+  // === 跨链路重连节流（P0-10）===
+
+  /// 是否处在全局重连冷却中。
+  ///
+  /// 只用于**周期轮询型**的链路（Surface 检查、停滞看门狗）：它们在冷却期
+  /// 直接跳过本次，下个采样周期自然会再来，重试次数不会被消耗，所以最终
+  /// 该重试的仍然会重试，只是被推后了最多一个采样间隔（3 秒）。
+  bool _isHeavyReconnectCoolingDown(DateTime now) {
+    final last = _lastHeavyReconnectAt;
+    return last != null && now.difference(last) < _heavyReconnectCooldown;
+  }
+
+  /// 记录一次破坏性重连并累加连续次数。
+  ///
+  /// 必须在真正执行重连动作**之前**调用，这样其它链路的冷却判断才生效。
+  /// 注意调用顺序：先算 [_heavyReconnectBackoff] 再调本方法 —— 本方法会让
+  /// streak +1，顺序反了会把「第 1 次重试」算成 2 秒。
+  void _noteHeavyReconnect(DateTime now) {
+    _lastHeavyReconnectAt = now;
+    _heavyReconnectStreak += 1;
+  }
+
+  /// 本次重连前应等待的退避时长：1 → 2 → 4 → 8 秒。
+  ///
+  /// 第一次重试仍是 1 秒（连续次数为 0），瞬时抖动不受影响；只有反复失败才
+  /// 逐步拉长，给网络/源站留出恢复时间。封顶 8 秒，避免卡太久。
+  Duration _heavyReconnectBackoff() {
+    final step = _heavyReconnectStreak.clamp(0, _heavyReconnectBackoffCeilingStep);
+    return Duration(seconds: 1 << step);
+  }
+
+  /// 播放有进展时调用：距上次重连已超过阈值，就认为流已经恢复。
+  ///
+  /// 刻意用「播放有进展」这个现成信号来复位，不新增定时器（新增定时器本身
+  /// 就是开销，也和 P0-16 的结论冲突）。这里只做一次时间比较，非常轻。
+  void _maybeResetHeavyReconnectStreak(DateTime now) {
+    if (_heavyReconnectStreak == 0) {
+      return;
+    }
+    final last = _lastHeavyReconnectAt;
+    if (last == null || now.difference(last) >= _heavyReconnectResetAfter) {
+      _heavyReconnectStreak = 0;
+      _lastHeavyReconnectAt = null;
+    }
   }
 
   void mediaEnd() {
