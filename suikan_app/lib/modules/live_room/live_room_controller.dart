@@ -389,6 +389,15 @@ class LiveRoomController extends PlayerController
   /// - 用户手动上拉聊天列表后，不再自动滚到底部
   var disableAutoScroll = false.obs;
 
+  /// 聊天消息上限（跟随底部时的常态上限）。
+  static const int _maxChatMessages = 200;
+  /// 用户上滑看历史时的放宽上限。
+  ///
+  /// 看历史时删头部会打断阅读，所以放宽；但不能不设限 —— 原来裁剪完全挂在
+  /// 「未禁用自动滚动」的前提下，用户一上滑就永不裁剪，热门房挂机几小时
+  /// 消息量无上限增长。500 条是可控内存，同时足够回看。
+  static const int _maxChatMessagesWhilePaused = 500;
+
   /// 应用是否处于后台
   var isBackground = false;
 
@@ -534,6 +543,8 @@ class LiveRoomController extends PlayerController
     }
     if (_isChatNearBottom()) {
       disableAutoScroll.value = false;
+      // 回到跟随状态，把看历史期间攒下的放宽额度裁回常态上限。
+      _trimChatMessages();
       return;
     }
     if (scrollController.position.userScrollDirection ==
@@ -1672,6 +1683,24 @@ class LiveRoomController extends PlayerController
     super.onClose();
   }
 
+  /// 裁剪聊天消息，保住内存上限。
+  ///
+  /// 裁剪与「是否在自动滚动」**解耦**：两种状态都裁，只是看历史时放宽到
+  /// [_maxChatMessagesWhilePaused]。原因是原来把它挂在 !disableAutoScroll 下，
+  /// 用户上滑看历史期间就完全不裁，热门房挂机会无限增长。
+  ///
+  /// 批量 [removeRange] 而不是逐条 [removeAt]：删 N 条时后者是 N 次数组搬移
+  /// + N 次 Rx 通知，前者只有一次。
+  void _trimChatMessages() {
+    final limit =
+        disableAutoScroll.value ? _maxChatMessagesWhilePaused : _maxChatMessages;
+    final excess = messages.length - limit;
+    if (excess <= 0) {
+      return;
+    }
+    messages.removeRange(0, excess);
+  }
+
   /// 聊天列表滚动到底部
   void chatScrollToBottom() {
     if (scrollController.hasClients) {
@@ -1687,6 +1716,8 @@ class LiveRoomController extends PlayerController
     _chatBottomRestoreTimer?.cancel();
     _chatBottomRestoreTimer = Timer(delay, () {
       disableAutoScroll.value = false;
+      // 同上：回到跟随状态后裁回常态上限。
+      _trimChatMessages();
       if (!scrollController.hasClients) {
         return;
       }
@@ -1710,9 +1741,8 @@ class LiveRoomController extends PlayerController
   void onWSMessage(LiveMessage msg) {
     msg = _sanitizeLiveMessage(msg);
     if (msg.type == LiveMessageType.chat) {
-      if (messages.length > 200 && !disableAutoScroll.value) {
-        messages.removeAt(0);
-      }
+      // 裁剪与滚动状态解耦，保住内存上限（见 _trimChatMessages 注释）。
+      _trimChatMessages();
       if (_isUserShielded(msg.userName) || isTempMutedUser(msg.userName)) {
         Log.d("已过滤被屏蔽用户: ${msg.userName}");
         return;
