@@ -37,6 +37,10 @@ class _DanmakuScreenState extends State<DanmakuScreen>
   /// 弹幕动画控制器
   late AnimationController _animationController;
 
+  /// 滚动弹幕数量上限（屏幕内同时最多条数，超出丢弃新弹幕防绘制堆积）。
+  /// 低端设备（TV 盒子）配合 frameRate 降帧使用（2026-09-01）。
+  static const int _maxScrollDanmakuItems = 25;
+
   /// 滚动弹幕重绘驱动器（降帧用）：frameRate 非空时用 Timer 按目标帧率通知，
   /// 位置由 tick（stopwatch 时间）推进保持连续，只降重绘频率（2026-09-01）。
   final ValueNotifier<int> _scrollFrameNotifier = ValueNotifier(0);
@@ -388,6 +392,12 @@ class _DanmakuScreenState extends State<DanmakuScreen>
         setState(() {});
         break;
       case DanmakuItemType.scroll:
+        // 弹幕数量上限：屏幕内滚动弹幕超限丢弃新弹幕（自己发的除外），
+        // 防止密集弹幕堆叠 → 每帧绘制量失控（低端盒子 GPU 卡顿元凶，2026-09-01）。
+        if (!content.selfSend &&
+            _scrollDanmakuItems.length >= _maxScrollDanmakuItems) {
+          break;
+        }
         // 滚动弹幕走降频驱动器（frameRate 非空时 Timer 限帧，位置按 tick 连续）
         _ensureScrollFrameTimer();
         break;
