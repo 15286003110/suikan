@@ -142,4 +142,12 @@ class HomeController extends BaseController {
   void toCategory() {
     Get.toNamed(RoutePath.kCategory);
   }
+
+  void toLiveChannels() {
+    Get.toNamed(RoutePath.kLiveChannels);
+  }
+
+  void toVideoLibraries() {
+    Get.toNamed(RoutePath.kVideoLibraries);
+  }
 }

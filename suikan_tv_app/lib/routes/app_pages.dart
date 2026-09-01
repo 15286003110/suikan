@@ -15,6 +15,7 @@ import 'package:simple_live_tv_app/modules/home/home_controller.dart';
 import 'package:simple_live_tv_app/modules/home/home_page.dart';
 import 'package:simple_live_tv_app/modules/hot_live/hot_live_controller.dart';
 import 'package:simple_live_tv_app/modules/hot_live/hot_live_page.dart';
+import 'package:simple_live_tv_app/modules/live_channels/live_channels_page.dart';
 import 'package:simple_live_tv_app/modules/live_room/live_room_controller.dart';
 import 'package:simple_live_tv_app/modules/live_room/live_room_page.dart';
 import 'package:simple_live_tv_app/modules/search/anchor/search_anchor_controller.dart';
@@ -25,6 +26,7 @@ import 'package:simple_live_tv_app/modules/settings/settings_controller.dart';
 import 'package:simple_live_tv_app/modules/settings/settings_page.dart';
 import 'package:simple_live_tv_app/modules/sync/sync_controller.dart';
 import 'package:simple_live_tv_app/modules/sync/sync_page.dart';
+import 'package:simple_live_tv_app/modules/video_libraries/video_libraries_page.dart';
 
 import 'route_path.dart';
 
@@ -120,6 +122,16 @@ class AppPages {
           subCategory: Get.arguments[1],
         ),
       ),
+    ),
+    // 电视直播（所有直播源频道汇总）
+    GetPage(
+      name: RoutePath.kLiveChannels,
+      page: () => const LiveChannelsPage(),
+    ),
+    // 电影电视（所有影视库汇总）
+    GetPage(
+      name: RoutePath.kVideoLibraries,
+      page: () => const VideoLibrariesPage(),
     ),
     // 搜索房间
     GetPage(

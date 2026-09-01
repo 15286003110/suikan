@@ -40,4 +40,10 @@ class RoutePath {
 
   /// 分类详情
   static const kCategoryDetail = "/category/detail";
+
+  /// 电视直播（所有直播源频道汇总）
+  static const kLiveChannels = "/live_channels";
+
+  /// 电影电视（所有影视库汇总）
+  static const kVideoLibraries = "/video_libraries";
 }
