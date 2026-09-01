@@ -2104,12 +2104,26 @@ class LiveRoomController extends PlayerController
       }
     }
     if (urls == null) {
-      final playUrl = await site.liveSite.getPlayUrls(
-        detail: detail.value!,
-        quality: qualites[currentQuality],
-      );
-      urls = playUrl.urls;
-      headers = playUrl.headers;
+      try {
+        final playUrl = await site.liveSite
+            .getPlayUrls(
+              detail: detail.value!,
+              quality: qualites[currentQuality],
+            )
+            // 进房主链路第二段超时保护：getRoomDetail 已加（P0-15），这里同样
+            // 补上——弱网下详情秒回、播放地址卡住，用户会卡在「正在加载播放地址」。
+            // 8 秒与 getRoomDetail 保持一致。超时后返回 false 走失败路径，语义
+            // 与「拿不到地址」一致，不改变任何重试/换线路逻辑。
+            .timeout(const Duration(seconds: 8));
+        urls = playUrl.urls;
+        headers = playUrl.headers;
+      } catch (e) {
+        if (!silent) {
+          SmartDialog.showToast("读取播放地址超时，请稍后重试");
+        }
+        Log.d("读取播放地址超时/失败: $e");
+        return false;
+      }
     }
     if (!_isCurrentLoad(loadGeneration)) {
       return false;
