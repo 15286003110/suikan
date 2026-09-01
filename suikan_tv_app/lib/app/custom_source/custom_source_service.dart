@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:flutter/widgets.dart';
 import 'package:dio/dio.dart';
 import 'package:get/get.dart';
 import 'package:simple_live_tv_app/app/event_bus.dart';
@@ -49,7 +50,9 @@ class CustomSourceService extends GetxService {
         Log.e('自定义源[$key]解析失败: $e', stack);
       }
     }
-    startAutoRefresh();
+    // 只起定时器；「立即先跑一次」那轮挪到首帧之后，别和首帧抢 IO。
+    startAutoRefresh(runInitial: false);
+    _scheduleInitialRefreshAfterFirstFrame();
     return this;
   }
 
@@ -354,12 +357,34 @@ class CustomSourceService extends GetxService {
 
   /// 启动后台定时检查（每 15 分钟），按各源刷新规则自动刷新。
   /// 进程存活期间持续运行；重复调用会先取消旧计时器。
-  void startAutoRefresh() {
+  ///
+  /// [runInitial] 为 true 时顺带立即跑一次到期检查。init() 里传 false：
+  /// init() 是被 main() 的 Future.wait 等待的，在这里同步发起网络请求会
+  /// 与首帧抢 IO、抢主线程，拖慢冷启动（低端机 / TV 盒子上尤其明显）。
+  void startAutoRefresh({bool runInitial = true}) {
     _autoTimer?.cancel();
     _autoTimer = Timer.periodic(const Duration(minutes: 15), (_) {
       unawaited(_autoRefreshDue());
     });
-    unawaited(_autoRefreshDue());
+    if (runInitial) {
+      unawaited(_autoRefreshDue());
+    }
+  }
+
+  /// 把 init() 时欠下的首次刷新排到首帧渲染完之后。
+  ///
+  /// 用 addPostFrameCallback 而不是拍一个固定延时：首帧真正画出来才说明
+  /// 启动 IO 高峰过去了，低端机 / TV 盒子上比写死秒数更准。
+  ///
+  /// WidgetsBinding 在 main() 顶部已 ensureInitialized，正常不会抛；万一在
+  /// 非 widget 环境被调用，退化为 1 秒后执行，保证这次刷新不会丢失。
+  void _scheduleInitialRefreshAfterFirstFrame() {
+    void run() => unawaited(_autoRefreshDue());
+    try {
+      WidgetsBinding.instance.addPostFrameCallback((_) => run());
+    } catch (_) {
+      unawaited(Future<void>.delayed(const Duration(seconds: 1), run));
+    }
   }
 
   Future<void> _autoRefreshDue() async {
