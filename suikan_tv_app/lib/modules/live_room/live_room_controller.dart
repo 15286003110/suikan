@@ -150,11 +150,23 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
 
   void initTimer() {
     _clockTimer?.cancel();
-    _clockTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      var now = DateTime.now();
-      datetime.value =
-          "${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}";
+    // 时钟只显示到「时:分」，每秒 tick 有 59/60 次赋的是同一个值，纯属浪费
+    // （每次赋值都会通知 Obx 重建）。改成对齐到下一个整分后按分钟走：
+    // 回调从 60 次/分钟降到 1 次，而且因为对齐了整分，显示反而更准 —— 不会
+    // 出现「系统时间已过整分、界面还慢几秒」的情况。
+    _updateClockText();
+    final secondsToNextMinute = 60 - DateTime.now().second;
+    _clockTimer = Timer(Duration(seconds: secondsToNextMinute), () {
+      _updateClockText();
+      _clockTimer =
+          Timer.periodic(const Duration(minutes: 1), (_) => _updateClockText());
     });
+  }
+
+  void _updateClockText() {
+    final now = DateTime.now();
+    datetime.value =
+        "${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}";
   }
 
   /// 双击退出Flag

@@ -147,9 +147,21 @@ class LocalStorageService extends GetxService {
   late Box<String> shieldPresetBox;
 
   Future init() async {
-    settingsBox = await _openBoxSafe("LocalStorage");
-    shieldBox = await _openBoxSafe("DanmuShield");
-    shieldPresetBox = await _openBoxSafe("DanmuShieldPreset");
+    // 三个箱是不同文件、不同锁，彼此没有依赖，串行等是白白多花三倍时间。
+    // 每个 openBox 最坏要等满 5 秒超时（见 _openBoxSafe），串行最坏 15 秒；
+    // 先一起发起再分别 await，最坏仍只有 5 秒。
+    //
+    // 这里刻意不用 Future.wait：三个 openBox 的泛型不同（Box<dynamic> /
+    // Box<String> 等），Future.wait 会把类型擦成 List<Object> 需要再强转；
+    // 分别 await 类型更清楚，并行效果和 Future.wait 完全一样。
+    // 泛型要显式写：结果先落到中间变量后，Dart 没法再从赋值目标反推 T，
+    // 不写会被推断成 Box<dynamic> 而报类型不匹配。
+    final settingsFuture = _openBoxSafe("LocalStorage");
+    final shieldFuture = _openBoxSafe<String>("DanmuShield");
+    final presetFuture = _openBoxSafe<String>("DanmuShieldPreset");
+    settingsBox = await settingsFuture;
+    shieldBox = await shieldFuture;
+    shieldPresetBox = await presetFuture;
   }
 
   /// 打开 Hive 箱（带超时与空箱兜底）。

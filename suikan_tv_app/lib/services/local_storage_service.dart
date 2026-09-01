@@ -197,8 +197,14 @@ class LocalStorageService extends GetxService {
   late Box<String> shieldBox;
 
   Future init() async {
-    settingsBox = await _openBoxSafe("TVLocalStorage");
-    shieldBox = await _openBoxSafe("TVDanmuShield");
+    // 两个箱是不同文件、不同锁，彼此没有依赖，串行等是白白多花一倍时间。
+    // TV 盒子 IO 慢，每个 openBox 最坏要等满 5 秒超时（见 _openBoxSafe），
+    // 串行最坏 10 秒；先一起发起再分别 await，最坏仍只有 5 秒。
+    // 与同项目 db_service 的写法对齐。
+    final settingsFuture = _openBoxSafe("TVLocalStorage");
+    final shieldFuture = _openBoxSafe<String>("TVDanmuShield");
+    settingsBox = await settingsFuture;
+    shieldBox = await shieldFuture;
   }
 
   /// 打开 Hive 箱（带超时与空箱兜底）。
