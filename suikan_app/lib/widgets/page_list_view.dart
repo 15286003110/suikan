@@ -51,6 +51,10 @@ class PageListView extends StatelessWidget {
             onRefresh: pageController.refreshData,
             child: ListView.separated(
               padding: padding,
+              // 同上（page_grid_view.dart 的瀑布流分支）：EasyRefresh 监听的是
+              // pageController.scrollController，列表自己也必须用同一个，
+              // 否则两边对不上，下拉刷新/加载更多的触发位置会错位。
+              controller: pageController.scrollController,
               itemCount: pageController.list.length,
               itemBuilder: itemBuilder,
               separatorBuilder:

@@ -73,6 +73,11 @@ class PageGridView extends StatelessWidget {
                   )
                 : MasonryGridView.count(
                     padding: padding,
+                    // 补传滚动控制器：原来这个分支漏了，EasyRefresh 监听的是
+                    // pageController.scrollController，而瀑布流自己在用另一个
+                    // 控制器滚动 —— 两边对不上，下拉刷新/加载更多的触发会错位。
+                    // 传了 controller 之后 primary 自动为 false，无需再写。
+                    controller: pageController.scrollController,
                     itemCount: pageController.list.length,
                     itemBuilder: itemBuilder,
                     crossAxisCount: crossAxisCount,
