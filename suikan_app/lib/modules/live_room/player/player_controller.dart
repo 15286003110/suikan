@@ -2211,6 +2211,15 @@ class PlayerController extends BaseController
         _scheduleStablePlaybackReset(generation);
       } else {
         _cancelStablePlaybackTimer();
+        // 暂停 / 停止 / 播放结束都要释放屏幕常亮。原来只在 mediaEnd、
+        // mediaError、exitFullScreen 三处释放，手动暂停或退后台暂停之后
+        // 标志会一直残留到下次终止流程，白耗电。
+        //
+        // 不会误伤卡顿场景：查过 media_kit 1.2.6 源码，playing 只由 mpv 的
+        // `pause` 属性、MPV_EVENT_START_FILE 和 eof-reached 三个来源驱动；
+        // 缓冲（core-idle / paused-for-cache）走的是 buffering 流，不会把
+        // playing 打成 false。所以网络卡顿期间屏幕不会突然变暗。
+        unawaited(WakelockPlus.disable());
       }
     });
 
