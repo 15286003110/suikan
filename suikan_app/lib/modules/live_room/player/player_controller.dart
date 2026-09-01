@@ -1615,6 +1615,7 @@ mixin PlayerGestureControlMixin
       },
     );
     lastVolume = -1;
+    lastBrightness = -1;
 
     verticalDragging = true;
     _verticalDragReady = false;
@@ -1694,6 +1695,7 @@ mixin PlayerGestureControlMixin
   }
 
   int lastVolume = -1; // it's ok to be -1
+  int lastBrightness = -1; // it's ok to be -1
 
   void setGestureVolume(double dy) {
     double value = 0.0;
@@ -1739,28 +1741,41 @@ mixin PlayerGestureControlMixin
 
   void setGestureBrightness(double dy) {
     double value = 0.0;
+    double seek;
     if (dy > verStartPosition) {
       value = ((dy - verStartPosition) / _verticalDragExtent);
 
-      var seek = _currentBrightness - value;
+      seek = _currentBrightness - value;
       if (seek < 0) {
         seek = 0;
       }
-      ScreenBrightness.instance.setApplicationScreenBrightness(seek);
-
-      showGestureTipText("亮度 ${(seek * 100).toInt()}%");
-      Log.logPrint(value);
     } else {
       value = ((dy - verStartPosition) / _verticalDragExtent);
-      var seek = value.abs() + _currentBrightness;
+      seek = value.abs() + _currentBrightness;
       if (seek > 1) {
         seek = 1;
       }
-
-      ScreenBrightness.instance.setApplicationScreenBrightness(seek);
-      showGestureTipText("亮度 ${(seek * 100).toInt()}%");
-      Log.logPrint(value);
     }
+    // 与音量路径（:1715-1722）同构的 5 档量化 + 去重。
+    // 原来每次 update 都直调平台通道，一次 3 秒拖拽约 180 次调用；
+    // 量化后一次手势最多 21 次，且重复值直接跳过。
+    //
+    // 这里**刻意不套 DelayedThrottle**：DelayedThrottle.cancel() 会丢弃
+    // 暂存的那次调用（custom_throttle.dart:22），而 cancelVerticalDrag()
+    // 在抬手时就会 cancel —— 快速松手会把最后一次亮度丢掉，
+    // 停在错误的档位。量化后的调用次数已经足够低，逐个应用最稳。
+    final int brightness = _convertBrightness((seek * 100).round());
+    if (brightness == lastBrightness) {
+      return;
+    }
+    lastBrightness = brightness;
+    showGestureTipText("亮度 $brightness%");
+    ScreenBrightness.instance.setApplicationScreenBrightness(brightness / 100);
+  }
+
+  // 0 to 100, 5 step each
+  int _convertBrightness(int brightness) {
+    return (brightness / 5).round() * 5;
   }
 
   /// 竖向手势完成
