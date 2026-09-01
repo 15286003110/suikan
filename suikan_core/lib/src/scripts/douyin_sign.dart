@@ -10648,6 +10648,21 @@ function getMSSDKSignature(msStub, userAgent) {
 ''';
 
   static const String defaultUserAgent = DouyinSite.kDefaultUserAgent;
+
+  /// a_bogus 签名用的 JS 运行时（懒创建，首次用到时才 eval 脚本）。
+  static final _aBogusSigner = _JsSigner(
+    script: kABogus,
+    memoryLimit: 32 * 1024 * 1024,
+    maxStackSize: 512 * 1024,
+  );
+
+  /// X-MS-STUB 签名用的 JS 运行时（懒创建）。
+  static final _msSdkSigner = _JsSigner(
+    script: kWebMsSDK,
+    memoryLimit: 4 * 1024 * 1024,
+    maxStackSize: 128 * 1024,
+  );
+
   static String getAbogusUrl(String url, String userAgent) {
     return getAbogusUrlWithMsToken(url, userAgent);
   }
@@ -10657,10 +10672,6 @@ function getMSSDKSignature(msStub, userAgent) {
     String userAgent, {
     String? msToken,
   }) {
-    JsRuntime flutterJs = JsRuntime(
-      memoryLimit: 32 * 1024 * 1024,
-      maxStackSize: 512 * 1024,
-    );
     final uri = Uri.parse(url);
     final queryParameters = Map<String, String>.from(uri.queryParameters);
     final effectiveMsToken = msToken?.trim().isNotEmpty == true
@@ -10674,11 +10685,8 @@ function getMSSDKSignature(msStub, userAgent) {
     final query = unsignedUrl.split('?').length > 1
         ? unsignedUrl.split('?').sublist(1).join('?')
         : '';
-    var jsCode = kABogus;
-    flutterJs.eval(jsCode);
-    // 执行getABogus函数
-    var aBogus = flutterJs.eval("getABogus('$query', '$userAgent')");
-    flutterJs.dispose();
+    // 执行getABogus函数。runtime 由 _aBogusSigner 持有复用，这里不再 dispose。
+    var aBogus = _aBogusSigner.run("getABogus('$query', '$userAgent')");
     final signedUri = Uri.parse(unsignedUrl).replace(
       queryParameters: {...queryParameters, "a_bogus": aBogus.toString()},
     );
@@ -10691,23 +10699,16 @@ function getMSSDKSignature(msStub, userAgent) {
   }
 
   static String getSignatureForParams(Map<String, dynamic> params) {
-    JsRuntime flutterJs = JsRuntime(
-      memoryLimit: 4 * 1024 * 1024,
-      maxStackSize: 128 * 1024,
-    );
-
-    flutterJs.eval(kWebMsSDK);
     var msStub = getMsStubFromParams(params);
-    var signature = flutterJs.eval(
+    var signature = _msSdkSigner.run(
       "getMSSDKSignature('$msStub','$defaultUserAgent')",
     );
     // 如果signature中包含-或=，重新生成
     while (signature.contains('-') || signature.contains('=')) {
-      signature = flutterJs.eval(
+      signature = _msSdkSigner.run(
         "getMSSDKSignature('$msStub','$defaultUserAgent')",
       );
     }
-    flutterJs.dispose();
     return signature;
   }
 
@@ -10754,5 +10755,59 @@ function getMSSDKSignature(msStub, userAgent) {
       length,
       (_) => characters[random.nextInt(characters.length)],
     ).join('');
+  }
+}
+
+/// 复用同一个 QuickJS 运行时，避免每次签名都重新 eval 整份脚本。
+///
+/// 为什么可以安全地复用：kABogus 和 kWebMsSDK 都**只有一个顶层函数声明**，
+/// 没有任何顶层 var/let/const，辅助函数全在闭包里；kWebMsSDK 每次进来还会
+/// 主动把自己的全局重置掉（document={} / window={} / navigator={userAgent}）。
+/// 所以反复调用不会互相污染，共用 runtime 与每次新建的结果一致。
+///
+/// 原来每次签名都新建 runtime + 重新 eval：kWebMsSDK 约 1 万行混淆代码，
+/// 一次抖音弹幕连接（含取 IM 上下文 + 组两个候选地址）就要跑 3 遍。
+class _JsSigner {
+  _JsSigner({
+    required this.script,
+    required this.memoryLimit,
+    required this.maxStackSize,
+  });
+
+  final String script;
+  final int memoryLimit;
+  final int maxStackSize;
+
+  JsRuntime? _runtime;
+
+  /// 在复用的 runtime 里执行一段 JS 并返回结果。
+  dynamic run(String code) {
+    final runtime = _runtime ??= _create();
+    try {
+      final result = runtime.eval(code);
+      // 每次跑完顺手 GC。长期持有的 runtime 若一直攒着垃圾，迟早会撞上
+      // memoryLimit（kWebMsSDK 那个只有 4MB）导致签名直接失败；
+      // GC 的成本远低于重新 eval 一遍整份脚本。
+      runtime.runGC();
+      return result;
+    } catch (e) {
+      // 出错后 runtime 内部状态未知，丢掉重建，绝不带病继续用
+      _dispose();
+      rethrow;
+    }
+  }
+
+  JsRuntime _create() {
+    final runtime = JsRuntime(
+      memoryLimit: memoryLimit,
+      maxStackSize: maxStackSize,
+    );
+    runtime.eval(script);
+    return runtime;
+  }
+
+  void _dispose() {
+    _runtime?.dispose();
+    _runtime = null;
   }
 }

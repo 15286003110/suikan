@@ -239,7 +239,11 @@ class DouyinDanmaku implements LiveDanmaku {
         .toString();
   }
 
-  String _buildSocketUrl(String base, _DouyinImContext? context) {
+  String _buildSocketUrl(
+    String base,
+    _DouyinImContext? context,
+    String signature,
+  ) {
     final uri = Uri.parse(base).replace(
       scheme: 'wss',
       queryParameters: {
@@ -248,17 +252,24 @@ class DouyinDanmaku implements LiveDanmaku {
           internalExt: context?.internalExt,
           dynamicHeartbeat: context?.heartbeatDuration,
         ),
-        "signature": DouyinSign.getSignatureForParams(_signatureParameters()),
+        "signature": signature,
       },
     );
     return uri.toString();
   }
 
   List<String> _socketUrls(_DouyinImContext? context) {
+    // 签名只由 roomId / userId 决定，与地址无关，两个候选地址共用一份即可。
+    // 原来在这里算两次，等于把 kWebMsSDK（约 1 万行混淆 JS）多跑一遍。
+    final signature = DouyinSign.getSignatureForParams(_signatureParameters());
     final dynamicUrl = context == null
         ? null
-        : _buildSocketUrl(_normalizePushServer(context.pushServer), context);
-    final staticUrl = _buildSocketUrl(serverUrl, context);
+        : _buildSocketUrl(
+            _normalizePushServer(context.pushServer),
+            context,
+            signature,
+          );
+    final staticUrl = _buildSocketUrl(serverUrl, context, signature);
     final urls = <String>[
       if (dynamicUrl != null && dynamicUrl.isNotEmpty) dynamicUrl,
       staticUrl,
