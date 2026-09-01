@@ -135,6 +135,32 @@ mixin PlayerMixin {
     ),
   );
 
+  /// 当前 mpv 视频轨是否被停用（即 `vid=no`，对应 [setAudioOnlyMode]）。
+  ///
+  /// [setAudioOnlyMode] 原来只写 mpv 属性、不留任何 Dart 状态，于是没有任何
+  /// 地方能判断「现在是不是纯音频」，Surface 健康检查只能靠 `width` 是否为
+  /// null 来猜。补上这个状态后检查才能准确短路。
+  ///
+  /// 声明在 [PlayerMixin] 而不是 [PlayerController]：[setAudioOnlyMode] 就在
+  /// 这个 mixin 里，mixin 引用不到宿主类的私有成员，而宿主类可以引用 mixin
+  /// 的成员（同一 library 内私有可见），所以放这里两边都能用。
+  bool _audioOnlyMode = false;
+
+  /// 当前是否是「没有画面可恢复」的纯音频播放。
+  ///
+  /// **只认 [_audioOnlyMode]**（mpv `vid` 的实际状态），刻意不把
+  /// [_autoAudioOnlyActivated] 也算进来，原因有两个：
+  /// ① 那是「探测状态」不是「播放器状态」，用它判断有没有画面并不精确；
+  ///    自动纯音频的所有路径最终都会调 [setAudioOnlyMode]，这里已覆盖。
+  /// ② 它存在一个弱网误判且**不会自愈**的场景：4 秒探测期内没解出视频参数
+  ///    就会被判成纯音频并锁定，之后视频轨出现也不会撤销。若把它算进守卫，
+  ///    误判后 Surface 失效将永久无法恢复（黑屏卡死）；只看 [_audioOnlyMode]
+  ///    则只要 vid 回到 auto，守卫就自动失效。
+  ///
+  /// 判定纯音频用这个 getter，不要再用 `width == null` 反推 —— 详见
+  /// [_hasInvalidVideoSize] 上的说明。
+  bool get _isAudioOnlyPlayback => _audioOnlyMode;
+
   /// 纯音频模式：停用/恢复视频轨道（mpv vid=no / auto），直播与影视一视同仁。
   /// 停轨后只解码音频，视频解码与渲染开销全部省掉。
   /// 恢复时调用方需负责让画面回来：影视切回 auto 即出画面，
@@ -143,6 +169,10 @@ mixin PlayerMixin {
     try {
       final native = player.platform as NativePlayer;
       await native.setProperty('vid', enable ? 'no' : 'auto');
+      // 只在属性确实设成功之后才记状态：这个标志一旦为 true，Surface 健康
+      // 检查就会短路。记错（比如设失败了却记成 true）等于把真正的 Surface
+      // 失效也一起放过，比漏记危险得多。
+      _audioOnlyMode = enable;
     } catch (e) {
       Log.d('setAudioOnlyMode($enable) error: $e');
     }
@@ -2242,7 +2272,9 @@ class PlayerController extends BaseController
 
       // Fix Issue #57: 检测异常的视频尺寸
       if (event == null || event <= 0) {
-        if (player.state.playing) {
+        // 纯音频下 width 本就恒为 null（见 _hasInvalidVideoSize 注释），
+        // 不是 Surface 失效，不能触发恢复。
+        if (player.state.playing && !_isAudioOnlyPlayback) {
           Log.w("播放器宽度异常: $event (播放中)，可能是Surface失效");
           unawaited(_handleInvalidVideoSize());
         }
@@ -2260,7 +2292,8 @@ class PlayerController extends BaseController
 
       // Fix Issue #57: 检测异常的视频尺寸
       if (event == null || event <= 0) {
-        if (player.state.playing) {
+        // 同 width：纯音频下 height 恒为 null，不是 Surface 失效。
+        if (player.state.playing && !_isAudioOnlyPlayback) {
           Log.w("播放器高度异常: $event (播放中)，可能是Surface失效");
           unawaited(_handleInvalidVideoSize());
         }
@@ -2453,6 +2486,11 @@ class PlayerController extends BaseController
   // Fix Issue #57 & #97: 处理异常的视频尺寸（Surface失效）。
   // Recovery is bounded and serialized so startup events cannot storm the decoder.
   Future<void> _handleInvalidVideoSize() async {
+    // 纯音频播放没有视频轨，width/height 恒为 null，这里的「异常」是预期的，
+    // 无画面可恢复。放在入口兜底，将来新增调用点也不会漏掉这个守卫。
+    if (_isAudioOnlyPlayback) {
+      return;
+    }
     final generation = playbackLoadGeneration;
     final mediaGeneration = playbackMediaGeneration;
     if (!isPlaybackLoadGenerationCurrent(generation) ||
@@ -2557,6 +2595,22 @@ class PlayerController extends BaseController
     }
   }
 
+  /// 视频尺寸是否异常（Surface 失效的典型表现）。
+  ///
+  /// ⚠️ **纯音频播放时这个方法恒为 true，并不代表 Surface 有问题。**
+  /// 已查 media_kit 1.2.6 源码确认（不是推断）：
+  /// ① open/stop 时 `PlayerState` 被整体重建，`width` 因此重置为 null
+  ///    （`real.dart:267` 重建 state + `:337` 向 width 流推 null）；
+  /// ② 此后 `width` 只在 `video-params` 的 `dw` 为整数时才被赋值
+  ///    （`real.dart:2025-2048`），纯音频流永远等不到那一刻。
+  /// 于是纯音频下 `width` 从重置起就一直是 null。
+  ///
+  /// 顺带纠正一个容易搞错的点：`state.width` 与 `state.videoParams.w` **是
+  /// 同源的**（都来自 `video-params`，前者取 `dw` 并处理了旋转），不是两套
+  /// 独立数据，所以不能指望用 videoParams 去纠正 width。
+  ///
+  /// 调用方必须先用 [_isAudioOnlyPlayback] 排除纯音频，否则会把纯音频当成
+  /// Surface 失效，每 3 秒触发一轮重开流（P0-11）。
   bool _hasInvalidVideoSize() {
     final width = player.state.width;
     final height = player.state.height;
@@ -2578,8 +2632,18 @@ class PlayerController extends BaseController
           return;
         }
 
-        // 检测：播放中但尺寸为null = Surface异常
-        if (player.state.playing && _hasInvalidVideoSize()) {
+        // 检测：播放中但尺寸为null = Surface异常。
+        //
+        // 必须排除纯音频：纯音频没有视频轨，width/height 恒为 null，不排掉
+        // 就会每 3 秒误判一次、触发一轮完整重开流（pause → 重开解码器与网络
+        // 连接），表现是持续发热 + 每隔一阵断一下音。这就是 P0-11。
+        //
+        // 三处判定里只有这一处会真正误触发：width/height 是值变化流，纯音频
+        // 下 open 时置 null 之后就不再变化（那时 playing 还是 false），所以
+        // 那两个监听其实打不到 —— 它们的守卫是防御性的。
+        if (player.state.playing &&
+            _hasInvalidVideoSize() &&
+            !_isAudioOnlyPlayback) {
           Log.w(
             "Surface健康检查失败: playing=${player.state.playing} "
             "width=${player.state.width} height=${player.state.height}",
