@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
-import 'package:get/get.dart';
 import 'package:simple_live_tv_app/app/app_focus_node.dart';
 import 'package:simple_live_tv_app/app/app_style.dart';
 import 'package:simple_live_tv_app/app/sites.dart';
@@ -50,18 +49,20 @@ class AnchorCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final site = Sites.allSites[siteId]!;
     final focusNode = this.focusNode ?? AppFocusNode();
-    return Obx(
-      () => HighlightWidget(
-        onTap: onTap ??
-            () {
-              AppNavigator.toLiveRoomDetail(site: site, roomId: roomId);
-            },
-        focusNode: focusNode,
-        autofocus: autofocus,
-        borderRadius: AppStyle.radius16,
-        color: Colors.white10,
-        child: _buildCard(context, site, focusNode.isFoucsed.value),
-      ),
+    // 不再在这里包一层 Obx：焦点状态通过 childBuilder 由 HighlightWidget 内部
+    // 那一层 Obx 统一驱动，避免同一个焦点变化被两层 Obx 各重建一次整卡。
+    return HighlightWidget(
+      onTap: onTap ??
+          () {
+            AppNavigator.toLiveRoomDetail(site: site, roomId: roomId);
+          },
+      focusNode: focusNode,
+      autofocus: autofocus,
+      borderRadius: AppStyle.radius16,
+      color: Colors.white10,
+      // child 只是占位，真正的内容由 childBuilder 按焦点状态生成。
+      child: const SizedBox.shrink(),
+      childBuilder: (context, focused) => _buildCard(context, site, focused),
     );
   }
 

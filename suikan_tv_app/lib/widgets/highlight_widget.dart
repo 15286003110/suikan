@@ -10,6 +10,13 @@ typedef FocusOnKeyDownCallback = KeyEventResult Function();
 class HighlightWidget extends StatelessWidget {
   final AppFocusNode focusNode;
   final Widget child;
+  /// 需要把焦点状态传给 child 时用它，替代在父层再套一层 Obx。
+  ///
+  /// 之前 AnchorCard 在 HighlightWidget 外面又包了一层 Obx 来拿
+  /// `focusNode.isFoucsed` 传给卡片内部改文字颜色，导致同一个焦点变化被两层
+  /// Obx 各重建一次。改成这里统一在一个 Obx 里驱动，scale/背景/文字颜色同步，
+  /// 只重建一次。传了 [childBuilder] 就忽略 [child]。
+  final Widget Function(BuildContext context, bool focused)? childBuilder;
   final FocusOnKeyDownCallback? onUpKey;
   final FocusOnKeyDownCallback? onDownKey;
   final FocusOnKeyDownCallback? onLeftKey;
@@ -25,6 +32,7 @@ class HighlightWidget extends StatelessWidget {
   const HighlightWidget({
     required this.focusNode,
     required this.child,
+    this.childBuilder,
     this.onUpKey,
     this.onDownKey,
     this.onLeftKey,
@@ -93,7 +101,11 @@ class HighlightWidget extends StatelessWidget {
                         ? foucsedColor
                         : color,
                   ),
-                  child: child,
+                  // 焦点状态需要传给 child 时，用 childBuilder 在同一层 Obx
+                  // 里取，避免父层再套一层 Obx 造成重复重建。
+                  child: childBuilder != null
+                      ? childBuilder!(context, focusNode.isFoucsed.value)
+                      : child,
                 ),
               ),
             ),

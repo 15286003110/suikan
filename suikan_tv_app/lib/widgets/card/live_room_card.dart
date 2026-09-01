@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
-import 'package:get/get.dart';
 import 'package:simple_live_tv_app/app/app_focus_node.dart';
 import 'package:simple_live_tv_app/app/app_style.dart';
 import 'package:simple_live_tv_app/app/utils.dart';
@@ -36,8 +35,9 @@ class LiveRoomCard extends StatelessWidget {
       color: Colors.white10,
       onTap: onTap,
       borderRadius: AppStyle.radius16,
-      child: Obx(
-        () => Column(
+      // child 只是占位，真正内容由 childBuilder 按焦点状态生成。
+      child: const SizedBox.shrink(),
+      childBuilder: (context, focused) => Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             ClipRRect(
@@ -61,7 +61,7 @@ class LiveRoomCard extends StatelessWidget {
                       padding:
                           AppStyle.edgeInsetsH8.copyWith(top: 4.w, bottom: 4.w),
                       decoration: BoxDecoration(
-                        color: focusNode.isFoucsed.value
+                        color: focused
                             ? Colors.white
                             : Colors.black54,
                         borderRadius: AppStyle.radius8,
@@ -76,7 +76,7 @@ class LiveRoomCard extends StatelessWidget {
                                 padding: AppStyle.edgeInsetsR8,
                                 child: Icon(
                                   Icons.whatshot,
-                                  color: focusNode.isFoucsed.value
+                                  color: focused
                                       ? Colors.orange
                                       : Colors.white,
                                   size: 20.w,
@@ -90,7 +90,7 @@ class LiveRoomCard extends StatelessWidget {
                         ),
                         style: TextStyle(
                           fontSize: 20.w,
-                          color: focusNode.isFoucsed.value
+                          color: focused
                               ? Colors.black
                               : Colors.white,
                         ),
@@ -108,7 +108,7 @@ class LiveRoomCard extends StatelessWidget {
               padding: AppStyle.edgeInsetsH20,
               child: SizedBox(
                 height: 56.w,
-                child: focusNode.isFoucsed.value
+                child: focused
                     ? Marquee(
                         text: title,
                         style: AppStyle.textStyleBlack,
@@ -135,7 +135,7 @@ class LiveRoomCard extends StatelessWidget {
                 AppStyle.hGap20,
                 Icon(
                   Icons.account_circle,
-                  color: focusNode.isFoucsed.value
+                  color: focused
                       ? Colors.black54
                       : Colors.white54,
                   size: 32.w,
@@ -144,7 +144,7 @@ class LiveRoomCard extends StatelessWidget {
                 Expanded(
                   child: Text(
                     anchor,
-                    style: focusNode.isFoucsed.value
+                    style: focused
                         ? AppStyle.subTextStyleBlack
                         : AppStyle.subTextStyleWhite,
                     maxLines: 1,
@@ -156,7 +156,6 @@ class LiveRoomCard extends StatelessWidget {
             AppStyle.vGap12,
           ],
         ),
-      ),
     );
   }
 }
