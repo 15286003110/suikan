@@ -48,29 +48,40 @@ class CategoryListView extends StatelessWidget {
                       ),
                     ),
                     content: Obx(
-                      () => GridView.count(
-                        shrinkWrap: true,
-                        padding: AppStyle.edgeInsetsV8,
-                        physics: const NeverScrollableScrollPhysics(),
-                        crossAxisCount:
-                            (MediaQuery.of(context).size.width ~/ 80)
-                                .clamp(1, 12)
-                                .toInt(),
-                        crossAxisSpacing: 8,
-                        mainAxisSpacing: 8,
-                        children: item.showAll.value
-                            ? (item.children
-                                .map(
-                                  (e) => buildSubCategory(context, e),
-                                )
-                                .toList())
-                            : (item.take15
-                                .map(
-                                  (e) => buildSubCategory(context, e),
-                                )
-                                .toList()
-                              ..add(buildShowMore(item))),
-                      ),
+                      () {
+                        // GridView.count 会把一个分类下所有子分类卡片一次性
+                        // 构建出来（几十上百个 ShadowCard + NetImage），换成
+                        // builder 懒构建：只构建可见的那几个。行为完全等价
+                        // （同样的子项、同样的顺序、同样的 childAspectRatio
+                        // 默认 1.0）。
+                        final showAll = item.showAll.value;
+                        final itemCount = showAll
+                            ? item.children.length
+                            : item.take15.length + 1;
+                        return GridView.builder(
+                          shrinkWrap: true,
+                          padding: AppStyle.edgeInsetsV8,
+                          physics: const NeverScrollableScrollPhysics(),
+                          gridDelegate:
+                              SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount:
+                                (MediaQuery.of(context).size.width ~/ 80)
+                                    .clamp(1, 12)
+                                    .toInt(),
+                            crossAxisSpacing: 8,
+                            mainAxisSpacing: 8,
+                          ),
+                          itemCount: itemCount,
+                          itemBuilder: (_, i) {
+                            if (!showAll && i == item.take15.length) {
+                              return buildShowMore(item);
+                            }
+                            final sub =
+                                showAll ? item.children[i] : item.take15[i];
+                            return buildSubCategory(context, sub);
+                          },
+                        );
+                      },
                     ),
                   ),
                 ],
