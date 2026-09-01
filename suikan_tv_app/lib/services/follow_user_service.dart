@@ -65,13 +65,22 @@ class FollowUserService extends BasePageController<FollowUser> {
       });
     });
 
-    // 启动只加载本地关注列表（轻量），不在启动时全量刷新主播状态：
-    // 同步大量关注后，启动全量刷新会并发发起几百个状态请求，弱性能设备
-    // （电视盒子）会被拖死导致白屏/打不开。状态刷新交由定时器（initTimer）
-    // 与进入关注页/手动刷新触发。
-    unawaited(refreshData(forceStatus: false));
+    // 启动：先加载本地关注列表（轻量、不阻塞首帧），随后异步刷新一次主播状态，
+    // 让用户一进首页就看到当前谁在播。状态刷新走 startUpdateStatus 的并发限流
+    // （自动 2~4 并发 worker 队列），几百个关注也是分批刷、不会同时打爆；旧的
+    // 「启动全量刷新会拖死盒子」顾虑已不成立（并发早已限流）。unawaited 保证不
+    // 阻塞首帧，刷新期间 UI 先显示本地缓存的在线状态、刷完自动更新。
+    unawaited(_startupLoadAndRefresh());
     initTimer();
     super.onInit();
+  }
+
+  /// 启动加载 + 刷新：先加载本地关注列表，再异步刷新一次主播状态。
+  /// 串行执行（先 await 加载完、再刷新）避免和 refreshData 内部的 loadLocalList
+  /// 并发竞态；由 onInit 以 unawaited 调用，不阻塞首帧。
+  Future<void> _startupLoadAndRefresh() async {
+    await refreshData(forceStatus: false);
+    await _startAutomaticRefresh();
   }
 
   /// Load local follows immediately, then perform one status refresh before
