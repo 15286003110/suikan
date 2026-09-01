@@ -1,5 +1,10 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:extended_image/extended_image.dart';
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 
 class NetImage extends StatelessWidget {
   static const liveCoverCacheName = 'simple_live_live_covers';
@@ -25,6 +30,74 @@ class NetImage extends StatelessWidget {
         .putIfAbsent(liveCoverCacheName, () => ImageCache())
       ..maximumSize = 120
       ..maximumSizeBytes = 32 << 20;
+
+    // 磁盘缓存只增不减（见 _pruneDiskImageCache），启动早期异步清理一次，
+    // 不阻塞启动。
+    unawaited(_pruneDiskImageCache());
+  }
+
+  /// 清理 extended_image 的磁盘图片缓存。
+  ///
+  /// 查证 extended_image_library 5.0.1 源码：磁盘缓存目录是
+  /// `getTemporaryDirectory()/cacheimage`（常量名 `cacheImageFolderName`），
+  /// 文件名 = `keyToMd5(url)`，读取时只按文件名匹配、**不看时间戳**，也没有
+  /// 任何总大小上限或自动清理 —— 直播封面天天更新，旧图会无限堆积。
+  ///
+  /// 库自带的 `clearDiskCachedImages` 是内部 API（`_extended_network_image_utils_io.dart`
+  /// 未从公开入口导出），所以这里按同一目录规则自己清理，不依赖私有 API：
+  /// ① 删除超过 [maxAge] 的缓存文件；② 总大小仍超 [maxBytes] 时按最旧优先删。
+  /// 全程 catch，清理失败绝不影响启动。
+  static Future<void> _pruneDiskImageCache({
+    Duration maxAge = const Duration(days: 7),
+    int maxBytes = 200 << 20,
+  }) async {
+    try {
+      final dir = Directory(
+        p.join((await getTemporaryDirectory()).path, 'cacheimage'),
+      );
+      if (!dir.existsSync()) {
+        return;
+      }
+      final now = DateTime.now();
+      final files = <File>[];
+      await for (final entity in dir.list()) {
+        if (entity is File) {
+          files.add(entity);
+        }
+      }
+
+      // ① 删除过期文件。
+      for (final f in files) {
+        try {
+          if (now.difference(await f.lastModified()) > maxAge) {
+            await f.delete();
+          }
+        } catch (_) {/* 单个文件失败继续 */}
+      }
+
+      // ② 总大小超限时按最旧优先删。
+      final remaining = <(File, DateTime)>[];
+      var total = 0;
+      for (final f in files) {
+        try {
+          if (!await f.exists()) continue;
+          total += await f.length();
+          remaining.add((f, await f.lastModified()));
+        } catch (_) {/* 单个文件失败继续 */}
+      }
+      if (total <= maxBytes) {
+        return;
+      }
+      remaining.sort((a, b) => a.$2.compareTo(b.$2));
+      for (final (f, _) in remaining) {
+        if (total <= maxBytes) break;
+        try {
+          final size = await f.length();
+          await f.delete();
+          total -= size;
+        } catch (_) {/* 单个文件失败继续 */}
+      }
+    } catch (_) {/* 清理失败不影响启动 */}
   }
 
   /// 网格封面：按父布局给到的真实宽度解码，而不是按原图分辨率。
