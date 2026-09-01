@@ -26,6 +26,16 @@ class DanmakuContentItem {
   /// 为空时兼容旧逻辑：先绘制 [text]，再把 [imageUrls] 追加到末尾。
   final List<DanmakuContentPart>? parts;
 
+  /// [Utils.contentParts] 的缓存。
+  ///
+  /// text / imageUrls / parts 都是 final，拆分结果不会变，但绘制时
+  /// **每帧每条弹幕都要问一次**，原来每次都重新跑正则 + 重建 List。
+  /// 算一次缓存在这里即可（不可修改，调用方只读）。
+  List<DanmakuContentPart>? cachedParts;
+
+  /// [Utils.imageUrlsForContent] 的缓存，同理。
+  List<String>? cachedImageUrls;
+
   DanmakuContentItem(
     this.text, {
     this.color = Colors.white,

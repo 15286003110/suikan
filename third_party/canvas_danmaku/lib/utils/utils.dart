@@ -131,7 +131,21 @@ class Utils {
     }
   }
 
+  /// 拆分结果缓存在 content 上（text/imageUrls/parts 都是 final，结果不变）。
+  /// 返回的 List 不可修改——调用方只读，不要改它。
   static List<DanmakuContentPart> contentParts(DanmakuContentItem content) {
+    final cached = content.cachedParts;
+    if (cached != null) {
+      return cached;
+    }
+    final parts = _buildContentParts(content);
+    content.cachedParts = parts;
+    return parts;
+  }
+
+  static List<DanmakuContentPart> _buildContentParts(
+    DanmakuContentItem content,
+  ) {
     final parts = content.parts ?? const <DanmakuContentPart>[];
     if (parts.isNotEmpty) {
       return parts;
@@ -140,9 +154,11 @@ class Utils {
         .where((url) => url.trim().isNotEmpty)
         .toList();
     if (imageUrls.isEmpty) {
-      return [
-        if (content.text.isNotEmpty) DanmakuContentPart.text(content.text),
-      ];
+      return content.text.isEmpty
+          ? const <DanmakuContentPart>[]
+          : List<DanmakuContentPart>.unmodifiable([
+              DanmakuContentPart.text(content.text),
+            ]);
     }
 
     final result = <DanmakuContentPart>[];
@@ -167,15 +183,23 @@ class Utils {
     for (; imageIndex < imageUrls.length; imageIndex += 1) {
       result.add(DanmakuContentPart.image(imageUrls[imageIndex]));
     }
-    return result;
+    return List<DanmakuContentPart>.unmodifiable(result);
   }
 
+  /// 同样缓存到 content 上：绘制时每帧每条弹幕都要问一次有没有表情，
+  /// 原来每次都重新拆一遍文本再新建 List。
   static List<String> imageUrlsForContent(DanmakuContentItem content) {
-    return contentParts(content)
+    final cached = content.cachedImageUrls;
+    if (cached != null) {
+      return cached;
+    }
+    final urls = contentParts(content)
         .where((part) => part.isImage)
         .map((part) => normalizeImageUrl(part.imageUrl ?? ""))
         .where((url) => url.isNotEmpty)
         .toList();
+    content.cachedImageUrls = List<String>.unmodifiable(urls);
+    return content.cachedImageUrls!;
   }
 
   static void _appendContent(
