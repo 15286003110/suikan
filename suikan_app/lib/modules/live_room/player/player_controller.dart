@@ -1852,6 +1852,9 @@ class PlayerController extends BaseController
       _autoAudioOnlyActivated = false;
       _audioOnlyProbeTimer?.cancel();
       _audioOnlyProbeTimer = null;
+      // 🔴 vid=no 是 mpv 全局属性，换流后仍残留 → 新直播间视频轨被禁无画面
+      // （"从纯音频直播间切走一直只有音频"真因，2026-09-01）。必须恢复视频轨。
+      await setAudioOnlyMode(false);
     }
     final opening = Future<void>.microtask(() => player.open(media));
     _playbackOpenFuture = opening;
