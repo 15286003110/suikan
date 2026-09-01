@@ -175,6 +175,27 @@ mixin PlayerDanmakuMixin on PlayerStateMixin {
       danmakuController?.addDanmaku(item);
     }
   }
+
+  /// 开关弹幕。
+  ///
+  /// 不要直接改 `showDanmakuState.value` —— 那只是个 UI 状态，DanmakuScreen
+  /// 收不到任何通知：Offstage 只跳过 paint，`_animationController.repeat()`
+  /// 和 100ms 的清理循环照常在跑，已存在的弹幕继续走完整套计算。
+  void setDanmakuVisible(bool visible) {
+    if (showDanmakuState.value == visible) {
+      return;
+    }
+    showDanmakuState.value = visible;
+    if (visible) {
+      danmakuController?.resume();
+    } else {
+      // 先 clear 再 pause：残留的 DanmakuItem 每条都持有 Paragraph /
+      // strokeParagraph（Skia native 内存，Dart GC 管不到），热门房一屏能堆
+      // 上百条。pause() 只停动画和定时器，不释放这些缓存。
+      danmakuController?.clear();
+      danmakuController?.pause();
+    }
+  }
 }
 mixin PlayerSystemMixin on PlayerMixin, PlayerStateMixin, PlayerDanmakuMixin {
   final DeviceInfoPlugin deviceInfo = DeviceInfoPlugin();

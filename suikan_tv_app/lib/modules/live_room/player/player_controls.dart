@@ -629,7 +629,7 @@ void showPlayerSettings(LiveRoomController controller) {
                   items: const {0: "关", 1: "开"},
                   value: controller.showDanmakuState.value ? 1 : 0,
                   onChanged: (e) {
-                    controller.showDanmakuState.value = e == 1;
+                    controller.setDanmakuVisible(e == 1);
                     AppSettingsController.instance.setDanmuEnable(e == 1);
                   },
                 ),

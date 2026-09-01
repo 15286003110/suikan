@@ -448,6 +448,11 @@ mixin PlayerDanmakuMixin on PlayerStateMixin {
     if (visible) {
       danmakuController?.resume();
     } else {
+      // 先 clear 再 pause：pause() 只停动画和定时器，不会释放已存在的弹幕，
+      // 而每条 DanmakuItem 都持有 Paragraph / strokeParagraph（Skia native
+      // 内存，Dart GC 管不到），热门房一屏能堆上百条。
+      // 副作用：重开弹幕从空屏开始（原来会残留关闭前那一屏继续飘完）。
+      danmakuController?.clear();
       danmakuController?.pause();
     }
   }

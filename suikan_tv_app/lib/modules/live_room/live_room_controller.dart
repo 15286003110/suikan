@@ -357,7 +357,7 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
   }
 
   void toggleDanmaku() {
-    showDanmakuState.value = !showDanmakuState.value;
+    setDanmakuVisible(!showDanmakuState.value);
     AppSettingsController.instance.setDanmuEnable(showDanmakuState.value);
     SmartDialog.showToast(showDanmakuState.value ? "弹幕已开启" : "弹幕已关闭");
   }
