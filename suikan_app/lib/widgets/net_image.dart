@@ -142,20 +142,31 @@ class NetImage extends StatelessWidget {
         headers: httpHeaders,
         loadStateChanged: (e) {
           if (e.extendedImageLoadState == LoadState.loading) {
-            return const Icon(
-              Icons.image,
-              color: Colors.grey,
-              size: 24,
+            // 撑满容器尺寸的浅灰占位，而不是一个居中的 24px 灰点。图片区域
+            // 在加载完成前有完整的轮廓，观感更好，也避免图片「啪」地弹出。
+            // 尺寸直接复用图片的 width/height，保证与最终画面完全一致。
+            return Container(
+              width: width,
+              height: height,
+              color: Colors.black12,
+              alignment: Alignment.center,
+              child: const Icon(Icons.image, color: Colors.grey, size: 24),
             );
           }
           if (e.extendedImageLoadState == LoadState.failed) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
               onLoadFailed?.call();
             });
-            return const Icon(
-              Icons.broken_image,
-              color: Colors.grey,
-              size: 24,
+            return Container(
+              width: width,
+              height: height,
+              color: Colors.black12,
+              alignment: Alignment.center,
+              child: const Icon(
+                Icons.broken_image,
+                color: Colors.grey,
+                size: 24,
+              ),
             );
           }
           return null;
