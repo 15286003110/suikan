@@ -1181,7 +1181,10 @@ class LiveRoomController extends PlayerController
     _superChatRefreshTimer = null;
   }
 
-  void _restartOnlineRefreshTimer() {
+  /// [refreshImmediately] 为 true 时，除了起 10 秒周期定时器，还立刻跑一次。
+  /// 回到前台用它（退后台期间攒下的热度/开播状态要尽快跟上）；普通加载路径
+  /// 不传，避免每次 loadData 都多打一次网络请求。
+  void _restartOnlineRefreshTimer({bool refreshImmediately = false}) {
     _onlineRefreshTimer?.cancel();
     _onlineRefreshInFlight = false;
     _onlineStatusRefreshPolicy.reset();
@@ -1191,8 +1194,7 @@ class LiveRoomController extends PlayerController
     final refreshGeneration = _loadGeneration;
     final refreshSiteId = site.id;
     final refreshRoomId = roomId;
-    _onlineRefreshTimer =
-        Timer.periodic(const Duration(seconds: 10), (_) async {
+    Future<void> tick() async {
       if (_onlineRefreshInFlight ||
           !_isCurrentLoad(refreshGeneration) ||
           site.id != refreshSiteId ||
@@ -1245,7 +1247,13 @@ class LiveRoomController extends PlayerController
           _onlineRefreshInFlight = false;
         }
       }
-    });
+    }
+
+    _onlineRefreshTimer =
+        Timer.periodic(const Duration(seconds: 10), (_) => unawaited(tick()));
+    if (refreshImmediately) {
+      unawaited(tick());
+    }
   }
 
   void _refreshDanmakuOverlay(String reason) {
@@ -3676,6 +3684,46 @@ ${errorStackTrace ?? ""}''');
     refreshIosVideoOutputLimit(force: true);
   }
 
+  /// 退后台要停掉的常驻定时器。
+  ///
+  /// 原来这里只做「保存房间 + player.pause()」，下面四个定时器一个不停：
+  /// 10s 在线刷新（每次一个 getRoomDetail 网络请求）、4s SuperChat、
+  /// 3s 事件流、1s 开播时长；播放器那边的 3s Surface 检查与 3s 停滞看门狗
+  /// 也照跑 —— 退后台后每 10 秒 6 次唤醒 + 持续网络请求。
+  void _suspendBackgroundTimers() {
+    _onlineRefreshTimer?.cancel();
+    _onlineRefreshTimer = null;
+    _onlineRefreshInFlight = false;
+    _superChatRefreshTimer?.cancel();
+    _superChatRefreshTimer = null;
+    _liveEventFlowTimer?.cancel();
+    _liveEventFlowTimer = null;
+    _liveDurationTimer?.cancel();
+    _liveDurationTimer = null;
+    suspendPlaybackHealthTimers();
+    Log.d("退后台：常驻定时器已暂停");
+  }
+
+  /// 回到前台恢复常驻定时器。
+  ///
+  /// 其中三个各自带前置守卫（在线刷新要 liveStatus、SuperChat 要虎牙平台
+  /// + liveStatus、开播时长要 status + showTime），不满足就直接 return，
+  /// 所以无条件调用不会把本来不该跑的定时器拉起来。
+  ///
+  /// 事件流定时器没有前置守卫，但它是幂等的（内部先 cancel 旧的），重复调用
+  /// 不会变成两个。它刻意**不**按「功能开关」守卫：开关判断在
+  /// _recordLiveEventFlow（记录侧）而不在定时器侧，且它只在进房时启动一次
+  /// （onInit :476），全仓库没有「开关改动后重启定时器」的监听，一旦按开关
+  /// 跳过就再也起不来了，那才是真 bug。
+  void _resumeBackgroundTimers() {
+    _restartOnlineRefreshTimer(refreshImmediately: true);
+    _restartSuperChatRefreshTimer();
+    _startLiveEventFlowTimer();
+    startLiveDurationTimer();
+    resumePlaybackHealthTimers();
+    Log.d("返回前台：常驻定时器已恢复");
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
@@ -3708,10 +3756,14 @@ ${errorStackTrace ?? ""}''');
         // 允许后台播放：退后台后自动降级为纯音频，只解码声音、不解码画面。
         _scheduleBackgroundAudioOnlyDowngrade();
       }
+      // 无论是否允许后台播放都要停：后台不需要刷新热度/SuperChat/事件流/
+      // 开播时长，Surface 检查在纯音频下还会把 width=null 误判成异常。
+      _suspendBackgroundTimers();
     } else if (state == AppLifecycleState.resumed) {
       Log.d("返回前台");
       _refreshAutoExitCountdown();
       isBackground = false;
+      _resumeBackgroundTimers();
       unawaited(
         AppSettingsController.instance.setLastLiveRoomResumePending(false),
       );

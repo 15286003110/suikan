@@ -2102,6 +2102,10 @@ class PlayerController extends BaseController
   Timer? _surfaceHealthCheckTimer;
   Timer? _playbackStallWatchdogTimer;
   Timer? _playbackStallStableTimer;
+  // 退后台挂起时记录「当时是否在跑」，回前台只恢复原来在跑的那些，
+  // 避免把本来没启动的定时器凭空拉起来。
+  bool _surfaceHealthCheckWasActive = false;
+  bool _stallWatchdogWasActive = false;
   bool _surfaceRecoveryInFlight = false;
   int _surfaceRecoveryAttempts = 0;
   int? _surfaceRecoveryLoadGeneration;
@@ -2595,6 +2599,39 @@ class PlayerController extends BaseController
       _playbackStallSampleInterval,
       (_) => _checkPlaybackStall(),
     );
+  }
+
+  /// 退后台时停掉这两个播放健康定时器（Surface 3s 检查 + 停滞看门狗 3s）。
+  ///
+  /// 后台本来就不该做这两件事：不允许后台播放时播放器已经 pause；允许后台
+  /// 播放时会降级为纯音频，而纯音频下 `width`/`height` 恒为 null，Surface
+  /// 检查会把它当成异常、白白触发一轮重开流。
+  void suspendPlaybackHealthTimers() {
+    _surfaceHealthCheckWasActive = _surfaceHealthCheckTimer != null;
+    _stallWatchdogWasActive = _playbackStallWatchdogTimer != null;
+    _surfaceHealthCheckTimer?.cancel();
+    _surfaceHealthCheckTimer = null;
+    _playbackStallWatchdogTimer?.cancel();
+    _playbackStallWatchdogTimer = null;
+    _resetPlaybackStallSample();
+  }
+
+  /// 回到前台恢复。只恢复挂起时确实在跑的那些；两个 start 方法都是
+  /// 「先 cancel 再 new」，重复调用幂等。
+  void resumePlaybackHealthTimers() {
+    if (_playerClosing) {
+      _surfaceHealthCheckWasActive = false;
+      _stallWatchdogWasActive = false;
+      return;
+    }
+    if (_surfaceHealthCheckWasActive) {
+      _startSurfaceHealthCheck();
+    }
+    if (_stallWatchdogWasActive) {
+      _startPlaybackStallWatchdog();
+    }
+    _surfaceHealthCheckWasActive = false;
+    _stallWatchdogWasActive = false;
   }
 
   void _checkPlaybackStall() {
