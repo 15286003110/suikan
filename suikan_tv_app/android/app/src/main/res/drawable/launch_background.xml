@@ -12,10 +12,13 @@
                 android:angle="135" />
         </shape>
     </item>
-    <!-- You can insert your own image assets here -->
-    <!-- <item>
+    <!-- 居中放品牌图标，消除启动瞬间的空白。
+         图标要放在渐变之后才会叠在渐变之上。用 ic_launcher_foreground
+         （透明底前景）而不是 ic_launcher（自带背景底），否则会在渐变上再
+         糊一层方底。五个 mipmap 密度目录都有这个资源，不会编译失败。 -->
+    <item>
         <bitmap
             android:gravity="center"
-            android:src="@mipmap/launch_image" />
-    </item> -->
+            android:src="@mipmap/ic_launcher_foreground" />
+    </item>
 </layer-list>

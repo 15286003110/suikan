@@ -3,10 +3,13 @@
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:drawable="@android:color/white" />
 
-    <!-- You can insert your own image assets here -->
-    <!-- <item>
+    <!-- 居中放品牌图标，消除启动瞬间的纯白空白。
+         用 ic_launcher_foreground（自适应图标的前景，透明底）而不是
+         ic_launcher（自带背景底），否则会和这里的白底叠成两层。
+         五个 mipmap 密度目录下都有这个资源，不会因缺资源而编译失败。 -->
+    <item>
         <bitmap
             android:gravity="center"
-            android:src="@mipmap/launch_image" />
-    </item> -->
+            android:src="@mipmap/ic_launcher_foreground" />
+    </item>
 </layer-list>
