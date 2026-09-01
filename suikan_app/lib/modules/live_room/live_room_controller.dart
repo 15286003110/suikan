@@ -1804,8 +1804,15 @@ class LiveRoomController extends PlayerController
       rebuildDanmakuView();
       addSysMsg("正在读取直播间信息");
       final detailStopwatch = Stopwatch()..start();
+      // 进房主链路唯一的超时保护：原来没有 .timeout()，弱网下要一直卡到 Dio
+      // 全局 20s 超时才报错，界面停在「正在读取直播间信息」没有任何反馈。
+      // 8 秒与在线刷新（_restartOnlineRefreshTimer）保持一致。
+      // 超时后走原有 catch → loadError → 错误页可重试，失败语义不变，只是
+      // 让用户更早拿到「可以重试」的机会。
       final loadedDetail = _sanitizeRoomDetail(
-        await targetSite.liveSite.getRoomDetail(roomId: targetRoomId),
+        await targetSite.liveSite
+            .getRoomDetail(roomId: targetRoomId)
+            .timeout(const Duration(seconds: 8)),
       );
       detailStopwatch.stop();
       Log.i(
