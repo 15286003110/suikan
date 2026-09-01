@@ -1332,13 +1332,15 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
     }
     var index = liveChannels
         .indexWhere((element) => element.id == "${site.id}_$roomId");
+    // 当前频道不在在线关注列表（如直播源频道直接播放、未关注）：按下键从第一个开始，
+    // 统一所有平台「上下键循环切在线关注频道」的行为。
     if (index == -1) {
-      SmartDialog.showToast("当前直播间不在直播列表中");
-      return;
-    }
-    index += 1;
-    if (index >= liveChannels.length) {
       index = 0;
+    } else {
+      index += 1;
+      if (index >= liveChannels.length) {
+        index = 0;
+      }
     }
     var nextChannel = liveChannels[index];
     final nextSite = Sites.siteForKey(nextChannel.siteId);
@@ -1358,13 +1360,15 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
     }
     var index = liveChannels
         .indexWhere((element) => element.id == "${site.id}_$roomId");
+    // 当前频道不在在线关注列表（如直播源频道直接播放、未关注）：按上键从最后一个开始，
+    // 统一所有平台「上下键循环切在线关注频道」的行为。
     if (index == -1) {
-      SmartDialog.showToast("当前直播间不在直播列表中");
-      return;
-    }
-    index -= 1;
-    if (index < 0) {
       index = liveChannels.length - 1;
+    } else {
+      index -= 1;
+      if (index < 0) {
+        index = liveChannels.length - 1;
+      }
     }
     var nextChannel = liveChannels[index];
     final nextSite = Sites.siteForKey(nextChannel.siteId);
