@@ -2,9 +2,7 @@ import 'dart:async';
 import 'package:canvas_danmaku/utils/utils.dart';
 import 'package:flutter/material.dart';
 import 'models/danmaku_item.dart';
-import 'scroll_danmaku_painter.dart';
-import 'special_danmaku_painter.dart';
-import 'static_danmaku_painter.dart';
+import 'merged_danmaku_painter.dart';
 import 'danmaku_controller.dart';
 import 'dart:ui' as ui;
 import 'models/danmaku_option.dart';
@@ -709,83 +707,51 @@ class _DanmakuScreenState extends State<DanmakuScreen>
         for (int i = 0; i < _trackCount; i++) {
           _trackYPositions.add(i * trackHeight);
         }
+        // 三层弹幕（滚动 / 顶部底部 / 高级）合成到一个 CustomPaint 里画。
+        //
+        // 原来是 Stack 里三个 RepaintBoundary，每个都是一块独立合成层；而
+        // CustomPaint 的 child 是个空 Container，Container 无 child 时内部套
+        // 的是 LimitedBox(0,0) + ConstrainedBox.expand()，在受限约束下会撑满
+        // —— 所以每层都是一整块屏幕大小，1080p 约 8MB/层，三层约 25MB，而且
+        // 每帧要走三次合成。
+        //
+        // 驱动源沿用滚动那一路的（frameRate 非空 → Timer 降频，否则 vsync
+        // 全速）。特效层原来用的也是 _animationController，与滚动在
+        // frameRate 为空时本来就是同一个对象；frameRate 非空时特效弹幕会跟着
+        // 降到同一帧率，但全仓库没有任何地方传过 frameRate（两处 DanmakuOption
+        // 构造都省略了），这条路当前走不到。
         return ClipRect(
           child: IgnorePointer(
             child: Opacity(
               opacity: _option.opacity,
-              child: Stack(
-                children: [
-                  RepaintBoundary(
-                    child: AnimatedBuilder(
-                      // 滚动弹幕驱动：frameRate 非空 → Timer 降频；null → vsync 全速
-                      // （默认，与屏幕刷新对齐帧均匀）
-                      animation: _option.frameRate != null
-                          ? _scrollFrameNotifier
-                          : _animationController,
-                      builder: (context, child) {
-                        return CustomPaint(
-                          painter: ScrollDanmakuPainter(
-                            _animationController.value,
-                            _scrollDanmakuItems,
-                            _option.duration,
-                            _option.fontSize,
-                            _option.fontWeight,
-                            _option.fontFamily,
-                            _option.showStroke,
-                            _danmakuHeight,
-                            _running,
-                            _tick,
-                            _emojiImageCache,
-                          ),
-                          child: Container(),
-                        );
-                      },
-                    ),
-                  ),
-                  RepaintBoundary(
-                    child: AnimatedBuilder(
-                      animation: _staticAnimationController,
-                      builder: (context, child) {
-                        return CustomPaint(
-                          painter: StaticDanmakuPainter(
-                            _staticAnimationController.value,
-                            _topDanmakuItems,
-                            _bottomDanmakuItems,
-                            _option.duration,
-                            _option.fontSize,
-                            _option.fontWeight,
-                            _option.fontFamily,
-                            _option.showStroke,
-                            _danmakuHeight,
-                            _running,
-                            _tick,
-                            _emojiImageCache,
-                          ),
-                          child: Container(),
-                        );
-                      },
-                    ),
-                  ),
-                  RepaintBoundary(
-                    child: AnimatedBuilder(
-                      animation: _animationController, // 与滚动弹幕共用控制器
-                      builder: (context, child) {
-                        return CustomPaint(
-                          painter: SpecialDanmakuPainter(
-                            _animationController.value,
-                            _specialDanmakuItems,
-                            _option.fontSize,
-                            _option.fontWeight,
-                            _option.fontFamily,
-                            _running,
-                            _tick,
-                          ),
-                          child: Container(),
-                        );
-                      },
-                    ),
-                  ),
-                ],
+              child: RepaintBoundary(
+                child: AnimatedBuilder(
+                  animation: _option.frameRate != null
+                      ? _scrollFrameNotifier
+                      : _animationController,
+                  builder: (context, child) {
+                    return CustomPaint(
+                      painter: buildMergedDanmakuPainter(
+                        progress: _animationController.value,
+                        staticProgress: _staticAnimationController.value,
+                        scrollDanmakuItems: _scrollDanmakuItems,
+                        topDanmakuItems: _topDanmakuItems,
+                        bottomDanmakuItems: _bottomDanmakuItems,
+                        specialDanmakuItems: _specialDanmakuItems,
+                        danmakuDurationInSeconds: _option.duration,
+                        fontSize: _option.fontSize,
+                        fontWeight: _option.fontWeight,
+                        fontFamily: _option.fontFamily,
+                        showStroke: _option.showStroke,
+                        danmakuHeight: _danmakuHeight,
+                        running: _running,
+                        tick: _tick,
+                        emojiImageCache: _emojiImageCache,
+                      ),
+                      child: Container(),
+                    );
+                  },
+                ),
               ),
             ),
           ),
