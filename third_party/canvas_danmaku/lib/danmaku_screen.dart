@@ -117,6 +117,10 @@ class _DanmakuScreenState extends State<DanmakuScreen>
 
   final Map<String, ui.Image> _emojiImageCache = {};
   final Set<String> _loadingEmojiImageUrls = {};
+  /// 表情图缓存条目上限：热门房表情种类多，_emojiImageCache 原本只增不减
+  /// （dispose 才 clear），每个表情一张 ui.Image 引用无限堆积。超限时淘汰
+  /// 最旧的（LinkedHashMap 的 keys.first 即最早插入），后续用到再重新解码。
+  static const int _maxEmojiImageCache = 30;
 
   @override
   void initState() {
@@ -223,6 +227,10 @@ class _DanmakuScreenState extends State<DanmakuScreen>
       listener = ImageStreamListener(
         (info, _) {
           _loadingEmojiImageUrls.remove(value);
+          // 条目上限：超限时淘汰最旧的，避免 ui.Image 引用无限堆积。
+          if (_emojiImageCache.length >= _maxEmojiImageCache) {
+            _emojiImageCache.remove(_emojiImageCache.keys.first);
+          }
           _emojiImageCache[value] = info.image;
           if (mounted) {
             setState(() {});
