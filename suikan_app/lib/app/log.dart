@@ -59,9 +59,17 @@ class Log {
     ),
   );
 
+  /// 发行版是否把日志打到 stdout/logcat。
+  /// 页面内的「调试日志」列表（addDebugLog）本来就只在 debug 收集，
+  /// 发行版打出去既看不到又白付字符串拼接 + PrettyPrinter + print 的成本。
+  /// 写文件不受影响：那是设置项控制的用户可见功能，且定位线上问题要靠它。
+  static bool get _printToConsole => !kReleaseMode;
+
   static void d(String message, [bool writeFile = true]) {
     addDebugLog(message, Colors.orange);
-    logger.d("${DateTime.now().toString()}\n$message");
+    if (_printToConsole) {
+      logger.d("${DateTime.now().toString()}\n$message");
+    }
     if (writeFile) {
       writeLog(message, Level.debug);
     }
@@ -69,13 +77,17 @@ class Log {
 
   static void i(String message, [bool writeFile = true]) {
     addDebugLog(message, Colors.blue);
-    logger.i("${DateTime.now().toString()}\n$message");
+    if (_printToConsole) {
+      logger.i("${DateTime.now().toString()}\n$message");
+    }
     if (writeFile) {
-      logFileWriter?.write("[INFO] $_currentTime：$message");
+      // 原来这里手写一行 "[INFO] ..." 后紧接着又调 writeLog()，
+      // 两行内容完全一样 → 日志文件里每条 info 都重复两遍，去掉手写那行。
       writeLog(message, Level.info);
     }
   }
 
+  /// 错误日志发行版照打：量小，且是线上排障唯一抓手。
   static void e(String message, StackTrace stackTrace,
       [bool writeFile = true]) {
     addDebugLog('$message\r\n\r\n$stackTrace', Colors.red);
@@ -87,7 +99,9 @@ class Log {
 
   static void w(String message, [bool writeFile = true]) {
     addDebugLog(message, Colors.pink);
-    logger.w("${DateTime.now().toString()}\n$message");
+    if (_printToConsole) {
+      logger.w("${DateTime.now().toString()}\n$message");
+    }
     if (writeFile) {
       writeLog(message, Level.warning);
     }

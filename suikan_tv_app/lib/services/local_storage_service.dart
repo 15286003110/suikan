@@ -221,7 +221,7 @@ class LocalStorageService extends GetxService {
   T getValue<T>(dynamic key, T defaultValue) {
     try {
       var value = settingsBox.get(key, defaultValue: defaultValue) as T;
-      Log.d("Get LocalStorage：$key");
+      // 原有一行 Log.d("Get LocalStorage：$key")：设置项被高频读取，纯噪音，去掉。
       return value;
     } catch (e) {
       Log.logPrint(e);

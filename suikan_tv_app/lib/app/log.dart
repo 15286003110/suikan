@@ -17,11 +17,23 @@ class Log {
     ),
   );
 
+  /// 发行版不打日志到 logcat：TV 盒子 CPU 弱，PrettyPrinter 的格式化 + print
+  /// 是纯浪费（TV 没有日志页面，打出去也没人看）。
+  /// 错误 e() 保留：量小，线上排障要靠它。
+  /// 需要发行版也输出的（数据安全相关）请走 logAlways()。
+  static bool get _printToConsole => !kReleaseMode;
+
   static void d(String message) {
+    if (!_printToConsole) {
+      return;
+    }
     logger.d("${DateTime.now().toString()}\n$message");
   }
 
   static void i(String message) {
+    if (!_printToConsole) {
+      return;
+    }
     logger.i("${DateTime.now().toString()}\n$message");
   }
 
@@ -30,6 +42,9 @@ class Log {
   }
 
   static void w(String message) {
+    if (!_printToConsole) {
+      return;
+    }
     logger.w("${DateTime.now().toString()}\n$message");
   }
 

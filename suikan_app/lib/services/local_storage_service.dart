@@ -172,7 +172,8 @@ class LocalStorageService extends GetxService {
   T getValue<T>(dynamic key, T defaultValue) {
     try {
       final value = settingsBox.get(key, defaultValue: defaultValue) as T;
-      Log.d("Get LocalStorage: $key");
+      // 原有一行 Log.d("Get LocalStorage: $key")：设置项在渲染/播放里被高频读取
+      // （每次取值都走一次字符串拼接 + 日志落盘），纯噪音，去掉。
       return value;
     } catch (e) {
       Log.logPrint(e);

@@ -18,7 +18,11 @@ class CoreLog {
   static bool enableLog = true;
 
   /// 请求日志模式
-  static RequestLogType requestLogType = RequestLogType.all;
+  /// 默认 short：`all` 会把完整响应体（自定义源 m3u8 可达数 MB）打进 logcat，
+  /// 而 CustomSourceService / FnOsService 的启动刷新发生在 initCoreLog() 之前
+  /// （main.dart initServices 末尾），此前一直是 all 全量打印。
+  /// 所有显式设置方（手机/WIN、TV、console、test）都要的就是 short，故默认值对齐。
+  static RequestLogType requestLogType = RequestLogType.short;
 
   static Function(Level, String)? onPrintLog;
   static Logger logger = Logger(
