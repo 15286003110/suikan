@@ -128,4 +128,16 @@ class BasePageController<T> extends BaseController {
       easyRefreshController.callRefresh();
     }
   }
+
+  @override
+  void onClose() {
+    // 这两个控制器全项目从来没释放过：ScrollController 会把 ScrollPosition
+    // 挂在widget树上，EasyRefreshController 自己也持有监听。反复进出列表页
+    // 就是持续累积。放到基类统一释放，子类不用各自记得写。
+    //
+    // 注意：子类如果覆写了 onClose，必须调 super.onClose() 才会走到这里。
+    scrollController.dispose();
+    easyRefreshController.dispose();
+    super.onClose();
+  }
 }

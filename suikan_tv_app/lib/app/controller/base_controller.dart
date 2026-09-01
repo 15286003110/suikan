@@ -147,4 +147,13 @@ class BasePageController<T> extends BaseController {
       easyRefreshController.callRefresh();
     }
   }
+
+  @override
+  void onClose() {
+    // 同手机端：这两个控制器原本全项目从未释放，反复进出列表页持续累积。
+    // 子类若覆写了 onClose，需要调 super.onClose() 才会走到这里。
+    scrollController.dispose();
+    easyRefreshController.dispose();
+    super.onClose();
+  }
 }
