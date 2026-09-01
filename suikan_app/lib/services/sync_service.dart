@@ -2,6 +2,9 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:device_info_plus/device_info_plus.dart';
+// 只导入 WidgetsBinding：直接 import 'widgets.dart' 会和 shelf_router 的
+// Router 撞名（ambiguous_import），用 show 精确限定即可。
+import 'package:flutter/widgets.dart' show WidgetsBinding;
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/get.dart';
 import 'package:network_info_plus/network_info_plus.dart';
@@ -44,9 +47,31 @@ class SyncService extends GetxService {
   void onInit() {
     Log.d('TVService init');
     deviceId = (const Uuid().v4()).split('-').first;
-    listenUDP();
-    initServer();
+    _scheduleStartAfterFirstFrame();
     super.onInit();
+  }
+
+  /// 把 bind 端口 / 起 HTTP Server 推到首帧渲染之后。
+  ///
+  /// 这两个动作都要占用端口并建 socket（UDP 23235 + HTTP 23234），放在启动
+  /// 关键路径上会拖慢首帧。首帧画出来再起，用户感知不到差别。
+  ///
+  /// **刻意不按方案做「进同步页才懒启动」**：本服务既是发端也是收端，只在
+  /// 同步页启动的话，其他设备就发现不了本机（除非用户主动打开同步页）——
+  /// 那是功能行为变化，不该在性能优化里擅自改。
+  void _scheduleStartAfterFirstFrame() {
+    void start() {
+      listenUDP();
+      initServer();
+    }
+
+    try {
+      WidgetsBinding.instance.addPostFrameCallback((_) => start());
+    } catch (_) {
+      // 非 widget 环境（如单测 / 纯 Dart 调用）退化成立即启动，
+      // 保证服务不会因为拿不到 binding 而整个丢失。
+      start();
+    }
   }
 
   /// 监听其他端UDP广播的回复
