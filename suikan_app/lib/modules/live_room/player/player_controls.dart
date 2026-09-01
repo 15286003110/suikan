@@ -789,6 +789,11 @@ Widget buildDanmuView(VideoState videoState, LiveRoomController controller) {
                     duration: settings.danmuSpeed.value.toInt(),
                     opacity: settings.danmuOpacity.value,
                     fontWeight: settings.danmuFontWeight.value,
+                    // 拍板项 A：把「描边宽度」设置项接到 showStroke。
+                    // 描边宽度 0 = 关闭描边（每条弹幕少一个 strokeParagraph + 每帧
+                    // 少画一遍，CPU 绘制量直接减半）；>0 保持描边（宽度仍由
+                    // canvas_danmaku 库内 generateStrokeParagraph 硬编码 2）。
+                    showStroke: settings.danmuStrokeWidth.value > 0,
                     hideTop: hideDanmu,
                     hideBottom: hideDanmu,
                     hideScroll: hideDanmu,
