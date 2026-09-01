@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:canvas_danmaku/utils/utils.dart';
 import 'package:flutter/material.dart';
 import 'models/danmaku_item.dart';
@@ -35,6 +36,29 @@ class _DanmakuScreenState extends State<DanmakuScreen>
 
   /// 弹幕动画控制器
   late AnimationController _animationController;
+
+  /// 滚动弹幕重绘驱动器（降帧用）：frameRate 非空时用 Timer 按目标帧率通知，
+  /// 位置由 tick（stopwatch 时间）推进保持连续，只降重绘频率（2026-09-01）。
+  final ValueNotifier<int> _scrollFrameNotifier = ValueNotifier(0);
+  Timer? _scrollFrameTimer;
+  Duration get _scrollFrameInterval => _option.frameRate == null
+      ? const Duration(milliseconds: 16)
+      : Duration(microseconds: (1000000 / _option.frameRate!).round());
+  void _ensureScrollFrameTimer() {
+    if (_scrollFrameTimer != null || !_running || !mounted) return;
+    _scrollFrameTimer = Timer.periodic(_scrollFrameInterval, (_) {
+      if (!_running || !mounted || _scrollDanmakuItems.isEmpty) {
+        _stopScrollFrameTimer();
+        return;
+      }
+      _scrollFrameNotifier.value++;
+    });
+  }
+
+  void _stopScrollFrameTimer() {
+    _scrollFrameTimer?.cancel();
+    _scrollFrameTimer = null;
+  }
 
   /// 静态弹幕动画控制器
   late AnimationController _staticAnimationController;
@@ -133,6 +157,8 @@ class _DanmakuScreenState extends State<DanmakuScreen>
     _running = false;
     _controller.running = false;
     WidgetsBinding.instance.removeObserver(this);
+    _stopScrollFrameTimer();
+    _scrollFrameNotifier.dispose();
     _animationController.dispose();
     _staticAnimationController.dispose();
     _emojiImageCache.clear();
@@ -362,10 +388,12 @@ class _DanmakuScreenState extends State<DanmakuScreen>
         setState(() {});
         break;
       case DanmakuItemType.scroll:
+        // 滚动弹幕走降频驱动器（frameRate 非空时 Timer 限帧，位置按 tick 连续）
+        _ensureScrollFrameTimer();
+        break;
       case DanmakuItemType.special:
-        if (!_animationController.isAnimating &&
-            (_scrollDanmakuItems.isNotEmpty ||
-                _specialDanmakuItems.isNotEmpty)) {
+        // 特效弹幕需要 value 动画（scale/fade），保留 vsync 全速
+        if (!_animationController.isAnimating && _specialDanmakuItems.isNotEmpty) {
           _animationController.repeat();
         }
         break;
@@ -383,6 +411,7 @@ class _DanmakuScreenState extends State<DanmakuScreen>
         _running = false;
         _controller.running = false;
       });
+      _stopScrollFrameTimer();
       if (_animationController.isAnimating) {
         _animationController.stop();
       }
@@ -400,8 +429,10 @@ class _DanmakuScreenState extends State<DanmakuScreen>
         _running = true;
         _controller.running = true;
       });
-      if (!_animationController.isAnimating &&
-          (_scrollDanmakuItems.isNotEmpty || _specialDanmakuItems.isNotEmpty)) {
+      if (_scrollDanmakuItems.isNotEmpty) {
+        _ensureScrollFrameTimer();
+      }
+      if (!_animationController.isAnimating && _specialDanmakuItems.isNotEmpty) {
         _animationController.repeat();
       }
       _startTick();
@@ -412,6 +443,7 @@ class _DanmakuScreenState extends State<DanmakuScreen>
   void updateOption(DanmakuOption option) {
     bool needRestart = false;
     bool needClearParagraph = false;
+    _stopScrollFrameTimer();
     if (_animationController.isAnimating) {
       _animationController.stop();
       needRestart = true;
@@ -471,8 +503,10 @@ class _DanmakuScreenState extends State<DanmakuScreen>
         }
       }
     }
-    if (needRestart &&
-        (_scrollDanmakuItems.isNotEmpty || _specialDanmakuItems.isNotEmpty)) {
+    if (needRestart && _scrollDanmakuItems.isNotEmpty) {
+      _ensureScrollFrameTimer();
+    }
+    if (needRestart && _specialDanmakuItems.isNotEmpty) {
       _animationController.repeat();
     }
     setState(() {});
@@ -505,6 +539,7 @@ class _DanmakuScreenState extends State<DanmakuScreen>
       _bottomDanmakuItems.clear();
       _specialDanmakuItems.clear();
     });
+    _stopScrollFrameTimer();
     _animationController.stop();
     _stopwatch.stop();
   }
@@ -582,9 +617,10 @@ class _DanmakuScreenState extends State<DanmakuScreen>
               (_tick - item.creationTime) >=
               (item.content as SpecialDanmakuContentItem).duration,
         );
-        if (_scrollDanmakuItems.isEmpty &&
-            _specialDanmakuItems.isEmpty &&
-            _animationController.isAnimating) {
+        if (_scrollDanmakuItems.isEmpty) {
+          _stopScrollFrameTimer();
+        }
+        if (_specialDanmakuItems.isEmpty && _animationController.isAnimating) {
           _animationController.stop();
         }
         final staticCount =
@@ -646,7 +682,9 @@ class _DanmakuScreenState extends State<DanmakuScreen>
                 children: [
                   RepaintBoundary(
                     child: AnimatedBuilder(
-                      animation: _animationController,
+                      // 滚动弹幕用降频驱动器（frameRate 非空时 Timer 限帧，
+                      // 位置由 painter 内 tick 连续推进，只降重绘频率）
+                      animation: _scrollFrameNotifier,
                       builder: (context, child) {
                         return CustomPaint(
                           painter: ScrollDanmakuPainter(

@@ -43,6 +43,11 @@ class DanmakuOption {
   /// 为字幕预留空间
   final bool safeArea;
 
+  /// 弹幕重绘帧率上限（AnimationController.minFps）。null=不限制（vsync 60fps）。
+  /// 低端设备（如 TV 盒子 GPU 弱）传 30 可平滑降帧：位置由 tick 时间推进保持连续，
+  /// 只是重绘频率降到 30fps，绘制量减半且无明显卡顿（2026-09-01）。
+  final double? frameRate;
+
   DanmakuOption({
     this.fontSize = 16,
     this.fontWeight = 4,
@@ -59,6 +64,7 @@ class DanmakuOption {
     this.showStroke = true,
     this.massiveMode = false,
     this.safeArea = true,
+    this.frameRate,
   });
 
   DanmakuOption copyWith({
@@ -77,6 +83,7 @@ class DanmakuOption {
     bool? showStroke,
     bool? massiveMode,
     bool? safeArea,
+    double? frameRate,
   }) {
     return DanmakuOption(
       area: area ?? this.area,
@@ -94,6 +101,7 @@ class DanmakuOption {
       showStroke: showStroke ?? this.showStroke,
       massiveMode: massiveMode ?? this.massiveMode,
       safeArea: safeArea ?? this.safeArea,
+      frameRate: frameRate ?? this.frameRate,
     );
   }
 }
