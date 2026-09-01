@@ -60,8 +60,15 @@ void main(List<String> args) async {
     showAlreadyRunningMessage();
     exit(0);
   }
-  await migrateData();
-  await initWindow();
+  // migrateData（仅桌面、首次）与 initWindow（仅桌面）没有数据依赖，可并行；
+  // 手机端两者都是空操作（内部直接 return），并行无副作用。桌面首次启动能
+  // 少等一段串行时间。
+  //
+  // 注意 MediaKit.ensureInitialized() 刻意保持在原位：它是同步的 libmpv 加载，
+  // 就算挪到 runApp 之后也依然阻塞在首帧渲染前（runApp 只调度帧、不渲染），
+  // 挪动没有收益，反而要承担「首屏就创建 Player」的时序风险。已查证
+  // initServices 不碰 media_kit，此处时序安全。
+  await Future.wait([migrateData(), initWindow()]);
   MediaKit.ensureInitialized();
   final hivePath = await resolveHivePath(args);
   await Hive.initFlutter(hivePath);
