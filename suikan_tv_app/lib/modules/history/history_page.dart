@@ -61,8 +61,6 @@ class HistoryPage extends GetView<HistoryController> {
                 crossAxisCount: 3,
                 crossAxisSpacing: 48.w,
                 mainAxisSpacing: 40.w,
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
                 itemBuilder: (_, i) {
                   var item = controller.list[i];
                   return AnchorCard(

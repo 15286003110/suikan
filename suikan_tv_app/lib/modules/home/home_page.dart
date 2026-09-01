@@ -55,9 +55,12 @@ class HomePage extends GetView<HomeController> {
             ],
           ),
           Expanded(
-            child: ListView(
-              padding: AppStyle.edgeInsetsV32,
-              children: [
+            child: CustomScrollView(
+              slivers: [
+                SliverPadding(
+                  padding: AppStyle.edgeInsetsV32,
+                  sliver: SliverList(
+                    delegate: SliverChildListDelegate([
                 Padding(
                   padding: AppStyle.edgeInsetsH48,
                   child: Row(
@@ -195,15 +198,17 @@ class HomePage extends GetView<HomeController> {
                   ),
                 ),
                 AppStyle.vGap32,
-                Obx(
-                  () => MasonryGridView.count(
-                    padding: AppStyle.edgeInsetsH48,
-                    itemCount: FollowUserService.instance.list.length,
+                    ]),
+                  ),
+                ),
+                SliverPadding(
+                  padding: AppStyle.edgeInsetsH48,
+                  sliver: Obx(
+                    () => SliverMasonryGrid.count(
+                    childCount: FollowUserService.instance.list.length,
                     crossAxisCount: 3,
                     crossAxisSpacing: 48.w,
                     mainAxisSpacing: 48.w,
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
                     itemBuilder: (_, i) {
                       var item = FollowUserService.instance.list[i];
                       return Obx(
@@ -218,37 +223,40 @@ class HomePage extends GetView<HomeController> {
                     },
                   ),
                 ),
-                Obx(
-                  () => Visibility(
-                    visible: FollowUserService.instance.allList.isEmpty,
-                    child: Column(
-                      children: [
-                        AppStyle.vGap24,
-                        LottieBuilder.asset(
-                          'assets/lotties/empty.json',
-                          width: 160.w,
-                          height: 160.w,
-                          repeat: false,
-                        ),
-                        AppStyle.vGap24,
-                        Text(
-                          "暂无任何关注\n您可以从其他端同步数据到此处",
-                          textAlign: TextAlign.center,
-                          style: AppStyle.textStyleWhite,
-                        ),
-                        AppStyle.vGap16,
-                        HighlightButton(
-                          focusNode: AppFocusNode(),
-                          iconData: Icons.devices,
-                          text: "同步数据",
-                          onTap: () {
-                            controller.toSync();
-                          },
-                        ),
-                      ],
+                ),
+                SliverToBoxAdapter(
+                  child: Obx(
+                    () => Visibility(
+                      visible: FollowUserService.instance.allList.isEmpty,
+                      child: Column(
+                        children: [
+                          AppStyle.vGap24,
+                          LottieBuilder.asset(
+                            'assets/lotties/empty.json',
+                            width: 160.w,
+                            height: 160.w,
+                            repeat: false,
+                          ),
+                          AppStyle.vGap24,
+                          Text(
+                            "暂无任何关注\n您可以从其他端同步数据到此处",
+                            textAlign: TextAlign.center,
+                            style: AppStyle.textStyleWhite,
+                          ),
+                          AppStyle.vGap16,
+                          HighlightButton(
+                            focusNode: AppFocusNode(),
+                            iconData: Icons.devices,
+                            text: "同步数据",
+                            onTap: () {
+                              controller.toSync();
+                            },
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                )
+                ),
               ],
             ),
           ),
