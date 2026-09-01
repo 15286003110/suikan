@@ -1701,6 +1701,28 @@ class LiveRoomController extends PlayerController
     messages.removeRange(0, excess);
   }
 
+  /// 本帧是否已经排过「滚动到底部」。
+  bool _chatBottomScrollScheduled = false;
+
+  /// 请求在下一帧把聊天列表滚到底部，同一帧内的重复请求会被合并。
+  ///
+  /// 原来每条弹幕都直接 addPostFrameCallback，热门房一帧来几十条就排几十个
+  /// 一模一样的回调。这些回调做的事完全相同（jumpTo 到 maxScrollExtent），
+  /// 执行 N 次和执行 1 次的结果没有区别 —— 中间那些是纯浪费。
+  ///
+  /// 注意这是**等价**优化：最终都停在「本帧最后一条消息加入后的底部」，
+  /// 只是省掉了中间几次无意义的 jumpTo。
+  void _scheduleChatScrollToBottom() {
+    if (_chatBottomScrollScheduled) {
+      return;
+    }
+    _chatBottomScrollScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _chatBottomScrollScheduled = false;
+      chatScrollToBottom();
+    });
+  }
+
   /// 聊天列表滚动到底部
   void chatScrollToBottom() {
     if (scrollController.hasClients) {
@@ -1760,9 +1782,8 @@ class LiveRoomController extends PlayerController
 
       messages.add(msg);
 
-      WidgetsBinding.instance.addPostFrameCallback(
-        (_) => chatScrollToBottom(),
-      );
+      // 每帧只排一次（见 _scheduleChatScrollToBottom 注释）。
+      _scheduleChatScrollToBottom();
       if (!liveStatus.value || (isBackground && !_allowBackgroundPlayback)) {
         return;
       }
