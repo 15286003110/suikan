@@ -135,6 +135,20 @@ class MpvOptionsService {
     options["demuxer-max-bytes"] = isVod ? "134217728" : "16777216";
     options["demuxer-readahead-secs"] = isVod ? "30" : "5";
     options["cache-secs"] = isVod ? "30" : "5";
+    // 弱机/弱网：允许丢帧换取音画同步。不丢的话解码一旦跟不上就会越拖越
+    // 久、越拖越热；丢帧反而能一直贴着实时走。
+    options["framedrop"] = "decoder+vo";
+    // 网络静默 10 秒就报错，让上层走重连，而不是无限期干等。
+    // 直播是长连接、持续有数据，正常播放不会触发；只有真断流才算。
+    options["network-timeout"] = "10";
+    // 关字幕轨：直播流基本不带字幕，但 mpv 仍会建轨、解码、渲染，白烧 CPU。
+    //
+    // ⚠️ **只在直播关，点播不能关** —— 影视点播（飞牛等）是有字幕轨的，
+    // 一律关掉等于把点播字幕功能弄没了，那就不是性能优化而是功能退化了。
+    if (!isVod) {
+      options["sub"] = "no";
+      options["sub-auto"] = "no";
+    }
     for (final entry in options.entries) {
       try {
         await (player.platform as dynamic).setProperty(entry.key, entry.value);
