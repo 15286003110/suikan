@@ -89,6 +89,11 @@ class _DanmakuScreenState extends State<DanmakuScreen>
   /// 弹幕高度
   late double _danmakuHeight;
 
+  /// 上次测量弹幕高度所用的字号 / 字体。
+  /// 只有这两者变化时才需要重新排版（build 里会顺带刷新）。
+  double? _measuredFontSize;
+  String? _measuredFontFamily;
+
   /// 弹幕轨道数
   int _trackCount = 0;
 
@@ -119,6 +124,7 @@ class _DanmakuScreenState extends State<DanmakuScreen>
   void initState() {
     super.initState();
     _option = widget.option;
+    _measureDanmakuHeight();
     _controller = DanmakuController(
       onAddDanmaku: addDanmaku,
       onUpdateOption: updateOption,
@@ -151,6 +157,35 @@ class _DanmakuScreenState extends State<DanmakuScreen>
   }
 
   /// 处理 Android/iOS 应用后台或熄屏导致的动画问题
+  /// 测量「弹幕」两个字的行高，作为一条弹幕轨道的高度基准。
+  ///
+  /// 只在字号或字体变化时才重新排版：原来 build() 每次都新建一个 TextPainter
+  /// 排版一遍，而且**从不 dispose**——Paragraph 是 native 内存，直播间里
+  /// build 会被反复触发（静态弹幕数量变化就会 setState），一路泄漏。
+  /// 注意：TextPainter.height 读的是 _layoutCache，dispose() 之后
+  /// _layoutCache 被置空就再也读不到了，所以必须先取值再 dispose。
+  void _measureDanmakuHeight() {
+    if (_measuredFontSize == _option.fontSize &&
+        _measuredFontFamily == _option.fontFamily) {
+      return;
+    }
+    final textPainter = TextPainter(
+      text: TextSpan(
+        text: '弹幕',
+        style: TextStyle(
+          fontSize: _option.fontSize,
+          fontFamily: _option.fontFamily,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    final height = textPainter.height;
+    textPainter.dispose();
+    _danmakuHeight = height;
+    _measuredFontSize = _option.fontSize;
+    _measuredFontFamily = _option.fontFamily;
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused) {
@@ -651,17 +686,7 @@ class _DanmakuScreenState extends State<DanmakuScreen>
   @override
   Widget build(BuildContext context) {
     /// 计算弹幕轨道
-    final textPainter = TextPainter(
-      text: TextSpan(
-        text: '弹幕',
-        style: TextStyle(
-          fontSize: _option.fontSize,
-          fontFamily: _option.fontFamily,
-        ),
-      ),
-      textDirection: TextDirection.ltr,
-    )..layout();
-    _danmakuHeight = textPainter.height;
+    _measureDanmakuHeight();
     return LayoutBuilder(
       builder: (context, constraints) {
         final trackHeight = _danmakuHeight * _option.lineHeight.clamp(1.0, 3.0);
