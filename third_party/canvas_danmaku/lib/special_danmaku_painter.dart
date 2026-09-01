@@ -54,9 +54,17 @@ class SpecialDanmakuPainter extends CustomPainter {
     int elapsed,
   ) {
     // 透明度动画
-    late final alpha =
+    //
+    // alpha 量化到 32 档：原来只要 alphaTween 非空，颜色就逐帧变化 → 下面
+    // 的 color 判等永远不成立 → 每帧都要重建 TextSpan 并 layout()（整段文本
+    // 重新排版，还带 Shadow 的模糊重算）。量化后只有跨档才重建，排版次数降到
+    // 约 1/30。32 档的透明度渐变肉眼不可辨。
+    //
+    // alphaTween 为空时 alpha 本就是常量，量化后仍是同一个常量，行为不变。
+    final double rawAlpha =
         item.alphaTween?.transform(elapsed / item.duration) ??
         item.color.opacity;
+    late final alpha = _quantizeAlpha(rawAlpha);
     final color = item.alphaTween == null
         ? item.color
         : item.color.withOpacity(alpha);
@@ -115,4 +123,18 @@ class SpecialDanmakuPainter extends CustomPainter {
   bool shouldRepaint(covariant SpecialDanmakuPainter oldDelegate) {
     return true;
   }
+}
+
+/// 把 alpha 量化到 32 档（0/32 … 32/32）。
+///
+/// 返回值恒落在 [0,1]，所以喂给 `Color.withOpacity` 不会触发断言——这一点比
+/// 直接透传原始 alpha 更安全（量化顺带兜住了越界值）。
+///
+/// 非有限值（NaN / Infinity）单独兜底为 1.0（不透明，保证弹幕可见）：
+/// `(x * 32).round()` 对 Infinity 会直接抛 `Unsupported operation:
+/// Infinity or NaN toInt`，而 `clamp` 对 NaN 是原样返回、拦不住——必须在这里
+/// 提前挡掉，否则 painter 里抛异常就是整屏红屏。
+double _quantizeAlpha(double alpha) {
+  if (!alpha.isFinite) return 1.0;
+  return (alpha * 32).round().clamp(0, 32) / 32;
 }
