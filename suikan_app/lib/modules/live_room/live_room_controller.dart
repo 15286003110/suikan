@@ -1685,6 +1685,11 @@ class LiveRoomController extends PlayerController
     liveRoomRecommendationScrollController.dispose();
     _cancelAutoExitTimers();
     _autoExitSession.stop();
+    // 聊天批量入列的定时器与残留缓冲：退出房间后已无必要再入列，直接清掉，
+    // 同时避免定时器继续持有 controller 引用。
+    _chatFlushTimer?.cancel();
+    _chatFlushTimer = null;
+    _pendingChatBuffer.clear();
     _superChatRefreshTimer?.cancel();
     _backgroundDowngradeTimer?.cancel();
     _usingAudioOnlyStream = false;
@@ -1772,6 +1777,49 @@ class LiveRoomController extends PlayerController
     _trimChatMessages();
   }
 
+  /// 待批量入列的聊天消息缓冲。
+  ///
+  /// 原本每来一条消息就 messages.add() 一次 → 一次 Rx 通知 → 聊天区（连同
+  /// 设置面板、SuperChat、关注列表等一大片 widget）整片重建一遍。热门房
+  /// 每秒 10~30 条消息 = 每秒 10~30 次重建。
+  ///
+  /// 改成攒一批再一次性入列后，重建频率降到约每 80ms 一次。消息内容与顺序
+  /// 完全一致，仅仅是最多晚 80ms 出现在列表里 —— 抖音数据源本来就自带
+  /// 80ms/50 条的批处理，这里是把同样的策略统一到所有平台。
+  ///
+  /// 注意：画面上滚动的弹幕走 _scheduleOverlayDanmaku，仍然逐条立即上屏，
+  /// 不受本缓冲影响，因此观感上不会有延迟。
+  final List<LiveMessage> _pendingChatBuffer = <LiveMessage>[];
+  Timer? _chatFlushTimer;
+
+  /// 聊天消息批量入列的时间窗口。
+  static const Duration _chatFlushWindow = Duration(milliseconds: 80);
+
+  /// 缓冲达到这个条数就立即入列，不等窗口到点。
+  static const int _chatFlushMaxBatch = 50;
+
+  void _enqueueChatMessage(LiveMessage msg) {
+    _pendingChatBuffer.add(msg);
+    if (_pendingChatBuffer.length >= _chatFlushMaxBatch) {
+      _flushChatBuffer();
+      return;
+    }
+    _chatFlushTimer ??= Timer(_chatFlushWindow, _flushChatBuffer);
+  }
+
+  /// 把缓冲里的消息一次性入列，只触发一次 Rx 通知。
+  void _flushChatBuffer() {
+    _chatFlushTimer?.cancel();
+    _chatFlushTimer = null;
+    if (_pendingChatBuffer.isEmpty) {
+      return;
+    }
+    final batch = List<LiveMessage>.of(_pendingChatBuffer);
+    _pendingChatBuffer.clear();
+    messages.addAll(batch);
+    _scheduleChatScrollToBottom();
+  }
+
   /// 本帧是否已经排过「滚动到底部」。
   bool _chatBottomScrollScheduled = false;
 
@@ -1852,10 +1900,9 @@ class LiveRoomController extends PlayerController
         return;
       }
 
-      messages.add(msg);
-
-      // 每帧只排一次（见 _scheduleChatScrollToBottom 注释）。
-      _scheduleChatScrollToBottom();
+      // 批量入列（见 _enqueueChatMessage 注释）：逐条 add 会让聊天区整片
+      // 重建一次，攒一批则只重建一次；滚动调度随之移入 _flushChatBuffer。
+      _enqueueChatMessage(msg);
       if (!liveStatus.value || (isBackground && !_allowBackgroundPlayback)) {
         return;
       }
