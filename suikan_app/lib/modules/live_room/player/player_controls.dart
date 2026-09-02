@@ -789,6 +789,15 @@ Widget buildDanmuView(VideoState videoState, LiveRoomController controller) {
                     duration: settings.danmuSpeed.value.toInt(),
                     opacity: settings.danmuOpacity.value,
                     fontWeight: settings.danmuFontWeight.value,
+                    // iPad 弹幕降帧：ProMotion 机型（iPad Pro）上 Flutter 界面
+                    // 会跑 120Hz，而弹幕是整块全屏 CustomPaint、每帧重绘，
+                    // 按 120fps 走等于白烧一倍填充率。这里限定 60fps；滚动
+                    // 位置仍由库内 _tick 按时间推进，速度不受影响。
+                    //
+                    // 只在 iOS 传值：安卓上 Timer 降帧实测抖动 10~50ms、反而
+                    // 更卡（2.2.0 已因此回退过一次），iOS 的定时器精度足够，
+                    // 且 60fps 本就是目标帧率，不损失观感。
+                    frameRate: Platform.isIOS ? 60.0 : null,
                     // 拍板项 A：把「描边宽度」设置项接到 showStroke。
                     // 描边宽度 0 = 关闭描边（每条弹幕少一个 strokeParagraph + 每帧
                     // 少画一遍，CPU 绘制量直接减半）；>0 保持描边（宽度仍由
