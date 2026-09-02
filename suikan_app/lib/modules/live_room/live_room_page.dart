@@ -1061,38 +1061,52 @@ class LiveRoomPage extends GetView<LiveRoomController> {
     // 重点动态）跟着一起重建。而外层 Obx 真正要管的只是「有哪些 tab、
     // tab 标题显示什么」这类结构信息，变化频率很低。
     return Obx(
-      () => Stack(
-        children: [
-          ListView.separated(
-            controller: controller.scrollController,
-            reverse: false,
-            separatorBuilder: (_, i) => SizedBox(
-              // *2与原来的EdgeInsets.symmetric(vertical: )做兼容
-              height: AppSettingsController.instance.chatTextGap.value * 2,
+      () {
+        // 聊天外观设置在这里一次性读取，再传给每条消息（见 buildMessageItem
+        // 注释）—— 原先每条消息各自套一个 Obx 订阅，屏内就是几十个 Obx。
+        final chatTextSize = AppSettingsController.instance.chatTextSize.value;
+        final bubbleStyle =
+            AppSettingsController.instance.chatBubbleStyle.value;
+        final renderEmoji =
+            AppSettingsController.instance.danmuRenderEmoji.value;
+        return Stack(
+          children: [
+            ListView.separated(
+              controller: controller.scrollController,
+              reverse: false,
+              separatorBuilder: (_, i) => SizedBox(
+                // *2与原来的EdgeInsets.symmetric(vertical: )做兼容
+                height: AppSettingsController.instance.chatTextGap.value * 2,
+              ),
+              padding: AppStyle.edgeInsetsA12,
+              itemCount: controller.messages.length,
+              itemBuilder: (_, i) {
+                var item = controller.messages[i];
+                return buildMessageItem(
+                  item,
+                  chatTextSize: chatTextSize,
+                  bubbleStyle: bubbleStyle,
+                  renderEmoji: renderEmoji,
+                );
+              },
             ),
-            padding: AppStyle.edgeInsetsA12,
-            itemCount: controller.messages.length,
-            itemBuilder: (_, i) {
-              var item = controller.messages[i];
-              return buildMessageItem(item);
-            },
-          ),
-          Visibility(
-            visible: controller.disableAutoScroll.value,
-            child: Positioned(
-              right: 12,
-              bottom: 12,
-              child: ElevatedButton.icon(
-                onPressed: () {
-                  controller.forceChatScrollToBottom();
-                },
-                icon: const Icon(Icons.expand_more),
-                label: const Text("最新"),
+            Visibility(
+              visible: controller.disableAutoScroll.value,
+              child: Positioned(
+                right: 12,
+                bottom: 12,
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    controller.forceChatScrollToBottom();
+                  },
+                  icon: const Icon(Icons.expand_more),
+                  label: const Text("最新"),
+                ),
               ),
             ),
-          ),
-        ],
-      ),
+          ],
+        );
+      },
     );
   }
 
@@ -1131,15 +1145,24 @@ class LiveRoomPage extends GetView<LiveRoomController> {
     );
   }
 
-  Widget buildMessageItem(LiveMessage message) {
+  /// 渲染单条聊天消息。
+  ///
+  /// 聊天外观设置（字号 / 气泡样式 / 是否渲染表情）由调用方**一次性读取后
+  /// 传入**。原先是每条消息自己套一个 Obx 订阅这些值，屏内 20~40 条消息就是
+  /// 20~40 个 Obx；而这些设置极少变动，放在列表层订阅即可 —— 设置一改就整列
+  /// 重建一次，完全可接受。
+  Widget buildMessageItem(
+    LiveMessage message, {
+    required double chatTextSize,
+    required bool bubbleStyle,
+    required bool renderEmoji,
+  }) {
     if (message.userName == "LiveSysMessage") {
-      return Obx(
-        () => Text(
-          message.message,
-          style: TextStyle(
-            color: Colors.grey,
-            fontSize: AppSettingsController.instance.chatTextSize.value,
-          ),
+      return Text(
+        message.message,
+        style: TextStyle(
+          color: Colors.grey,
+          fontSize: chatTextSize,
         ),
       );
     }
@@ -1153,12 +1176,8 @@ class LiveRoomPage extends GetView<LiveRoomController> {
         userName: message.userName,
         remark: remark,
         message: message.message,
-        imageUrls: AppSettingsController.instance.danmuRenderEmoji.value
-            ? message.imageUrls
-            : null,
-        spans: AppSettingsController.instance.danmuRenderEmoji.value
-            ? message.spans
-            : null,
+        imageUrls: renderEmoji ? message.imageUrls : null,
+        spans: renderEmoji ? message.spans : null,
         userStyle: userStyle,
         messageStyle: messageStyle,
         onUserTap: () => controller.showUserActions(
@@ -1169,53 +1188,48 @@ class LiveRoomPage extends GetView<LiveRoomController> {
       );
     }
 
-    return Obx(
-      () => AppSettingsController.instance.chatBubbleStyle.value
-          ? Row(
-              mainAxisAlignment: MainAxisAlignment.start,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Flexible(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: Colors.blueGrey.withAlpha(25),
-                      //borderRadius: AppStyle.radius8,
-                      borderRadius: const BorderRadius.only(
-                        topRight: Radius.circular(12),
-                        bottomLeft: Radius.circular(12),
-                        bottomRight: Radius.circular(12),
-                      ),
+    return bubbleStyle
+        ? Row(
+            mainAxisAlignment: MainAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Flexible(
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.blueGrey.withAlpha(25),
+                    borderRadius: const BorderRadius.only(
+                      topRight: Radius.circular(12),
+                      bottomLeft: Radius.circular(12),
+                      bottomRight: Radius.circular(12),
                     ),
-                    padding:
-                        AppStyle.edgeInsetsA4.copyWith(left: 12, right: 12),
-                    child: buildMessageContent(
-                      userStyle: TextStyle(
-                        color: Colors.grey,
-                        fontSize:
-                            AppSettingsController.instance.chatTextSize.value,
-                      ),
-                      messageStyle: TextStyle(
-                        color:
-                            Get.isDarkMode ? Colors.white : AppColors.black333,
-                        fontSize:
-                            AppSettingsController.instance.chatTextSize.value,
-                      ),
+                  ),
+                  padding:
+                      AppStyle.edgeInsetsA4.copyWith(left: 12, right: 12),
+                  child: buildMessageContent(
+                    userStyle: TextStyle(
+                      color: Colors.grey,
+                      fontSize: chatTextSize,
+                    ),
+                    messageStyle: TextStyle(
+                      color:
+                          Get.isDarkMode ? Colors.white : AppColors.black333,
+                      fontSize: chatTextSize,
                     ),
                   ),
                 ),
-              ],
-            )
-          : buildMessageContent(
-              userStyle: TextStyle(
-                color: Colors.grey,
-                fontSize: AppSettingsController.instance.chatTextSize.value,
               ),
-              messageStyle: TextStyle(
-                color: Get.isDarkMode ? Colors.white : AppColors.black333,
-                fontSize: AppSettingsController.instance.chatTextSize.value,
-              ),
+            ],
+          )
+        : buildMessageContent(
+            userStyle: TextStyle(
+              color: Colors.grey,
+              fontSize: chatTextSize,
             ),
-    );
+            messageStyle: TextStyle(
+              color: Get.isDarkMode ? Colors.white : AppColors.black333,
+              fontSize: chatTextSize,
+            ),
+          );
   }
 
   Widget buildSuperChats() {
