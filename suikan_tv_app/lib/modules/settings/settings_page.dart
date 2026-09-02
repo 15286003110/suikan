@@ -207,21 +207,27 @@ class SettingsPage extends GetView<SettingsController> {
           ),
         ),
         AppStyle.vGap24,
-        Obx(
-          () => SettingsItemWidget(
-            foucsNode: controller.compatibleModeFocusNode,
-            autofocus: controller.compatibleModeFocusNode.isFoucsed.value,
-            title: "兼容模式",
-            items: const {
-              0: "关",
-              1: "开",
-            },
-            value:
-                AppSettingsController.instance.playerCompatMode.value ? 1 : 0,
-            onChanged: (e) {
-              AppSettingsController.instance
-                  .setPlayerCompatMode(e == 1 ? true : false);
-            },
+        // 兼容模式内部走 vo=mediacodec_embed + hwdec=mediacodec，是 Android
+        // MediaCodec 的专属能力；mpv_options_service 里也只判了 Android。
+        // TV 的 Windows 构建上显示出来会让人以为能改、实际完全无效，故隐藏。
+        Visibility(
+          visible: Platform.isAndroid,
+          child: Obx(
+            () => SettingsItemWidget(
+              foucsNode: controller.compatibleModeFocusNode,
+              autofocus: controller.compatibleModeFocusNode.isFoucsed.value,
+              title: "兼容模式",
+              items: const {
+                0: "关",
+                1: "开",
+              },
+              value:
+                  AppSettingsController.instance.playerCompatMode.value ? 1 : 0,
+              onChanged: (e) {
+                AppSettingsController.instance
+                    .setPlayerCompatMode(e == 1 ? true : false);
+              },
+            ),
           ),
         ),
         AppStyle.vGap24,
