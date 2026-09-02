@@ -912,6 +912,12 @@ class LiveRoomPage extends GetView<LiveRoomController> {
   }
 
   Widget buildMessageArea() {
+    // 聊天列表在 Obx 之外预先构建：它内部自带 Obx 订阅 messages（见
+    // buildChatList 注释）。若像原来那样在下面这个 Obx 的 builder 里调用
+    // buildChatList()，messages 就会被登记成外层 Obx 的依赖 —— 每来一条
+    // 消息，整个 TabBar 连同 SC / 关注 / 贡献榜 / 重点动态 等所有分页
+    // 都要重建一遍。热门房每秒 10~30 条消息，等于每秒重建几十次整片区域。
+    final chatListPage = buildChatList();
     return Obx(() {
       final isVodLayout = !_isLegacyLiveSite(controller.site.id);
       final hasSuperChatTab = controller.site.id == Constant.kBiliBili ||
@@ -924,7 +930,7 @@ class LiveRoomPage extends GetView<LiveRoomController> {
           case "chat":
             keys.add(key);
             tabs.add(const Tab(text: "聊天"));
-            pages.add(buildChatList());
+            pages.add(chatListPage);
             break;
           case "super_chat":
             if (!hasSuperChatTab) return;
@@ -1048,37 +1054,45 @@ class LiveRoomPage extends GetView<LiveRoomController> {
   }
 
   Widget buildChatList() {
-    return Stack(
-      children: [
-        ListView.separated(
-          controller: controller.scrollController,
-          reverse: false,
-          separatorBuilder: (_, i) => SizedBox(
-            // *2与原来的EdgeInsets.symmetric(vertical: )做兼容
-            height: AppSettingsController.instance.chatTextGap.value * 2,
+    // 自带 Obx，把 messages 的订阅范围收敛到本列表内部。
+    //
+    // 原先本方法是在 buildMessageArea 那个大 Obx 的 builder 里被调用的，
+    // 于是每来一条消息都会让 TabBar 和所有分页（SC / 关注 / 贡献榜 /
+    // 重点动态）跟着一起重建。而外层 Obx 真正要管的只是「有哪些 tab、
+    // tab 标题显示什么」这类结构信息，变化频率很低。
+    return Obx(
+      () => Stack(
+        children: [
+          ListView.separated(
+            controller: controller.scrollController,
+            reverse: false,
+            separatorBuilder: (_, i) => SizedBox(
+              // *2与原来的EdgeInsets.symmetric(vertical: )做兼容
+              height: AppSettingsController.instance.chatTextGap.value * 2,
+            ),
+            padding: AppStyle.edgeInsetsA12,
+            itemCount: controller.messages.length,
+            itemBuilder: (_, i) {
+              var item = controller.messages[i];
+              return buildMessageItem(item);
+            },
           ),
-          padding: AppStyle.edgeInsetsA12,
-          itemCount: controller.messages.length,
-          itemBuilder: (_, i) {
-            var item = controller.messages[i];
-            return buildMessageItem(item);
-          },
-        ),
-        Visibility(
-          visible: controller.disableAutoScroll.value,
-          child: Positioned(
-            right: 12,
-            bottom: 12,
-            child: ElevatedButton.icon(
-              onPressed: () {
-                controller.forceChatScrollToBottom();
-              },
-              icon: const Icon(Icons.expand_more),
-              label: const Text("最新"),
+          Visibility(
+            visible: controller.disableAutoScroll.value,
+            child: Positioned(
+              right: 12,
+              bottom: 12,
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  controller.forceChatScrollToBottom();
+                },
+                icon: const Icon(Icons.expand_more),
+                label: const Text("最新"),
+              ),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
