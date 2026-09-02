@@ -504,6 +504,18 @@ class LiveRoomController extends PlayerController
       unawaited(_enterAudioOnly(reason: "进房即为纯音频"));
     }
 
+    // SuperChat 排序缓存的失效条件：列表本身增删，或排序方向设置被改动。
+    ever(superChats, (_) => _sortedSuperChatsCache = null);
+    ever(
+      AppSettingsController.instance.superChatSortDesc,
+      (_) => _sortedSuperChatsCache = null,
+    );
+    // 屏蔽词正则缓存的失效条件：屏蔽词集合被改动（增删、清空或同步覆盖）。
+    ever(
+      AppSettingsController.instance.shieldList,
+      (_) => _shieldPatternCache.clear(),
+    );
+
     scrollController.addListener(scrollListener);
 
     super.onInit();
@@ -560,6 +572,14 @@ class LiveRoomController extends PlayerController
     return scrollController.position.extentAfter <= 24;
   }
 
+  /// 屏蔽词 → 编译后 Pattern 的缓存。
+  ///
+  /// 原实现**每条消息**都对每个正则型屏蔽词重新 RegExp(...) 编译一次：
+  /// 热门房每秒数十条消息 × 数十个屏蔽词 = 每秒上千次正则编译。
+  /// 屏蔽词是全局设置，缓存按 keyword 为 key；编译失败不入缓存（与原本
+  /// 每次重试的行为一致）。失效由 onInit 里对 shieldList 的 ever 监听负责。
+  static final Map<String, Pattern> _shieldPatternCache = <String, Pattern>{};
+
   bool _isKeywordShielded(LiveMessage msg) {
     final settings = AppSettingsController.instance;
     if (!settings.danmuShieldEnable.value ||
@@ -567,18 +587,22 @@ class LiveRoomController extends PlayerController
       return false;
     }
     for (var keyword in settings.shieldList) {
-      Pattern? pattern;
-      if (Utils.isRegexFormat(keyword)) {
-        String removedSlash = Utils.removeRegexFormat(keyword);
-        try {
-          pattern = RegExp(removedSlash);
-        } catch (e) {
-          Log.d("正则屏蔽词 $keyword 无法编译，已跳过");
+      var pattern = _shieldPatternCache[keyword];
+      if (pattern == null) {
+        if (Utils.isRegexFormat(keyword)) {
+          final String removedSlash = Utils.removeRegexFormat(keyword);
+          try {
+            pattern = RegExp(removedSlash);
+          } catch (e) {
+            Log.d("正则屏蔽词 $keyword 无法编译，已跳过");
+            continue;
+          }
+        } else {
+          pattern = keyword;
         }
-      } else {
-        pattern = keyword;
+        _shieldPatternCache[keyword] = pattern;
       }
-      if (pattern != null && msg.message.contains(pattern)) {
+      if (msg.message.contains(pattern)) {
         Log.d("命中屏蔽词 $keyword\n已过滤消息: ${msg.message}");
         return true;
       }
@@ -676,8 +700,13 @@ class LiveRoomController extends PlayerController
     return "$userName\u0001${parts.join("\u0002")}";
   }
 
+  /// 预编译：原实现每次调用都新建 RegExp，而本方法在去重指纹里会对正文、
+  /// 每个 span 文本、每个 span 图片、每个图片 URL 各调一次（单条消息 2~10 次）。
+  /// 热门房每秒数十条消息 → 每秒上百次正则编译。改为静态复用，行为完全不变。
+  static final RegExp _whitespacePattern = RegExp(r"\s+");
+
   String _normalizeDanmuFingerprintPart(String value) {
-    return value.trim().replaceAll(RegExp(r"\s+"), " ");
+    return value.trim().replaceAll(_whitespacePattern, " ");
   }
 
   void _clearDanmuDedupeState() {
@@ -686,13 +715,27 @@ class LiveRoomController extends PlayerController
     _recentDanmuEventsSincePrune = 0;
   }
 
+  /// SuperChat 排序结果缓存。
+  ///
+  /// 原实现每次访问都 toList()+sort()，而面板的 itemBuilder 是「每个可见
+  /// item 调一次 getter」（live_room_page.dart:1221 的
+  /// `controller.sortedSuperChats[i]`）→ 可见 n 项就排序 n 次，O(n² log n)。
+  /// 排序依据只有 endTime（不随时间变化）与排序方向开关，故可安全缓存；
+  /// 失效由 onInit 里的 ever 监听 superChats / superChatSortDesc 负责。
+  List<LiveSuperChatMessage>? _sortedSuperChatsCache;
+
   List<LiveSuperChatMessage> get sortedSuperChats {
+    final cached = _sortedSuperChatsCache;
+    if (cached != null) {
+      return cached;
+    }
     final list = superChats.toList();
     list.sort((a, b) => a.endTime.compareTo(b.endTime));
-    if (AppSettingsController.instance.superChatSortDesc.value) {
-      return list.reversed.toList();
-    }
-    return list;
+    final result = AppSettingsController.instance.superChatSortDesc.value
+        ? list.reversed.toList()
+        : list;
+    _sortedSuperChatsCache = result;
+    return result;
   }
 
   bool _isUserShielded(String userName) {
@@ -1633,6 +1676,9 @@ class LiveRoomController extends PlayerController
     unawaited(cancelAutoPipOnLeave());
     CurrentRoomService.instance.clearRoom();
     scrollController.removeListener(scrollListener);
+    // 补上 dispose：此前只解除监听、从未释放控制器本身，反复进出直播间会
+    // 持续累积（同批另外 4 个 ScrollController 都已正确 dispose）。
+    scrollController.dispose();
     liveRoomFollowScrollController.dispose();
     liveRoomFollowDialogScrollController.dispose();
     liveRoomHistoryScrollController.dispose();
@@ -1701,6 +1747,31 @@ class LiveRoomController extends PlayerController
     messages.removeRange(0, excess);
   }
 
+  /// 距上次真正裁剪之间累计收到的聊天消息条数。
+  int _chatSinceLastTrim = 0;
+
+  /// 聊天列表裁剪的批量阈值：每累计这么多条才真正裁剪一次。
+  ///
+  /// 原实现在**每来一条消息**时都先 _trimChatMessages() 再 messages.add()。
+  /// 列表未超上限时裁剪会直接 return、没有额外通知；但直播间开久了列表
+  /// 一直处于满的状态，此时每条消息都会走 removeRange → **每条消息触发
+  /// 2 次 Rx 通知**（裁剪一次 + 添加一次），进而让聊天区整片重建两遍。
+  /// 热门房每秒 10~30 条消息 = 每秒 20~60 次重建。
+  ///
+  /// 改成累计到阈值才裁一次后，稳态下每条消息只剩 1 次通知，重建次数减半。
+  /// 代价是消息数最多临时超出上限本阈值条（上限本身是 200/500，几十条的
+  /// 浮动不影响内存保护的实际效果）。
+  static const int _chatTrimBatch = 32;
+
+  void _maybeTrimChatMessages() {
+    _chatSinceLastTrim += 1;
+    if (_chatSinceLastTrim < _chatTrimBatch) {
+      return;
+    }
+    _chatSinceLastTrim = 0;
+    _trimChatMessages();
+  }
+
   /// 本帧是否已经排过「滚动到底部」。
   bool _chatBottomScrollScheduled = false;
 
@@ -1764,7 +1835,8 @@ class LiveRoomController extends PlayerController
     msg = _sanitizeLiveMessage(msg);
     if (msg.type == LiveMessageType.chat) {
       // 裁剪与滚动状态解耦，保住内存上限（见 _trimChatMessages 注释）。
-      _trimChatMessages();
+      // 走批量版本：避免每来一条消息都额外触发一次 Rx 通知（含整片重建）。
+      _maybeTrimChatMessages();
       if (_isUserShielded(msg.userName) || isTempMutedUser(msg.userName)) {
         Log.d("已过滤被屏蔽用户: ${msg.userName}");
         return;
