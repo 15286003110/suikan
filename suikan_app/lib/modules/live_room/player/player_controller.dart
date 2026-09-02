@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
+import 'package:flutter/foundation.dart';
 import 'package:auto_orientation_v2/auto_orientation_v2.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:file_picker/file_picker.dart';
@@ -2283,12 +2284,20 @@ class PlayerController extends BaseController
         mediaEnd();
       }
     });
-    _logSubscription = player.stream.log.listen((event) {
-      Log.d("播放器日志：$event");
-    });
+    // mpv 日志在发行版没有任何用处：Log.d 内部本就有 kReleaseMode 守卫、
+    // 不会真的打印，但订阅仍会把每一条日志送过 Dart 侧，并白执行一次字符串
+    // 插值。卡顿 / 重连时日志非常密集，这笔开销不小，故发行版直接不订阅。
+    if (!kReleaseMode) {
+      _logSubscription = player.stream.log.listen((event) {
+        Log.d("播放器日志：$event");
+      });
+    }
     _widthSubscription = player.stream.width.listen((event) {
-      Log.d(
-          'width:$event  W:${(player.state.width)}  H:${(player.state.height)}');
+      // 同上：仅调试构建打印，发行版省掉插值开销（尺寸检测逻辑照常执行）。
+      if (!kReleaseMode) {
+        Log.d(
+            'width:$event  W:${(player.state.width)}  H:${(player.state.height)}');
+      }
 
       // Fix Issue #57: 检测异常的视频尺寸
       if (event == null || event <= 0) {
