@@ -4026,12 +4026,15 @@ ${errorStackTrace ?? ""}''');
   }
 
   /// 退到后台超过阈值后自动停掉视频轨（只留声音，省电）。
-  /// 仅移动端生效——桌面端窗口失焦时用户只是切窗口，画面应继续显示。
+  ///
+  /// 全平台统一走同一套逻辑（与手机 / iOS 保持一致）：退后台满 30 秒停掉
+  /// 视频轨，返回前台时由 _handleForegroundRestore →
+  /// _restoreFromBackgroundAudioOnly 自动恢复画面，无需用户干预。
+  ///
+  /// 注：桌面端「退后台」表现为窗口失焦，切到别的窗口同样会进入该流程，
+  /// 回来时自动恢复（重开流，中断约 1 秒）。这是与移动端对齐后的预期行为。
   void _scheduleBackgroundAudioOnlyDowngrade() {
     _backgroundDowngradeTimer?.cancel();
-    if (!Platform.isAndroid && !Platform.isIOS) {
-      return;
-    }
     // 手动纯音频已经停过轨，无需后台再降一次。
     if (_backgroundAudioOnly || _videoTrackDisabled) {
       return;
