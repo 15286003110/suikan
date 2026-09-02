@@ -109,6 +109,11 @@ class _DanmakuScreenState extends State<DanmakuScreen>
   bool _running = true;
   bool _cleanupLoopRunning = false;
 
+  /// 上一次清理时是否还存在静态弹幕（顶部 / 底部）。
+  /// 用于把「静态弹幕数量变化就整棵子树重建」收敛成「有无静态弹幕翻转才重建」，
+  /// 详见清理循环里的说明。
+  bool _lastHasStaticDanmaku = false;
+
   bool get _hasDanmakuItems =>
       _scrollDanmakuItems.isNotEmpty ||
       _topDanmakuItems.isNotEmpty ||
@@ -653,8 +658,6 @@ class _DanmakuScreenState extends State<DanmakuScreen>
         _scrollDanmakuItems.removeWhere(
           (item) => item.xPosition + item.width < 0,
         );
-        final previousStaticCount =
-            _topDanmakuItems.length + _bottomDanmakuItems.length;
         _topDanmakuItems.removeWhere(
           (item) => (_tick - item.creationTime) >= staticDuration,
         );
@@ -676,7 +679,19 @@ class _DanmakuScreenState extends State<DanmakuScreen>
         }
         final staticCount =
             _topDanmakuItems.length + _bottomDanmakuItems.length;
-        if (staticCount != previousStaticCount && mounted) {
+        // 只在「有没有静态弹幕」翻转时才重建整棵子树。
+        //
+        // 原实现是数量一变就 setState：静态弹幕 1→2→3 这类增长也会触发，
+        // 而 painter 每次绘制都会重新读取 _top/_bottomDanmakuItems，只要
+        // 有滚动弹幕在跑（AnimatedBuilder 每帧绘制）新内容自然就会出现，
+        // 并不需要为此重建。热门房静态弹幕频繁增减时，原来会白白触发大量
+        // LayoutBuilder 子树重建。
+        //
+        // 保留「从无到有 / 从有到无」的重建是为了兜底：当完全没有滚动弹幕
+        // 时，AnimatedBuilder 不会绘制，此刻需要一次重建让静态弹幕显示出来。
+        final hasStatic = staticCount > 0;
+        if (hasStatic != _lastHasStaticDanmaku && mounted) {
+          _lastHasStaticDanmaku = hasStatic;
           setState(() {});
         }
       }
