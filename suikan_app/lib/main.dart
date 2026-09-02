@@ -578,6 +578,16 @@ class MyApp extends StatelessWidget {
   static bool _desktopShortcutHandlerBound = false;
   static bool? _desktopShortcutCaptureEnabled;
 
+  /// 全局快捷键监听用的 FocusNode。
+  ///
+  /// 原先是在下面的 builder 里 `FocusNode()` 就地新建，而 builder 在每次路由
+  /// 变化时都会重跑 —— 于是每导航一次就新建一个 FocusNode，旧的那批从来不会
+  /// 被释放（StatelessWidget 也没有 dispose 可挂），随使用时间持续累积。
+  ///
+  /// 全局快捷键本就需要贯穿整个应用生命周期，提为静态单例正合适：只创建
+  /// 一次，也就不存在需要释放的问题。
+  static final FocusNode _globalShortcutFocusNode = FocusNode();
+
   const MyApp({super.key});
 
   @override
@@ -684,7 +694,7 @@ class MyApp extends StatelessWidget {
                       ),
                     },
                     child: KeyboardListener(
-                      focusNode: FocusNode(),
+                      focusNode: _globalShortcutFocusNode,
                       autofocus: true,
                       onKeyEvent: (KeyEvent event) async {
                         if (event is KeyDownEvent) {
