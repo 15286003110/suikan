@@ -1,5 +1,5 @@
 name: simple_live_app
-version: 2.2.3+20041
+version: 2.2.3+20047
 publish_to: none
 description: "随看 App"
 environment:
@@ -92,6 +92,11 @@ dev_dependencies:
 dependency_overrides:
   canvas_danmaku:
     path: ../third_party/canvas_danmaku
+  # path_provider_android 2.3.x 改用 jni_flutter(JNI 实现),在 Android 17
+  # (小米 17)上首启 FindClass 空指针闪退(dartjni);2.2.22(无 jni)实测白屏。
+  # 钉回 2.2.15:兼容 Flutter 3.47 embedding(2.2.1 太老用 Registrar 编译不过),
+  # 无 jni。上游修复后移除。
+  path_provider_android: 2.2.15
 
 flutter_launcher_icons:
   android: true
