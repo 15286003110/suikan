@@ -26,6 +26,7 @@ import 'package:simple_live_app/app/utils.dart';
 import 'package:simple_live_app/models/db/follow_user.dart';
 import 'package:simple_live_app/models/db/history.dart';
 import 'package:simple_live_app/modules/live_room/player/player_controller.dart';
+import 'package:simple_live_app/modules/live_room/widgets/ios_render_cap_selector.dart';
 import 'package:simple_live_app/modules/live_room/live_status_refresh_policy.dart';
 import 'package:simple_live_app/modules/live_room/widgets/live_contribution_rank_panel.dart';
 import 'package:simple_live_app/modules/settings/danmu_settings_page.dart';
@@ -2969,32 +2970,40 @@ class LiveRoomController extends PlayerController
   void showPlayUrlsSheet() {
     Utils.showBottomSheet(
       title: "线路选择",
-      child: RadioGroup(
-        groupValue: currentLineIndex,
-        onChanged: (e) {
-          Get.back();
-          //currentLineIndex = i;
-          //setPlayer();
-          changePlayLine(e ?? 0);
-        },
-        child: ListView.builder(
-          itemCount: playUrls.length,
-          itemBuilder: (_, i) {
-            final customName = (_customLineNames != null &&
-                    i < _customLineNames!.length)
-                ? _customLineNames![i]
-                : '';
-            return RadioListTile(
-              value: i,
-              title: Text(
-                customName.isEmpty ? "线路${i + 1}" : customName,
-              ),
-              secondary: Text(
-                playUrls[i].contains(".flv") ? "FLV" : "HLS",
-              ),
-            );
-          },
-        ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          RadioGroup(
+            groupValue: currentLineIndex,
+            onChanged: (e) {
+              Get.back();
+              //currentLineIndex = i;
+              //setPlayer();
+              changePlayLine(e ?? 0);
+            },
+            child: ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: playUrls.length,
+              itemBuilder: (_, i) {
+                final customName = (_customLineNames != null &&
+                        i < _customLineNames!.length)
+                    ? _customLineNames![i]
+                    : '';
+                return RadioListTile(
+                  value: i,
+                  title: Text(
+                    customName.isEmpty ? "线路${i + 1}" : customName,
+                  ),
+                  secondary: Text(
+                    playUrls[i].contains(".flv") ? "FLV" : "HLS",
+                  ),
+                );
+              },
+            ),
+          ),
+          buildIosRenderCapSelector(),
+        ],
       ),
     );
   }

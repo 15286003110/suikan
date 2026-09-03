@@ -12,6 +12,7 @@ import 'package:simple_live_app/app/constant.dart';
 import 'package:simple_live_app/app/controller/app_settings_controller.dart';
 import 'package:simple_live_app/app/utils.dart';
 import 'package:simple_live_app/modules/live_room/live_room_controller.dart';
+import 'package:simple_live_app/modules/live_room/widgets/ios_render_cap_selector.dart';
 import 'package:simple_live_app/modules/live_room/vod/vod_episode_panel.dart';
 import 'package:simple_live_app/widgets/superchat_card.dart';
 import 'package:simple_live_core/simple_live_core.dart';
@@ -257,10 +258,12 @@ Widget _buildFullTopBar(
     final userName = detail?.userName ?? "";
     final displayTitle = userName.isEmpty ? title : "$title - $userName";
 
-    return AnimatedPositioned(
-      left: 0,
-      right: 0,
-      top: visible ? 0 : -(48 + padding.top),
+    return Offstage(
+      offstage: !visible,
+      child: AnimatedPositioned(
+        left: 0,
+        right: 0,
+        top: visible ? 0 : -(48 + padding.top),
       duration: const Duration(milliseconds: 200),
       child: Container(
         height: 48 + padding.top,
@@ -344,6 +347,7 @@ Widget _buildFullTopBar(
           ],
         ),
       ),
+      ),
     );
   });
 }
@@ -358,10 +362,12 @@ Widget _buildFullBottomBar(
         !controller.lockControlsState.value;
     final showDanmaku = controller.showDanmakuState.value;
 
-    return AnimatedPositioned(
-      left: 0,
-      right: 0,
-      bottom: visible ? 0 : -(80 + padding.bottom),
+    return Offstage(
+      offstage: !visible,
+      child: AnimatedPositioned(
+        left: 0,
+        right: 0,
+        bottom: visible ? 0 : -(80 + padding.bottom),
       duration: const Duration(milliseconds: 200),
       child: Container(
         decoration: const BoxDecoration(
@@ -510,6 +516,7 @@ Widget _buildFullBottomBar(
             ),
           ],
         ),
+      ),
       ),
     );
   });
@@ -826,46 +833,57 @@ void showLinesInfo(LiveRoomController controller) {
   Utils.showRightDialog(
     title: "线路选择",
     useSystem: true,
-    child: ListView.builder(
-      padding: EdgeInsets.zero,
-      itemCount: controller.playUrls.length,
-      itemBuilder: (_, i) {
-        return ListTile(
-          selected: controller.currentLineIndex == i,
-          title: Text.rich(
-            TextSpan(
-              text: "线路${i + 1}",
-              children: [
-                WidgetSpan(
-                    child: Container(
-                  decoration: BoxDecoration(
-                    borderRadius: AppStyle.radius4,
-                    border: Border.all(
-                      color: Colors.grey,
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        ListView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          padding: EdgeInsets.zero,
+          itemCount: controller.playUrls.length,
+          itemBuilder: (_, i) {
+            return ListTile(
+              selected: controller.currentLineIndex == i,
+              title: Text.rich(
+                TextSpan(
+                  text: "线路${i + 1}",
+                  children: [
+                    WidgetSpan(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          borderRadius: AppStyle.radius4,
+                          border: Border.all(
+                            color: Colors.grey,
+                          ),
+                        ),
+                        padding: AppStyle.edgeInsetsH4,
+                        margin: AppStyle.edgeInsetsL8,
+                        child: Text(
+                          controller.playUrls[i].contains(".flv")
+                              ? "FLV"
+                              : "HLS",
+                          style: const TextStyle(
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
-                  padding: AppStyle.edgeInsetsH4,
-                  margin: AppStyle.edgeInsetsL8,
-                  child: Text(
-                    controller.playUrls[i].contains(".flv") ? "FLV" : "HLS",
-                    style: const TextStyle(
-                      fontSize: 12,
-                    ),
-                  ),
-                )),
-              ],
-            ),
-            style: const TextStyle(fontSize: 14),
-          ),
-          minLeadingWidth: 16,
-          onTap: () {
-            Utils.hideRightDialog();
-            //controller.currentLineIndex = i;
-            //controller.setPlayer();
-            controller.changePlayLine(i);
+                  ],
+                ),
+                style: const TextStyle(fontSize: 14),
+              ),
+              minLeadingWidth: 16,
+              onTap: () {
+                Utils.hideRightDialog();
+                //controller.currentLineIndex = i;
+                //controller.setPlayer();
+                controller.changePlayLine(i);
+              },
+            );
           },
-        );
-      },
+        ),
+        buildIosRenderCapSelector(),
+      ],
     ),
   );
 }

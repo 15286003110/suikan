@@ -125,6 +125,10 @@ class AppSettingsController extends GetxController {
       LocalStorageService.kIosOriginalQualityPowerSaving,
       true,
     );
+    iosRenderCapLongEdge.value = LocalStorageService.instance.getValue(
+      LocalStorageService.kIosRenderCapLongEdge,
+      1280,
+    );
     chatTextSize.value = LocalStorageService.instance
         .getValue(LocalStorageService.kChatTextSize, 14.0);
 
@@ -706,6 +710,22 @@ class AppSettingsController extends GetxController {
       e,
     );
   }
+
+  /// iPad 专属：渲染纹理最长边上限（像素）。0 = 关闭（不限制，原始画质）；
+  /// 1280/1600/1920 越大越清晰、降温越弱。仅大屏 iPad 生效（见 [kIosRenderCapLongEdge]）。
+  /// 默认 1280 = 与「原画省电优化」自动上限一致，保证升级后行为不变。
+  var iosRenderCapLongEdge = 1280.obs;
+  void setIosRenderCapLongEdge(int v) {
+    iosRenderCapLongEdge.value = v;
+    LocalStorageService.instance.setValue(
+      LocalStorageService.kIosRenderCapLongEdge,
+      v,
+    );
+  }
+
+  /// 实际传给计算函数的上限值；<=0 视为关闭（返回 null 即不限制）。
+  int? get iosRenderCapMaxLongEdge =>
+      iosRenderCapLongEdge.value <= 0 ? null : iosRenderCapLongEdge.value;
 
   var chatTextSize = 14.0.obs;
   void setChatTextSize(double e) {

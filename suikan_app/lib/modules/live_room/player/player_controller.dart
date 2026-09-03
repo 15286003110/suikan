@@ -1991,6 +1991,7 @@ class PlayerController extends BaseController
   StreamSubscription? _playingSubscription;
   Timer? _iosVideoOutputSyncTimer;
   Worker? _iosOriginalQualityPowerSavingWorker;
+  Worker? _iosRenderCapWorker;
   IosVideoOutputSize? _iosVideoOutputSize;
   int? _iosVideoSourceWidth;
   int? _iosVideoSourceHeight;
@@ -2100,7 +2101,7 @@ class PlayerController extends BaseController
       sourceHeight: sourceHeight,
       screenPhysicalWidth: physicalSize.width,
       screenPhysicalHeight: physicalSize.height,
-      maxLongEdge: isIpad ? kIosRenderCapLongEdge : null,
+      maxLongEdge: isIpad ? settings.iosRenderCapMaxLongEdge : null,
     );
     if (target == null || (!force && target == _iosVideoOutputSize)) {
       return;
@@ -2367,6 +2368,8 @@ class PlayerController extends BaseController
     _iosVideoOutputSyncTimer?.cancel();
     _iosOriginalQualityPowerSavingWorker?.dispose();
     _iosOriginalQualityPowerSavingWorker = null;
+    _iosRenderCapWorker?.dispose();
+    _iosRenderCapWorker = null;
     _iosVideoOutputSyncTimer = null;
     _audioOnlyProbeTimer?.cancel();
     _audioOnlyProbeTimer = null;
