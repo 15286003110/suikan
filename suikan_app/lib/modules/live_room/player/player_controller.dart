@@ -2091,11 +2091,16 @@ class PlayerController extends BaseController
       return;
     }
     final physicalSize = views.first.physicalSize;
+    // iPad 破例：屏幕物理短边 > 1366 视为大屏 iPad（iPhone 普遍 ≤1290），
+    // 开启「原画省电优化」时把渲染纹理压到 kIosRenderCapLongEdge 以降温。
+    // 手机不传 maxLongEdge，保持原「不超过屏幕」逻辑不变。
+    final isIpad = physicalSize.shortestSide > 1366;
     final target = calculateIosVideoOutputSize(
       sourceWidth: sourceWidth,
       sourceHeight: sourceHeight,
       screenPhysicalWidth: physicalSize.width,
       screenPhysicalHeight: physicalSize.height,
+      maxLongEdge: isIpad ? kIosRenderCapLongEdge : null,
     );
     if (target == null || (!force && target == _iosVideoOutputSize)) {
       return;

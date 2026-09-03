@@ -84,5 +84,31 @@ void main() {
       expect(portrait, const IosVideoOutputSize(1290, 724));
       expect(landscape, isNot(portrait));
     });
+
+    test('caps output to maxLongEdge on a large-screen iPad', () {
+      // iPad Pro 12.9" (2732x2048) 看 1080p 源：原逻辑 scale=1.0 不限制，
+      // 加 maxLongEdge=1280 后压到 1280x720 纹理上屏（破例降渲染分辨率以降温）。
+      final result = calculateIosVideoOutputSize(
+        sourceWidth: 1920,
+        sourceHeight: 1080,
+        screenPhysicalWidth: 2732,
+        screenPhysicalHeight: 2048,
+        maxLongEdge: 1280,
+      );
+
+      expect(result, const IosVideoOutputSize(1280, 720));
+    });
+
+    test('does not cap when maxLongEdge is omitted (phones unchanged)', () {
+      final result = calculateIosVideoOutputSize(
+        sourceWidth: 1920,
+        sourceHeight: 1080,
+        screenPhysicalWidth: 2796,
+        screenPhysicalHeight: 1290,
+      );
+
+      // 与既有用例一致：手机不传上限，保持原「不超过屏幕」行为。
+      expect(result, const IosVideoOutputSize(1920, 1080));
+    });
   });
 }

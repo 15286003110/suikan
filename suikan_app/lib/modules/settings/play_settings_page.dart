@@ -54,7 +54,7 @@ class PlaySettingsPage extends GetView<AppSettingsController> {
                   Obx(
                     () => SettingsSwitch(
                       title: "原画省电优化",
-                      subtitle: "限制渲染纹理不超过屏幕实际像素，不降低直播源清晰度；异常时可关闭",
+                      subtitle: "限制渲染纹理以省电（大屏设备可能降低清晰度）；异常或画质不合预期时可关闭",
                       value: controller.iosOriginalQualityPowerSaving.value,
                       onChanged: controller.setIosOriginalQualityPowerSaving,
                     ),
