@@ -9,9 +9,9 @@ import 'package:simple_live_app/app/controller/app_settings_controller.dart';
 /// 仅大屏 iPad（屏幕物理最短边 > 1366）显示；iPhone / 安卓 / Win / TV
 /// 不显示——这些设备上该上限逻辑上无效果（详见 [kIosRenderCapLongEdge]）。
 ///
-/// 选项值即「渲染纹理最长边像素」：0 = 不限制（原始画质）；
-/// 1280/1600/1920 越大越清晰、降温越弱。切换后即时重设纹理生效
-/// （player_controller 的 [ever] 监听），无需重开流。
+/// 选项值即「渲染纹理最长边像素」：0 = 原画·屏幕原生（默认，渲染不超屏幕物理
+/// 像素，视觉无损）；1280/1600/1920 为主动降温档，压得越低越省但画面越糊
+/// （1920 只对超过 1920 的源如 4K 生效）。切换后即时重设纹理生效。
 Widget buildIosRenderCapSelector() {
   if (!Platform.isIOS || Get.context == null) {
     return const SizedBox.shrink();
@@ -30,10 +30,10 @@ Widget buildIosRenderCapSelector() {
   }
 
   const options = <int, String>{
-    0: '原画 · 不限制',
-    1280: '省电档 · 1280',
-    1600: '均衡档 · 1600',
-    1920: '高清档 · 1920',
+    0: '原画 · 屏幕原生（默认）',
+    1280: '1280 · 强降温（较糊）',
+    1600: '1600 · 中降温（微糊）',
+    1920: '1920 · 弱降温（仅 4K 源）',
   };
   final settings = AppSettingsController.instance;
 
@@ -46,7 +46,7 @@ Widget buildIosRenderCapSelector() {
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 8),
             child: Text(
-              '画面清晰度上限（降温用）',
+              '画面渲染档位（默认原画 · 不超屏幕）',
               style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
             ),
           ),
