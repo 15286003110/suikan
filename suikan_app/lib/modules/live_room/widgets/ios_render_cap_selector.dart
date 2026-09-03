@@ -10,7 +10,8 @@ import 'package:simple_live_app/app/controller/app_settings_controller.dart';
 /// 不显示——这些设备上该上限逻辑上无效果（详见 [kIosRenderCapLongEdge]）。
 ///
 /// 选项值即「渲染纹理最长边像素」：0 = 不限制（原始画质）；
-/// 1280/1600/1920 越大越清晰、降温越弱。生效时机为下一次开播/切流。
+/// 1280/1600/1920 越大越清晰、降温越弱。切换后即时重设纹理生效
+/// （player_controller 的 [ever] 监听），无需重开流。
 Widget buildIosRenderCapSelector() {
   if (!Platform.isIOS || Get.context == null) {
     return const SizedBox.shrink();
