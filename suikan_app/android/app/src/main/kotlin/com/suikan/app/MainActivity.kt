@@ -82,10 +82,10 @@ class MainActivity : FlutterActivity() {
             }
         }
 
-        MethodChannel(
-            flutterEngine.dartExecutor.binaryMessenger,
-            "simple_live/dlna",
-        ).setMethodCallHandler { call, result ->
+        // 局域网发现(同步/投屏)共用的组播锁通道。
+        // Android 必须持有 WifiManager.MulticastLock 才能收到 UDP 广播,
+        // 否则内核会过滤多播包,导致"其它端互看正常、手机看不到别人"。
+        val multicastHandler = MethodChannel.MethodCallHandler { call, result ->
             when (call.method) {
                 "acquireMulticastLock" -> {
                     acquireMulticastLock()
@@ -100,6 +100,14 @@ class MainActivity : FlutterActivity() {
                 else -> result.notImplemented()
             }
         }
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "simple_live/dlna",
+        ).setMethodCallHandler(multicastHandler)
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "simple_live/discovery",
+        ).setMethodCallHandler(multicastHandler)
     }
 
     override fun onResume() {
