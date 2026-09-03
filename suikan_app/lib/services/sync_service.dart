@@ -24,6 +24,7 @@ import 'package:shelf/shelf.dart' as shelf;
 import 'package:shelf/shelf_io.dart' as shelf_io;
 import 'package:shelf_router/shelf_router.dart';
 import 'package:uuid/uuid.dart';
+import 'package:flutter/services.dart';
 
 class SyncService extends GetxService {
   static SyncService get instance => Get.find<SyncService>();
@@ -76,6 +77,7 @@ class SyncService extends GetxService {
 
   /// 监听其他端UDP广播的回复
   void listenUDP() async {
+    await _acquireMulticastLock();
     try {
       udp = await UDP.bind(Endpoint.any(port: const Port(udpPort)));
       udpRunning.value = true;
@@ -668,11 +670,36 @@ class SyncService extends GetxService {
   @override
   void onClose() {
     Log.d('SyncService close');
+    _releaseMulticastLock();
     udp?.close();
     udpRunning.value = false;
     server?.close(force: true);
     httpRunning.value = false;
     super.onClose();
+  }
+
+  /// 安卓专用：局域网发现必须持有 WifiManager.MulticastLock 才能收到 UDP
+  /// 广播，否则内核过滤多播包，表现为「其它端互看正常、手机看不到别人」。
+  /// 桌面/TV 端无需此锁。失败不影响主流程（仅记录）。
+  static const MethodChannel _discoveryChannel =
+      MethodChannel('simple_live/discovery');
+
+  Future<void> _acquireMulticastLock() async {
+    if (!Platform.isAndroid) return;
+    try {
+      await _discoveryChannel.invokeMethod('acquireMulticastLock');
+    } catch (e) {
+      Log.w('acquireMulticastLock failed: $e');
+    }
+  }
+
+  Future<void> _releaseMulticastLock() async {
+    if (!Platform.isAndroid) return;
+    try {
+      await _discoveryChannel.invokeMethod('releaseMulticastLock');
+    } catch (e) {
+      Log.w('releaseMulticastLock failed: $e');
+    }
   }
 }
 
