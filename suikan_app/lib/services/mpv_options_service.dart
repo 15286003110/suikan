@@ -143,18 +143,10 @@ class MpvOptionsService {
         ..remove("correct-downscaling")
         ..remove("sigmoid-upscaling")
         ..remove("deband");
-      // iPad 发热补充（2026-09-03）：均为 OpenGL/解码器级选项，
-      // iOS libmpv 不支持时会由下方 setProperty 静默忽略。
-      // - opengl-pbo=yes：纹理上传走像素缓冲对象，降低「渲染纹理→GPU」上传带宽
-      //   （与「渲染上限」配合，纹理越小上传越省，正是我们降温的主路径）。
-      // - video-latency-hacks=yes：降低解码延迟，对直播低延迟场景有益，不影响画质。
-      // - vd-lavc-fast=yes / vd-lavc-skiploopfilter=nonref：快解 + 跳非参考帧，
-      //   属 FloatyMPV 省电配置。注：硬解(videotoolbox)下基本 no-op；
-      //   之前因「软解会动画质」刻意排除，现按用户 2026-09-03 要求一并加入。
-      options["opengl-pbo"] = "yes";
-      options["video-latency-hacks"] = "yes";
-      options["vd-lavc-fast"] = "yes";
-      options["vd-lavc-skiploopfilter"] = "nonref";
+      // 2026-09-03 hotfix：④⑤ 省电项（opengl-pbo / video-latency-hacks /
+      // vd-lavc-fast / vd-lavc-skiploopfilter）整体移除 —— 直播场景转屏/全屏
+      // 重绑视频表面时易诱发「画面冻结、声音照常」（2.2.3 回归），回退到 2.2.2
+      // 已验证的 iOS 选项基线。待确认根因后如有必要再选择性补回。
     }
     // 缓冲策略：直播小缓冲（低延迟）、点播大缓冲（不卡）。
     // 属性为 mpv 网络/解复用缓冲上限与预读时长，setProperty 失败静默忽略。

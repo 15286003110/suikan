@@ -258,9 +258,7 @@ Widget _buildFullTopBar(
     final userName = detail?.userName ?? "";
     final displayTitle = userName.isEmpty ? title : "$title - $userName";
 
-    return Offstage(
-      offstage: !visible,
-      child: AnimatedPositioned(
+    return AnimatedPositioned(
         left: 0,
         right: 0,
         top: visible ? 0 : -(48 + padding.top),
@@ -347,7 +345,6 @@ Widget _buildFullTopBar(
           ],
         ),
       ),
-      ),
     );
   });
 }
@@ -362,9 +359,7 @@ Widget _buildFullBottomBar(
         !controller.lockControlsState.value;
     final showDanmaku = controller.showDanmakuState.value;
 
-    return Offstage(
-      offstage: !visible,
-      child: AnimatedPositioned(
+    return AnimatedPositioned(
         left: 0,
         right: 0,
         bottom: visible ? 0 : -(80 + padding.bottom),
@@ -516,7 +511,6 @@ Widget _buildFullBottomBar(
             ),
           ],
         ),
-      ),
       ),
     );
   });

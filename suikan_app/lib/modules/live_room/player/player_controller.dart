@@ -1995,6 +1995,9 @@ class PlayerController extends BaseController
   IosVideoOutputSize? _iosVideoOutputSize;
   int? _iosVideoSourceWidth;
   int? _iosVideoSourceHeight;
+  /// 上次实际应用输出限幅时的源尺寸（幂等去重用，2026-09-03 hotfix）。
+  int? _iosVideoOutputAppliedSourceWidth;
+  int? _iosVideoOutputAppliedSourceHeight;
   bool _iosVideoOutputForceApply = false;
 
   /// 纯音频流自动识别（2026-08-31 新增）：
@@ -2068,11 +2071,22 @@ class PlayerController extends BaseController
       return;
     }
     final settings = AppSettingsController.instance;
+    final sourceWidth = _iosVideoSourceWidth;
+    final sourceHeight = _iosVideoSourceHeight;
+    // 幂等短路（2026-09-03 hotfix）：源尺寸与「上次实际应用」一致时输出状态
+    // 无需重设。双击全屏/转屏会重绑视频表面并重发 VideoParams/playing，
+    // 旧代码每次都执行 setSize() 重置/重设，iOS 播放中反复动输出尺寸易诱发
+    // 「画面冻结、声音照常」（2.2.3 回归）。源没变就直接跳过。
+    final sourceApplied = _iosVideoOutputAppliedSourceWidth == sourceWidth &&
+        _iosVideoOutputAppliedSourceHeight == sourceHeight;
+
     if (!settings.iosOriginalQualityPowerSaving.value) {
-      if (force || _iosVideoOutputSize != null) {
+      if (!sourceApplied || _iosVideoOutputSize != null) {
         try {
           await videoController.setSize();
           _iosVideoOutputSize = null;
+          _iosVideoOutputAppliedSourceWidth = sourceWidth;
+          _iosVideoOutputAppliedSourceHeight = sourceHeight;
           Log.d("iOS 原画省电优化已关闭，恢复源分辨率纹理");
         } catch (e) {
           Log.w("恢复 iOS 源分辨率纹理失败: $e");
@@ -2081,8 +2095,6 @@ class PlayerController extends BaseController
       return;
     }
 
-    final sourceWidth = _iosVideoSourceWidth;
-    final sourceHeight = _iosVideoSourceHeight;
     final views = WidgetsBinding.instance.platformDispatcher.views;
     if (sourceWidth == null ||
         sourceHeight == null ||
@@ -2103,14 +2115,19 @@ class PlayerController extends BaseController
       screenPhysicalHeight: physicalSize.height,
       maxLongEdge: isIpad ? settings.iosRenderCapMaxLongEdge : null,
     );
-    if (target == null || (!force && target == _iosVideoOutputSize)) {
+    if (target == null) {
+      return;
+    }
+    // 源与目标都没变 → 跳过，避免转屏/全屏重绑时反复 setSize 冻屏。
+    if (sourceApplied && target == _iosVideoOutputSize) {
       return;
     }
 
     try {
-      if (force && _iosVideoOutputSize != null) {
-        // media_kit may restore the source-sized surface for a new VideoParams
-        // event without updating its Dart-side fixed-size state.
+      if (!sourceApplied && _iosVideoOutputSize != null) {
+        // 源尺寸真正变了才先恢复再重压：media_kit may restore the
+        // source-sized surface for a new VideoParams event without updating
+        // its Dart-side fixed-size state.
         await videoController.setSize();
       }
       await videoController.setSize(
@@ -2118,6 +2135,8 @@ class PlayerController extends BaseController
         height: target.height,
       );
       _iosVideoOutputSize = target;
+      _iosVideoOutputAppliedSourceWidth = sourceWidth;
+      _iosVideoOutputAppliedSourceHeight = sourceHeight;
       Log.i(
         "iOS 视频纹理限幅：source=${sourceWidth}x$sourceHeight "
         "screen=${physicalSize.width.toInt()}x${physicalSize.height.toInt()} "
