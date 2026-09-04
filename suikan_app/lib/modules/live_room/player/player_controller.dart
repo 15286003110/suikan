@@ -1947,12 +1947,17 @@ class PlayerController extends BaseController
     }
   }
 
-  /// 纯音频流探测：延迟 4 秒检查视频轨是否始终未出现。
+  /// 纯音频流探测：延迟检查视频轨是否始终未出现。
   /// 若 videoParams 为空但有音频轨 → 自动切 vid=no（音频链路，避免 mpv
   /// 按视频流处理纯音频源导致卡顿）。收到视频参数或用户已手动纯音频则放弃。
   /// **一旦识别为纯音频流（[_autoAudioOnlyActivated]）就锁定音频模式**：
   /// 直播纯音频源周期性重连（ifeng audio 约 30s）时直接保持 vid=no，
   /// 不再启动探测、不再弹提示（用户要求"只要是音频流就一直以音频流播放"）。
+  ///
+  /// 2026-09-04 修复误判：部分 HLS 直播源带 302 防盗链跳转，视频轨出帧
+  /// 可能超过 4s（如 gfjs.m3u8 案例）。改为两级探测——首轮 4s 未出视频
+  /// 不立即锁定，再给 4s 缓冲（共 8s），且任一时点 track-list 声明了
+  /// 视频轨（[Tracks.video] 非空）即视为视频流，彻底避免慢起播误判。
   void _scheduleAudioOnlyProbe(int loadGeneration, int mediaGeneration) {
     // 本播放会话已识别为纯音频：不再探测，静默保持音频模式。
     if (_autoAudioOnlyActivated) {
@@ -1977,11 +1982,46 @@ class PlayerController extends BaseController
       if (player.state.videoParams.w != null) {
         return;
       }
-      Log.d("检测到纯音频流（无视频轨），锁定音频模式");
-      _autoAudioOnlyActivated = true;
-      SmartDialog.showToast("该源为纯音频流，已自动切换音频模式");
-      unawaited(setAudioOnlyMode(true));
+      // track-list 已声明视频轨（HLS 分片 PMT 解析出轨道、尚未出帧）→
+      // 是视频流慢起播，不是纯音频：再给 4s 缓冲，避免 302 防盗链误判。
+      if (player.state.tracks.video.isNotEmpty) {
+        Log.d("纯音频探测：track-list 含视频轨，等待视频出帧…");
+        _audioOnlyProbeTimer?.cancel();
+        _audioOnlyProbeTimer = Timer(const Duration(seconds: 4), () {
+          _audioOnlyProbeTimer = null;
+          if (!_isPlaybackOwnerCurrent(
+            loadGeneration,
+            mediaGeneration,
+            null,
+          )) {
+            return;
+          }
+          if (AppSettingsController.instance.audioOnlyBackground.value) {
+            return;
+          }
+          if (player.state.videoParams.w != null) {
+            return;
+          }
+          if (player.state.tracks.video.isNotEmpty) {
+            Log.d("纯音频探测：8s 后 track-list 仍有视频轨但无画面，按视频流处理");
+            return;
+          }
+          _lockAudioOnlyMode(loadGeneration, mediaGeneration);
+        });
+        return;
+      }
+      _lockAudioOnlyMode(loadGeneration, mediaGeneration);
     });
+  }
+
+  Future<void> _lockAudioOnlyMode(int loadGeneration, int mediaGeneration) async {
+    if (!_isPlaybackOwnerCurrent(loadGeneration, mediaGeneration, null)) {
+      return;
+    }
+    Log.d("检测到纯音频流（无视频轨），锁定音频模式");
+    _autoAudioOnlyActivated = true;
+    SmartDialog.showToast("该源为纯音频流，已自动切换音频模式");
+    unawaited(setAudioOnlyMode(true));
   }
 
   Future<void> waitForPlaybackOpen() async {
@@ -2014,6 +2054,7 @@ class PlayerController extends BaseController
   StreamSubscription? _widthSubscription;
   StreamSubscription? _heightSubscription;
   StreamSubscription<VideoParams>? _videoParamsSubscription;
+  StreamSubscription<Tracks>? _tracksSubscription;
   StreamSubscription? _logSubscription;
   StreamSubscription? _playingSubscription;
   Timer? _iosVideoOutputSyncTimer;
@@ -2381,6 +2422,35 @@ class PlayerController extends BaseController
       _audioOnlyProbeTimer = null;
       _handleVideoParamsForIosOutput(params);
     });
+    // 纯音频误判自愈：若已被自动判定为纯音频（vid=no），但 track-list
+    // 后续声明出视频轨（慢 HLS/302 防盗链起播晚于探测窗口），立即恢复
+    // 视频，避免画面被永久禁用。（2026-09-04 gfjs.m3u8 误判修复）
+    _tracksSubscription = player.stream.tracks.listen((tracks) {
+      if (!_autoAudioOnlyActivated) {
+        return;
+      }
+      if (tracks.video.isNotEmpty && player.state.videoParams.w == null) {
+        Log.d("纯音频锁定被推翻：track-list 出现视频轨，恢复视频显示");
+        _audioOnlyProbeTimer?.cancel();
+        _audioOnlyProbeTimer = null;
+        _autoAudioOnlyActivated = false;
+        unawaited(setAudioOnlyMode(false));
+        // 复核：恢复 vid=auto 后若 4s 内 videoParams 仍无尺寸（track-list
+        // 虚报视频轨的纯音频源），重新锁回音频模式，避免画面空转。
+        _audioOnlyProbeTimer = Timer(const Duration(seconds: 4), () {
+          _audioOnlyProbeTimer = null;
+          if (_autoAudioOnlyActivated) {
+            return;
+          }
+          if (player.state.videoParams.w == null &&
+              player.state.tracks.video.isNotEmpty) {
+            Log.d("纯音频复核：恢复后仍无视频出帧，重新锁定音频模式");
+            _autoAudioOnlyActivated = true;
+            unawaited(setAudioOnlyMode(true));
+          }
+        });
+      }
+    });
 
     // Fix Issue #57: 启动Surface健康检查
     _startSurfaceHealthCheck();
@@ -2394,6 +2464,7 @@ class PlayerController extends BaseController
     _widthSubscription?.cancel();
     _heightSubscription?.cancel();
     _videoParamsSubscription?.cancel();
+    _tracksSubscription?.cancel();
     _logSubscription?.cancel();
     _pipSubscription?.cancel();
     _playingSubscription?.cancel();
