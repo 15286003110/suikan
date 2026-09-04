@@ -170,7 +170,12 @@ public class VideoOutput: NSObject {
     }
 
     texture.render(size)
-    DispatchQueue.main.sync { [weak self] in
+    // 随看扩展：原本是 main.sync 等主线程确认 textureFrameAvailable 才返回。
+    // 后台模式下若主线程被系统/Flutter 暂停调度，main.sync 会把 worker 串行
+    // 队列永久卡死 → 后续 render/deliver 全停 → iOS 画中画面冻结在最后一帧。
+    // 改 main.async：通知排队即可，不阻塞 worker；deliver 在 render 后立即执行
+    // （textureFrameAvailable 只通知 Flutter 纹理消费者，与画中画帧投递无关）。
+    DispatchQueue.main.async { [weak self] in
       guard let that = self else { return }
       // Textures must be marked as available from the main thread
       that.registry.textureFrameAvailable(that.textureId)
