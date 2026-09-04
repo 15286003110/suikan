@@ -1842,6 +1842,27 @@ class PlayerController extends BaseController
   /// Changes whenever the current media is deliberately reopened.
   int get playbackMediaGeneration => 0;
 
+  // 🔴 全局播放器串行门（2026-09-04）：
+  // 直播间返回时 `onClose()` 是 fire-and-forget（_handleBack 不能 await，
+  // 否则 pop 会卡住），旧播放器的 stop/dispose 链在后台要跑数百毫秒~数秒；
+  // 若用户此时快速进另一个直播间，新房 player 立刻 open → 两个 Player
+  // 并发操作 mpv（双实例纹理/解码器）→ native 竞态偶发崩，与「返回后再
+  // 进直播间容易闪退」的现象吻合。
+  // 新房 open 前先等旧播放器完全关闭（带超时，坏流关闭卡住不拖死新房）。
+  static Completer<void>? _playerShutdownGate;
+
+  static Future<void> _waitForOtherPlayerShutdown() async {
+    final gate = _playerShutdownGate;
+    if (gate == null) {
+      return;
+    }
+    try {
+      await gate.future.timeout(const Duration(seconds: 2));
+    } catch (_) {
+      // 旧播放器关闭超时：不阻塞新房（最坏退回老行为，不引入新故障）
+    }
+  }
+
   bool isPlaybackLoadGenerationCurrent(int generation) {
     return !_playerClosing && generation == playbackLoadGeneration;
   }
@@ -1870,6 +1891,8 @@ class PlayerController extends BaseController
     // 同一直播间重连（mediaError/surface 恢复）保持 false 不打扰（2026-09-01）。
     bool resetAudioOnlyLock = false,
   }) async {
+    // 等其它播放器（旧直播间）关闭完成，避免双 Player 并发 mpv 竞态崩。
+    await _waitForOtherPlayerShutdown();
     while (true) {
       if (!_isPlaybackOwnerCurrent(
         loadGeneration,
@@ -3035,18 +3058,29 @@ class PlayerController extends BaseController
       return;
     }
     _playerClosing = true;
-    _cancelStablePlaybackTimer();
-    clearTransientPlayerOverlays();
-    await stopBackgroundPlaybackService();
-    await waitForPlaybackOpen();
-    await player.stop();
-    if (smallWindowState.value) {
-      await exitSmallWindow();
+    // 建门：新房 open（openPlaybackMedia）会先等本门完成，
+    // 从而把「旧房关闭」与「新房打开」串行化。
+    final shutdownGate = Completer<void>();
+    _playerShutdownGate = shutdownGate;
+    try {
+      _cancelStablePlaybackTimer();
+      clearTransientPlayerOverlays();
+      await stopBackgroundPlaybackService();
+      await waitForPlaybackOpen();
+      await player.stop();
+      if (smallWindowState.value) {
+        await exitSmallWindow();
+      }
+      disposeStream();
+      disposeDanmakuController();
+      await resetSystem();
+      await player.dispose();
+    } finally {
+      if (identical(_playerShutdownGate, shutdownGate)) {
+        _playerShutdownGate = null;
+      }
+      shutdownGate.complete();
     }
-    disposeStream();
-    disposeDanmakuController();
-    await resetSystem();
-    await player.dispose();
   }
 
   @override
