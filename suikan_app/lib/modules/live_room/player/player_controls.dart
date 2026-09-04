@@ -14,6 +14,7 @@ import 'package:simple_live_app/app/utils.dart';
 import 'package:simple_live_app/modules/live_room/live_room_controller.dart';
 import 'package:simple_live_app/modules/live_room/widgets/ios_render_cap_selector.dart';
 import 'package:simple_live_app/modules/live_room/vod/vod_episode_panel.dart';
+import 'package:simple_live_app/services/ios_pip_service.dart';
 import 'package:simple_live_app/widgets/superchat_card.dart';
 import 'package:simple_live_core/simple_live_core.dart';
 import 'package:window_manager/window_manager.dart';
@@ -745,7 +746,10 @@ Widget buildDanmuView(VideoState videoState, LiveRoomController controller) {
       () {
         controller.danmakuViewVersion.value;
         return Offstage(
-          offstage: !controller.showDanmakuState.value,
+          offstage: !controller.showDanmakuState.value ||
+              // iOS 画中画激活：画面已进系统小窗，主界面弹幕一并收掉
+              // （省 GPU，也避免弹幕在小窗占位层上继续飘/掉帧）
+              IosPipService.active.value,
           child: Padding(
             padding: controller.fullScreenState.value
                 ? EdgeInsets.only(
