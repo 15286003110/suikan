@@ -682,12 +682,19 @@ class LiveRoomPage extends GetView<LiveRoomController> {
         Video(
           key: controller.globalPlayerKey,
           controller: controller.videoController,
-          pauseUponEnteringBackgroundMode: !AppSettingsController
-                  .instance.allowBackgroundPlayback.value &&
-              !AppSettingsController.instance.audioOnlyBackground.value,
-          resumeUponEnteringForegroundMode: !AppSettingsController
-                  .instance.allowBackgroundPlayback.value &&
-              !AppSettingsController.instance.audioOnlyBackground.value,
+          // 恒禁 media_kit 内置的"退后台自暂停"：该机制依赖 widget 参数在
+          // 退后台前已被 Obx 重建刷新。而"点纯音频后立刻滑后台"时 App 已
+          // paused、帧调度停止，Obx 来不及重建 → Video 用旧的
+          // pauseUponEnteringBackgroundMode=true 擅自 pause，与
+          // LiveRoomController 的手动纯音频豁免打架（实测：收进通知栏但停了，
+          // 要手动点一下播放才续）。
+          //
+          // 退后台暂停/恢复统一交给 controller.didChangeAppLifecycleState →
+          // _enterBackgroundState/_exitBackgroundState 实时裁决（同步读 Rx，
+          // 无帧调度延迟，且已正确豁免手动纯音频：audioOnlyBackground 开启时
+          // 退后台不暂停）。
+          pauseUponEnteringBackgroundMode: false,
+          resumeUponEnteringForegroundMode: false,
           controls:
               pipMode ? null : (state) => playerControls(state, controller),
           aspectRatio: aspectRatio,
