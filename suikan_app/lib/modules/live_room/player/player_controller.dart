@@ -2057,6 +2057,9 @@ class PlayerController extends BaseController
   StreamSubscription<Tracks>? _tracksSubscription;
   StreamSubscription? _logSubscription;
   StreamSubscription? _playingSubscription;
+  /// iOS 音频中断（来电/闹钟）前的播放状态，用于中断结束后恢复
+  bool _lastPlayingState = false;
+  MethodChannel? _iosAudioChannel;
   Timer? _iosVideoOutputSyncTimer;
   Worker? _iosOriginalQualityPowerSavingWorker;
   Worker? _iosRenderCapWorker;
@@ -2295,7 +2298,58 @@ class PlayerController extends BaseController
     });
   }
 
+  /// iOS 音频会话同步：播放中激活（保证退后台能续播），停止播放时释放
+  /// 会话把音频还给其它 App。原生侧见 SuikanAudioSession.swift。
+  /// Android：同一通道复用为音频焦点请求/释放（来电、导航、其它媒体避让）。
+  Future<void> _syncIosAudioSession({required bool active}) async {
+    try {
+      if (Platform.isIOS) {
+        await _iosAudioChannel?.invokeMethod(
+          active ? 'activate' : 'deactivate',
+        );
+      } else if (Platform.isAndroid) {
+        await _iosAudioChannel?.invokeMethod(
+          active ? 'requestFocus' : 'abandonFocus',
+        );
+      }
+    } catch (e) {
+      Log.d("音频会话/焦点同步失败: $e");
+    }
+  }
+
   void initStream() {
+    if (Platform.isIOS || Platform.isAndroid) {
+      // iOS 音频会话：播放时激活（后台续播前提），来电/闹钟中断结束后
+      // 若中断前在播则恢复播放（原生侧见 SuikanAudioSession.swift）。
+      // Android 音频焦点：来电/导航时通知暂停，焦点回来后恢复
+      // （原生侧见 MainActivity.kt）。
+      _iosAudioChannel ??= const MethodChannel('suikan/audio');
+      _iosAudioChannel?.setMethodCallHandler((call) async {
+        switch (call.method) {
+          case 'onInterruptionEnded':
+            final shouldResume = call.arguments as bool? ?? false;
+            if (shouldResume && _lastPlayingState && !player.state.playing) {
+              Log.d("iOS 音频中断结束，恢复播放");
+              unawaited(player.play());
+            }
+            break;
+          case 'onAudioFocusLost':
+            // 来电/导航等：暂停播放（仅在真的在播时）
+            if (player.state.playing) {
+              Log.d("Android 失去音频焦点，暂停播放");
+              unawaited(player.pause());
+            }
+            break;
+          case 'onAudioFocusGained':
+            if (_lastPlayingState && !player.state.playing) {
+              Log.d("Android 重新获得音频焦点，恢复播放");
+              unawaited(player.play());
+            }
+            break;
+        }
+        return null;
+      });
+    }
     if (Platform.isIOS) {
       _iosOriginalQualityPowerSavingWorker = ever<bool>(
         AppSettingsController.instance.iosOriginalQualityPowerSaving,
@@ -2336,6 +2390,13 @@ class PlayerController extends BaseController
     _playingSubscription = player.stream.playing.listen((event) {
       final generation = playbackLoadGeneration;
       _syncStreamErrorGeneration(generation);
+      _lastPlayingState = event;
+      // iOS：音频会话必须在真正播放时激活（playback 类别 + active），
+      // 否则退后台会被系统挂起 → 手动纯音频/后台播放返回桌面即停。
+      // Android：播放时申请音频焦点（来电/导航自动避让）。
+      if (Platform.isIOS || Platform.isAndroid) {
+        unawaited(_syncIosAudioSession(active: event));
+      }
       if (event) {
         _surfaceRecoveryGraceUntil =
             DateTime.now().add(_surfaceRecoveryGraceDuration);
@@ -2458,6 +2519,9 @@ class PlayerController extends BaseController
   }
 
   void disposeStream() {
+    if (Platform.isIOS) {
+      _iosAudioChannel?.setMethodCallHandler(null);
+    }
     _cancelStablePlaybackTimer();
     _errorSubscription?.cancel();
     _completedSubscription?.cancel();
@@ -3141,6 +3205,10 @@ class PlayerController extends BaseController
       _cancelStablePlaybackTimer();
       clearTransientPlayerOverlays();
       await stopBackgroundPlaybackService();
+      // iOS：释放音频会话，把音频还给其它 App（不释放会一直占用后台音频）
+      if (Platform.isIOS) {
+        await _syncIosAudioSession(active: false);
+      }
       await waitForPlaybackOpen();
       await player.stop();
       if (smallWindowState.value) {

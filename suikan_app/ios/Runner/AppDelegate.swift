@@ -10,9 +10,14 @@ import UserNotifications
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
     UNUserNotificationCenter.current().delegate = self
+    // iOS 后台播放前提：音频会话必须是 playback 类别并激活，否则退后台即被
+    // 系统挂起（手动纯音频/后台播放都会"返回桌面就停"）。这里只声明类别，
+    // 不抢音频；真正激活在播放开始时由 SuikanAudioSession.activate() 完成。
+    SuikanAudioSession.shared.configure()
     // 传统路径：window.rootViewController 可得时注册（部分场景仍会走这里）
     if let controller = window?.rootViewController as? FlutterViewController {
       registerNotificationChannel(on: controller.binaryMessenger)
+      registerAudioChannel(on: controller.binaryMessenger)
     }
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
@@ -24,6 +29,7 @@ import UserNotifications
     // 元凶）。这里从 registrar 拿运行引擎的 messenger，最可靠。
     if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "SuikanChannels") {
       registerNotificationChannel(on: registrar.messenger())
+      registerAudioChannel(on: registrar.messenger())
     }
   }
 
@@ -44,6 +50,30 @@ import UserNotifications
       } else {
         result(FlutterMethodNotImplemented)
       }
+    }
+  }
+
+  // 音频会话通道：Dart 侧通知"开始/停止播放"以便激活/释放会话；
+  // 原生侧把"来电等中断结束"回传给 Dart 恢复播放。
+  private func registerAudioChannel(on messenger: FlutterBinaryMessenger) {
+    let channel = FlutterMethodChannel(
+      name: "suikan/audio",
+      binaryMessenger: messenger
+    )
+    channel.setMethodCallHandler { call, result in
+      switch call.method {
+      case "activate":
+        SuikanAudioSession.shared.activate()
+        result(nil)
+      case "deactivate":
+        SuikanAudioSession.shared.deactivate()
+        result(nil)
+      default:
+        result(FlutterMethodNotImplemented)
+      }
+    }
+    SuikanAudioSession.shared.onInterruptionEndedShouldResume = { shouldResume in
+      channel.invokeMethod("onInterruptionEnded", arguments: shouldResume)
     }
   }
 
