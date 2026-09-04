@@ -1474,6 +1474,9 @@ mixin PlayerSystemMixin on PlayerMixin, PlayerStateMixin, PlayerDanmakuMixin {
       // 因此由原生侧把每帧 CVPixelBuffer 转 CMSampleBuffer 喂给
       // AVSampleBufferDisplayLayer，再交给 AVPictureInPictureController
       // （见 ios/Runner/SuikanPiPManager.swift）。
+      // 入口即时反馈：若这条 toast 都不出现 = Dart 入口未执行；若出现后
+      // 无后续 = 原生通道/设备问题（onError 会接力报原因）。
+      SmartDialog.showToast("正在进入小窗…");
       if (!await IosPipService.isSupported()) {
         SmartDialog.showToast("当前设备不支持小窗播放");
         return;
