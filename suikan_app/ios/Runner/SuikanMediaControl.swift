@@ -157,10 +157,15 @@ final class SuikanMediaControl: NSObject {
   private func loadArtwork(url: String, title: String) {
     guard let u = URL(string: url) else { return }
     let task = URLSession.shared.dataTask(with: u) { [weak self] data, _, _ in
+      // 解码在后台队列做（UIImage(data:) 本身线程安全）
       guard let data = data, let img = UIImage(data: data) else { return }
-      self?.coverCache[url] = img
+      // 缓存写入 + 贴图一律回主线程：Swift 的 Dictionary 非线程安全，
+      // 若在这里（URLSession 后台队列）写 coverCache，而 update() 在主线程读，
+      // 会形成数据竞争并可能崩溃（EXC_BAD_ACCESS）。
       DispatchQueue.main.async {
-        guard let self = self, self.currentTitle == title else { return }
+        guard let self = self else { return }
+        self.coverCache[url] = img
+        guard self.currentTitle == title else { return }
         self.applyArtwork(img)
       }
     }
