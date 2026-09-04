@@ -1990,9 +1990,13 @@ class PlayerController extends BaseController
       return;
     }
     try {
-      await activeOpen;
+      // 限时等待：open 可能卡在慢源/坏源的网络阶段（mpv/opener 线程）。
+      // close 路径不能无限等——用户已离开页面，继续等只会让后续播放器
+      // 一直排队（串行门 2s 超时后放行，又会制造双 mpv 并发）。
+      // 超时后由调用方执行 player.stop() 中断进行中的 open。
+      await activeOpen.timeout(const Duration(milliseconds: 1500));
     } catch (e, stackTrace) {
-      Log.e("等待媒体打开结束失败: $e", stackTrace);
+      Log.e("等待媒体打开结束超时/失败: $e", stackTrace);
     }
   }
 
