@@ -61,6 +61,11 @@ class IosPipService {
   /// 进入小窗（必须由用户点击触发，苹果不允许程序自动开启）
   static Future<void> start() => _channel.invokeMethod('start');
 
+  /// 预备小窗控制器（幂等，不启动）。
+  /// 播放中调用一次即可：让「切后台自动弹小窗」在系统需要时立刻可用，
+  /// 以及避免首次手动点小窗时因控制器尚未创建而失败。
+  static Future<void> prepare() => _channel.invokeMethod('prepare');
+
   /// 退出小窗
   static Future<void> stop() => _channel.invokeMethod('stop');
 

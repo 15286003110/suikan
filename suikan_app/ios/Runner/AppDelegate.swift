@@ -61,6 +61,9 @@ import UserNotifications
       switch call.method {
       case "isSupported":
         result(SuikanPiPManager.shared.isSupported)
+      case "prepare":
+        SuikanPiPManager.shared.prepare()
+        result(nil)
       case "start":
         SuikanPiPManager.shared.start()
         result(nil)

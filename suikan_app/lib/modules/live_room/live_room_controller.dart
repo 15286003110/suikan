@@ -480,6 +480,13 @@ class LiveRoomController extends PlayerController
     if (Platform.isWindows) {
       windowManager.addListener(this);
     }
+    if (Platform.isIOS) {
+      // iOS 系统画中画激活（含「切后台自动小窗」的延迟启动场景）：
+      // 退后台瞬间 active 可能还是 false，Dart 已按普通后台挂了 30s 降级
+      // timer；等 PiP 真正 didStart 才置 true。这里监听它在 active 变 true
+      // 时立刻取消降级 timer，避免 30s 后 vid=no 掐掉小窗帧源。
+      IosPipService.active.addListener(_onIosPipActiveChanged);
+    }
     if (initialDesktopSidePanelCollapsed ||
         DesktopStartupArgs.startupCollapseChat) {
       desktopSidePanelCollapsed.value = true;
@@ -1674,6 +1681,9 @@ class LiveRoomController extends PlayerController
   @override
   void onClose() async {
     _roomDisposed = true;
+    if (Platform.isIOS) {
+      IosPipService.active.removeListener(_onIosPipActiveChanged);
+    }
     // iOS 画中画激活时离开直播间：先退出小窗，避免小窗还挂着而播放器
     // 已销毁（帧源没了 → 小窗画面冻结）
     if (Platform.isIOS && IosPipService.active.value) {
@@ -4082,6 +4092,17 @@ ${errorStackTrace ?? ""}''');
   /// 退到后台超过阈值后自动停掉视频轨（只留声音，省电）。
   ///
   /// 全平台统一走同一套逻辑（与手机 / iOS 保持一致）：退后台满 30 秒停掉
+  /// iOS 系统画中画激活监听：PiP 一接管画面立刻取消「后台 30s 停画面」降级，
+  /// 否则 timer 到点 vid=no 会把小窗的帧源掐掉（自动小窗场景下 PiP 是在
+  /// 退后台之后才 didStart，进入后台时 active 还是 false，必须靠监听补刀）。
+  void _onIosPipActiveChanged() {
+    if (!IosPipService.active.value) {
+      return;
+    }
+    _backgroundDowngradeTimer?.cancel();
+    Log.d("PiP 激活，取消后台自动降级 timer（小窗持续要帧）");
+  }
+
   /// 视频轨，返回前台时由 _handleForegroundRestore →
   /// _restoreFromBackgroundAudioOnly 自动恢复画面，无需用户干预。
   ///
