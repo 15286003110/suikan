@@ -682,10 +682,12 @@ class LiveRoomPage extends GetView<LiveRoomController> {
         Video(
           key: controller.globalPlayerKey,
           controller: controller.videoController,
-          pauseUponEnteringBackgroundMode:
-              !AppSettingsController.instance.allowBackgroundPlayback.value,
-          resumeUponEnteringForegroundMode:
-              !AppSettingsController.instance.allowBackgroundPlayback.value,
+          pauseUponEnteringBackgroundMode: !AppSettingsController
+                  .instance.allowBackgroundPlayback.value &&
+              !AppSettingsController.instance.audioOnlyBackground.value,
+          resumeUponEnteringForegroundMode: !AppSettingsController
+                  .instance.allowBackgroundPlayback.value &&
+              !AppSettingsController.instance.audioOnlyBackground.value,
           controls:
               pipMode ? null : (state) => playerControls(state, controller),
           aspectRatio: aspectRatio,
@@ -1622,17 +1624,14 @@ class LiveRoomPage extends GetView<LiveRoomController> {
                 controller.saveScreenshot();
               },
             ),
-            Visibility(
-              visible: Platform.isAndroid,
-              child: ListTile(
-                leading: const Icon(Icons.picture_in_picture),
-                title: const Text("小窗播放"),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () {
-                  Get.back();
-                  controller.enablePIP();
-                },
-              ),
+            ListTile(
+              leading: const Icon(Icons.picture_in_picture),
+              title: const Text("小窗播放"),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () {
+                Get.back();
+                controller.enablePIP();
+              },
             ),
             Obx(
               () => SwitchListTile(

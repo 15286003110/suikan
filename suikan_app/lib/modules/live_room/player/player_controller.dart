@@ -1469,7 +1469,10 @@ mixin PlayerSystemMixin on PlayerMixin, PlayerStateMixin, PlayerDanmakuMixin {
 
   Future enablePIP() async {
     if (!Platform.isAndroid) {
-      SmartDialog.showToast("当前平台暂不支持小窗播放");
+      // iOS/iPad 的播放内核是 mpv，进不了苹果系统画中画（只认 AVPlayer）。
+      // 入口已按手机对齐开放，真正可用需先做「mpv 帧 → AVSampleBufferDisplayLayer」
+      // 桥接（iOS 端部专项），未落地前给明确提示，避免点了没反应。
+      SmartDialog.showToast("小窗播放适配中，将在后续版本支持");
       return;
     }
     if (await pip.isPipAvailable == false) {
@@ -3035,10 +3038,12 @@ class PlayerController extends BaseController
       return;
     }
     if (playing &&
-        AppSettingsController.instance.allowBackgroundPlayback.value) {
+        (AppSettingsController.instance.allowBackgroundPlayback.value ||
+            AppSettingsController.instance.audioOnlyBackground.value)) {
       await BackgroundPlaybackService.instance.start();
     } else if (!playing ||
-        !AppSettingsController.instance.allowBackgroundPlayback.value) {
+        (!AppSettingsController.instance.allowBackgroundPlayback.value &&
+            !AppSettingsController.instance.audioOnlyBackground.value)) {
       await BackgroundPlaybackService.instance.stop();
     }
   }
