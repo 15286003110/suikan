@@ -3035,12 +3035,10 @@ class PlayerController extends BaseController
       return;
     }
     if (playing &&
-        (AppSettingsController.instance.allowBackgroundPlayback.value ||
-            AppSettingsController.instance.audioOnlyBackground.value)) {
+        AppSettingsController.instance.allowBackgroundPlayback.value) {
       await BackgroundPlaybackService.instance.start();
     } else if (!playing ||
-        (!AppSettingsController.instance.allowBackgroundPlayback.value &&
-            !AppSettingsController.instance.audioOnlyBackground.value)) {
+        !AppSettingsController.instance.allowBackgroundPlayback.value) {
       await BackgroundPlaybackService.instance.stop();
     }
   }

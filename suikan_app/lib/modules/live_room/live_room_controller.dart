@@ -402,10 +402,11 @@ class LiveRoomController extends PlayerController
   /// 应用是否处于后台
   var isBackground = false;
 
+  /// 「后台播放」是总开关、优先级最高：只由它裁决退后台是否继续播放。
+  /// 纯音频模式是播放形态（遮画面/停轨/降清），不再能放行后台续播——
+  /// 总开关关闭时，即使开着纯音频，退后台也一律暂停。
   bool get _allowBackgroundPlayback =>
-      AppSettingsController.instance.allowBackgroundPlayback.value ||
-      // 纯音频模式下视同允许后台：前台/锁屏都持续只放声音
-      AppSettingsController.instance.audioOnlyBackground.value;
+      AppSettingsController.instance.allowBackgroundPlayback.value;
 
   /// 退到后台后是否已自动降级为纯音频（停掉视频轨），回前台需恢复画面。
   bool _backgroundAudioOnly = false;
@@ -2826,15 +2827,6 @@ class LiveRoomController extends PlayerController
                     ),
                   ),
                 ],
-                AppStyle.divider,
-                Obx(
-                  () => SettingsSwitch(
-                    title: "后台播放",
-                    subtitle: "退到后台/锁屏自动只播放声音（停画面省电），回到前台恢复画面",
-                    value: settings.allowBackgroundPlayback.value,
-                    onChanged: settings.setAllowBackgroundPlayback,
-                  ),
-                ),
                 AppStyle.divider,
                 Obx(
                   () => SettingsSwitch(

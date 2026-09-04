@@ -682,12 +682,10 @@ class LiveRoomPage extends GetView<LiveRoomController> {
         Video(
           key: controller.globalPlayerKey,
           controller: controller.videoController,
-          pauseUponEnteringBackgroundMode: !AppSettingsController
-                  .instance.allowBackgroundPlayback.value &&
-              !AppSettingsController.instance.audioOnlyBackground.value,
-          resumeUponEnteringForegroundMode: !AppSettingsController
-                  .instance.allowBackgroundPlayback.value &&
-              !AppSettingsController.instance.audioOnlyBackground.value,
+          pauseUponEnteringBackgroundMode:
+              !AppSettingsController.instance.allowBackgroundPlayback.value,
+          resumeUponEnteringForegroundMode:
+              !AppSettingsController.instance.allowBackgroundPlayback.value,
           controls:
               pipMode ? null : (state) => playerControls(state, controller),
           aspectRatio: aspectRatio,
@@ -1633,6 +1631,19 @@ class LiveRoomPage extends GetView<LiveRoomController> {
                 onTap: () {
                   Get.back();
                   controller.enablePIP();
+                },
+              ),
+            ),
+            Obx(
+              () => SwitchListTile(
+                secondary: const Icon(Icons.headphones_outlined),
+                title: const Text("后台播放"),
+                subtitle: const Text("关闭后退到后台/锁屏立即暂停"),
+                value: AppSettingsController
+                    .instance.allowBackgroundPlayback.value,
+                onChanged: (v) {
+                  AppSettingsController.instance
+                      .setAllowBackgroundPlayback(v);
                 },
               ),
             ),
