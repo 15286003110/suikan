@@ -23,6 +23,7 @@ import 'package:simple_live_app/app/log.dart';
 import 'package:simple_live_app/app/utils.dart';
 import 'package:simple_live_app/services/background_playback_service.dart';
 import 'package:simple_live_app/services/ios_video_output_size.dart';
+import 'package:simple_live_app/services/media_control_service.dart';
 import 'package:simple_live_app/services/mpv_options_service.dart';
 import 'package:simple_live_core/simple_live_core.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
@@ -2319,6 +2320,23 @@ class PlayerController extends BaseController
 
   void initStream() {
     if (Platform.isIOS || Platform.isAndroid) {
+      MediaControlService.init();
+      MediaControlService.onCommand = (command) {
+        switch (command) {
+          case 'play':
+            unawaited(player.play());
+            break;
+          case 'pause':
+            unawaited(player.pause());
+            break;
+          default:
+            if (player.state.playing) {
+              unawaited(player.pause());
+            } else {
+              unawaited(player.play());
+            }
+        }
+      };
       // iOS 音频会话：播放时激活（后台续播前提），来电/闹钟中断结束后
       // 若中断前在播则恢复播放（原生侧见 SuikanAudioSession.swift）。
       // Android 音频焦点：来电/导航时通知暂停，焦点回来后恢复
@@ -2391,6 +2409,10 @@ class PlayerController extends BaseController
       final generation = playbackLoadGeneration;
       _syncStreamErrorGeneration(generation);
       _lastPlayingState = event;
+      // 系统媒体中心同步播放状态（锁屏按钮 / 通知栏按钮）
+      if (Platform.isIOS || Platform.isAndroid) {
+        unawaited(MediaControlService.setPlaying(event));
+      }
       // iOS：音频会话必须在真正播放时激活（playback 类别 + active），
       // 否则退后台会被系统挂起 → 手动纯音频/后台播放返回桌面即停。
       // Android：播放时申请音频焦点（来电/导航自动避让）。
@@ -3208,6 +3230,10 @@ class PlayerController extends BaseController
       // iOS：释放音频会话，把音频还给其它 App（不释放会一直占用后台音频）
       if (Platform.isIOS) {
         await _syncIosAudioSession(active: false);
+      }
+      // 清掉锁屏/通知栏的"正在播放"
+      if (Platform.isIOS || Platform.isAndroid) {
+        await MediaControlService.clear();
       }
       await waitForPlaybackOpen();
       await player.stop();

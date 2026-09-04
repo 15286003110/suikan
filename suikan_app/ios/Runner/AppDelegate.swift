@@ -14,10 +14,12 @@ import UserNotifications
     // 系统挂起（手动纯音频/后台播放都会"返回桌面就停"）。这里只声明类别，
     // 不抢音频；真正激活在播放开始时由 SuikanAudioSession.activate() 完成。
     SuikanAudioSession.shared.configure()
+    SuikanMediaControl.shared.configure()
     // 传统路径：window.rootViewController 可得时注册（部分场景仍会走这里）
     if let controller = window?.rootViewController as? FlutterViewController {
       registerNotificationChannel(on: controller.binaryMessenger)
       registerAudioChannel(on: controller.binaryMessenger)
+      registerMediaChannel(on: controller.binaryMessenger)
     }
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
@@ -30,6 +32,7 @@ import UserNotifications
     if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "SuikanChannels") {
       registerNotificationChannel(on: registrar.messenger())
       registerAudioChannel(on: registrar.messenger())
+      registerMediaChannel(on: registrar.messenger())
     }
   }
 
@@ -74,6 +77,42 @@ import UserNotifications
     }
     SuikanAudioSession.shared.onInterruptionEndedShouldResume = { shouldResume in
       channel.invokeMethod("onInterruptionEnded", arguments: shouldResume)
+    }
+  }
+
+  // 系统媒体中心（锁屏 / 控制中心）：Dart 侧推送标题等元信息与播放状态，
+  // 原生侧把系统命令（播放 / 暂停 / 线控）回传给 Dart 执行。
+  private func registerMediaChannel(on messenger: FlutterBinaryMessenger) {
+    let channel = FlutterMethodChannel(
+      name: "suikan/media",
+      binaryMessenger: messenger
+    )
+    channel.setMethodCallHandler { call, result in
+      guard let args = call.arguments as? [String: Any] else {
+        result(nil)
+        return
+      }
+      switch call.method {
+      case "update":
+        SuikanMediaControl.shared.update(
+          title: args["title"] as? String ?? "随看",
+          artist: args["artist"] as? String ?? "",
+          isLive: args["isLive"] as? Bool ?? true,
+          playing: args["playing"] as? Bool ?? false
+        )
+        result(nil)
+      case "setPlaying":
+        SuikanMediaControl.shared.setPlaying(args["playing"] as? Bool ?? false)
+        result(nil)
+      case "clear":
+        SuikanMediaControl.shared.clear()
+        result(nil)
+      default:
+        result(FlutterMethodNotImplemented)
+      }
+    }
+    SuikanMediaControl.shared.onCommand = { command in
+      channel.invokeMethod("onCommand", arguments: command)
     }
   }
 

@@ -36,6 +36,7 @@ import 'package:simple_live_app/services/current_room_service.dart';
 import 'package:simple_live_app/services/db_service.dart';
 import 'package:simple_live_app/services/follow_service.dart';
 import 'package:simple_live_app/services/local_storage_service.dart';
+import 'package:simple_live_app/services/media_control_service.dart';
 import 'package:simple_live_app/services/mpv_options_service.dart';
 import 'package:simple_live_app/widgets/filter_button.dart';
 import 'package:simple_live_app/widgets/desktop_refresh_button.dart';
@@ -2002,6 +2003,18 @@ class LiveRoomController extends PlayerController
         return;
       }
       detail.value = loadedDetail;
+      // 系统媒体中心（锁屏/控制中心/通知栏）显示当前房间信息：
+      // 标题=直播间标题，副标题=主播名（点播则为平台名）。
+      if (Platform.isIOS || Platform.isAndroid) {
+        unawaited(
+          MediaControlService.update(
+            title: loadedDetail.title.isEmpty ? "随看直播" : loadedDetail.title,
+            artist: loadedDetail.userName,
+            isLive: !isVod,
+            playing: player.state.playing,
+          ),
+        );
+      }
       // 点播（影视）：异步加载影片详情与剧集（信息页/集数页数据源）。
       if (isVod) {
         unawaited(loadVodMeta());

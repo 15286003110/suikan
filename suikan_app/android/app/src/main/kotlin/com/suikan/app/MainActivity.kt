@@ -112,6 +112,7 @@ class MainActivity : FlutterActivity() {
         ).setMethodCallHandler(multicastHandler)
         // 音频焦点：来电/导航/其它媒体时通知 Dart 避让，结束后恢复
         setupAudioFocus(flutterEngine)
+        setupMediaControl(flutterEngine)
     }
 
     override fun onResume() {
@@ -291,6 +292,7 @@ class MainActivity : FlutterActivity() {
     companion object {
         private const val APP_WINDOW_CHANNEL = "simple_live/app_window"
         private const val AUDIO_FOCUS_CHANNEL = "suikan/audio"
+        private const val MEDIA_CHANNEL = "suikan/media"
         private const val LIVE_START_CHANNEL_ID = "simple_live_live_start"
         private const val WINDOWING_MODE_FREEFORM = 5
     }
@@ -330,6 +332,37 @@ class MainActivity : FlutterActivity() {
                     result.success(true)
                 }
                 else -> result.notImplemented()
+            }
+        }
+    }
+
+    // MARK: - 系统媒体控制（通知栏播放/暂停，零新增依赖）
+
+    private fun setupMediaControl(flutterEngine: FlutterEngine) {
+        val channel = MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            MEDIA_CHANNEL,
+        )
+        channel.setMethodCallHandler { call, result ->
+            when (call.method) {
+                "setPlaying" -> {
+                    val playing = call.argument<Boolean>("playing") ?: false
+                    val changed = playing != SuikanMediaActions.isPlaying()
+                    SuikanMediaActions.setPlaying(playing)
+                    // 状态变化时重建通知，切换"播放/暂停"按钮
+                    if (changed) {
+                        val intent = Intent(this, BackgroundPlaybackService::class.java)
+                        startService(intent)
+                    }
+                    result.success(null)
+                }
+                else -> result.notImplemented()
+            }
+        }
+        // 通知/按钮命令 → Dart
+        SuikanMediaActions.commandSink = { command ->
+            runOnUiThread {
+                channel.invokeMethod("onCommand", command)
             }
         }
     }
