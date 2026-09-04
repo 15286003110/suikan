@@ -22,6 +22,7 @@ import 'package:simple_live_app/app/custom_throttle.dart';
 import 'package:simple_live_app/app/log.dart';
 import 'package:simple_live_app/app/utils.dart';
 import 'package:simple_live_app/services/background_playback_service.dart';
+import 'package:simple_live_app/services/ios_pip_service.dart';
 import 'package:simple_live_app/services/ios_video_output_size.dart';
 import 'package:simple_live_app/services/mpv_options_service.dart';
 import 'package:simple_live_core/simple_live_core.dart';
@@ -1468,11 +1469,20 @@ mixin PlayerSystemMixin on PlayerMixin, PlayerStateMixin, PlayerDanmakuMixin {
   }
 
   Future enablePIP() async {
+    if (Platform.isIOS) {
+      // iOS/iPadOS 系统小窗：播放内核是 mpv，进不了只认 AVPlayer 的系统画中画，
+      // 因此由原生侧把每帧 CVPixelBuffer 转 CMSampleBuffer 喂给
+      // AVSampleBufferDisplayLayer，再交给 AVPictureInPictureController
+      // （见 ios/Runner/SuikanPiPManager.swift）。
+      if (!await IosPipService.isSupported()) {
+        SmartDialog.showToast("当前设备不支持小窗播放");
+        return;
+      }
+      await IosPipService.start();
+      return;
+    }
     if (!Platform.isAndroid) {
-      // iOS/iPad 的播放内核是 mpv，进不了苹果系统画中画（只认 AVPlayer）。
-      // 入口已按手机对齐开放，真正可用需先做「mpv 帧 → AVSampleBufferDisplayLayer」
-      // 桥接（iOS 端部专项），未落地前给明确提示，避免点了没反应。
-      SmartDialog.showToast("小窗播放适配中，将在后续版本支持");
+      SmartDialog.showToast("当前平台暂不支持小窗播放");
       return;
     }
     if (await pip.isPipAvailable == false) {
@@ -2300,6 +2310,17 @@ class PlayerController extends BaseController
 
   void initStream() {
     if (Platform.isIOS) {
+      // 系统小窗（画中画）：小窗里的播放/暂停按钮 → 控制 mpv。
+      // 画面由原生侧把每帧 CVPixelBuffer 转成 CMSampleBuffer 送进
+      // AVSampleBufferDisplayLayer（见 SuikanPiPManager）。
+      IosPipService.init();
+      IosPipService.onPlayPause = (playing) {
+        if (playing) {
+          unawaited(player.play());
+        } else {
+          unawaited(player.pause());
+        }
+      };
       _iosOriginalQualityPowerSavingWorker = ever<bool>(
         AppSettingsController.instance.iosOriginalQualityPowerSaving,
         (_) => refreshIosVideoOutputLimit(),

@@ -104,6 +104,13 @@ dependency_overrides:
   # 防 Flutter 3.38+ mpv 线程调用已删 FFI 回调 → SIGABRT / 引擎纹理崩)。
   media_kit:
     path: ../vendor/media_kit
+  # media_kit_video：iOS/iPadOS 系统小窗（画中画）需要把 mpv 每一帧的
+  # CVPixelBuffer 交给 AVSampleBufferDisplayLayer（苹果 PiP 只认 AVPlayerLayer
+  # 或 AVSampleBufferDisplayLayer，mpv 自绘画面进不去）。上游包没有这个钩子，
+  # 故 vendor 到 ../vendor/media_kit_video，在 TextureHW 渲染完成后通过
+  # TextureFrameBridge 把帧投递给 App 侧（见 ios/Runner/SuikanPiPManager.swift）。
+  media_kit_video:
+    path: ../vendor/media_kit_video
 
 flutter_launcher_icons:
   android: true

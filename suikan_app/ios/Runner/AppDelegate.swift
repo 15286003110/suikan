@@ -25,6 +25,38 @@ import UserNotifications
           result(FlutterMethodNotImplemented)
         }
       }
+
+      // 系统画中画（iOS / iPadOS）。
+      // 播放内核是 mpv，进不了只认 AVPlayer 的系统 PiP，因此由
+      // SuikanPiPManager 把视频帧转成 CMSampleBuffer 喂给
+      // AVSampleBufferDisplayLayer，再交给 AVPictureInPictureController。
+      let pipChannel = FlutterMethodChannel(
+        name: "suikan/pip",
+        binaryMessenger: controller.binaryMessenger
+      )
+      pipChannel.setMethodCallHandler { call, result in
+        switch call.method {
+        case "isSupported":
+          result(SuikanPiPManager.shared.isSupported)
+        case "start":
+          SuikanPiPManager.shared.start()
+          result(nil)
+        case "stop":
+          SuikanPiPManager.shared.stop()
+          result(nil)
+        case "isActive":
+          result(SuikanPiPManager.shared.isPipActive)
+        default:
+          result(FlutterMethodNotImplemented)
+        }
+      }
+      // PiP 窗口里的播放/暂停 → 通知 Dart 控制 mpv
+      SuikanPiPManager.shared.onPlayPause = { playing in
+        pipChannel.invokeMethod("onPlayPause", arguments: playing)
+      }
+      SuikanPiPManager.shared.onPipStateChanged = { active in
+        pipChannel.invokeMethod("onPipState", arguments: active)
+      }
     }
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
