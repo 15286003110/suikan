@@ -16,6 +16,11 @@ class VodEpisodePanel extends StatefulWidget {
 
 class _VodEpisodePanelState extends State<VodEpisodePanel> {
   int _seasonIndex = 0;
+  /// 用户是否手动选过季。
+  /// ⚠️ 必须保留：此前用「当前播放集所在季」无条件覆盖显示季，导致只要当前
+  /// 集在第一季（默认就是），点第二季/第三季就切不动（手动选择被覆盖）。
+  /// 手动选择优先，点了具体某集后（切集成功）再回到自动跟随。
+  bool _userPickedSeason = false;
   /// 最近一次触发过"懒加载集列表"的季 guid（避免 build 反复请求）。
   String? _requestedSeasonGuid;
 
@@ -38,8 +43,14 @@ class _VodEpisodePanelState extends State<VodEpisodePanel> {
       }
       // 切集/进入时跟随当前播放集所在季；手动切季后保持手动选择。
       final located = _locateSeasonIndex(seasons, widget.controller.roomId);
-      final displayIndex = located >= 0 ? located : _seasonIndex;
-      if (displayIndex >= seasons.length) _seasonIndex = 0;
+      var safeIndex = _seasonIndex;
+      if (safeIndex >= seasons.length || safeIndex < 0) {
+        safeIndex = 0;
+      }
+      final displayIndex = _userPickedSeason
+          ? safeIndex
+          : (located >= 0 ? located : safeIndex);
+      _seasonIndex = safeIndex;
       final season = seasons[displayIndex];
       final episodes = season.episodes;
       // 当前季集未加载 → 懒加载（进入时若当前集在其它季，保证能展开该季）。
@@ -70,7 +81,10 @@ class _VodEpisodePanelState extends State<VodEpisodePanel> {
                   ),
                   selected: selected,
                   onSelected: (_) {
-                    setState(() => _seasonIndex = i);
+                    setState(() {
+                      _seasonIndex = i;
+                      _userPickedSeason = true;
+                    });
                     if (s.episodes.isEmpty) {
                       widget.controller.selectVodSeason(s);
                     }
@@ -96,7 +110,13 @@ class _VodEpisodePanelState extends State<VodEpisodePanel> {
                     itemBuilder: (_, i) => _EpisodeCell(
                       episode: episodes[i],
                       active: widget.controller.roomId == episodes[i].guid,
-                      onTap: () => widget.controller.playVodEpisode(episodes[i]),
+                      onTap: () {
+                        // 切集后回到"跟随当前播放集所在季"
+                        if (_userPickedSeason) {
+                          setState(() => _userPickedSeason = false);
+                        }
+                        widget.controller.playVodEpisode(episodes[i]);
+                      },
                     ),
                   ),
           ),
