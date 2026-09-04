@@ -7,6 +7,8 @@ import android.app.PendingIntent
 import android.content.Intent
 import android.content.Context
 import android.content.res.Configuration
+import android.media.AudioFocusRequest
+import android.media.AudioManager
 import android.net.wifi.WifiManager
 import android.os.Build
 import io.flutter.embedding.android.FlutterActivity
@@ -108,6 +110,9 @@ class MainActivity : FlutterActivity() {
             flutterEngine.dartExecutor.binaryMessenger,
             "simple_live/discovery",
         ).setMethodCallHandler(multicastHandler)
+        // 音频焦点：来电/导航/其它媒体时通知 Dart 避让，结束后恢复
+        setupAudioFocus(flutterEngine)
+        setupMediaControl(flutterEngine)
     }
 
     override fun onResume() {
@@ -286,7 +291,151 @@ class MainActivity : FlutterActivity() {
 
     companion object {
         private const val APP_WINDOW_CHANNEL = "simple_live/app_window"
+        private const val AUDIO_FOCUS_CHANNEL = "suikan/audio"
+        private const val MEDIA_CHANNEL = "suikan/media"
         private const val LIVE_START_CHANNEL_ID = "simple_live_live_start"
         private const val WINDOWING_MODE_FREEFORM = 5
+    }
+
+    // MARK: - 音频焦点（来电/导航/其它 App 播放时避让，结束后恢复）
+
+    private var audioManager: AudioManager? = null
+    private var audioFocusChannel: MethodChannel? = null
+    private var audioFocusRequest: Any? = null
+    private var hasAudioFocus = false
+
+    private val focusChangeListener = AudioManager.OnAudioFocusChangeListener { change ->
+        when (change) {
+            AudioManager.AUDIOFOCUS_LOSS,
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
+                hasAudioFocus = false
+                audioFocusChannel?.invokeMethod("onAudioFocusLost", null)
+            }
+            AudioManager.AUDIOFOCUS_GAIN -> {
+                hasAudioFocus = true
+                audioFocusChannel?.invokeMethod("onAudioFocusGained", null)
+            }
+        }
+    }
+
+    private fun setupAudioFocus(flutterEngine: FlutterEngine) {
+        audioManager = getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+        audioFocusChannel = MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            AUDIO_FOCUS_CHANNEL,
+        )
+        audioFocusChannel?.setMethodCallHandler { call, result ->
+            when (call.method) {
+                "requestFocus" -> result.success(requestAudioFocus())
+                "abandonFocus" -> {
+                    abandonAudioFocus()
+                    result.success(true)
+                }
+                else -> result.notImplemented()
+            }
+        }
+    }
+
+    // MARK: - 系统媒体控制（通知栏播放/暂停，零新增依赖）
+
+    private fun setupMediaControl(flutterEngine: FlutterEngine) {
+        SuikanMediaSession.ensure(this)
+        val channel = MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            MEDIA_CHANNEL,
+        )
+        channel.setMethodCallHandler { call, result ->
+            when (call.method) {
+                "update" -> {
+                    SuikanMediaSession.update(
+                        title = call.argument<String>("title") ?: "随看",
+                        artist = call.argument<String>("artist") ?: "",
+                        isLive = call.argument<Boolean>("isLive") ?: true,
+                        coverUrl = call.argument<String>("coverUrl"),
+                        durationSec = call.argument<Double>("duration"),
+                        positionSec = call.argument<Double>("position"),
+                        canNext = call.argument<Boolean>("canNext") ?: false,
+                        canPrev = call.argument<Boolean>("canPrev") ?: false,
+                    )
+                    result.success(null)
+                }
+                "setPlaying" -> {
+                    val playing = call.argument<Boolean>("playing") ?: false
+                    val changed = playing != SuikanMediaActions.isPlaying()
+                    SuikanMediaActions.setPlaying(playing)
+                    SuikanMediaSession.setPlaying(
+                        playing,
+                        call.argument<Double>("position"),
+                    )
+                    // 状态变化时重建通知（MediaSession 会自动更新，这里兜底刷新）
+                    if (changed) {
+                        val intent = Intent(this, BackgroundPlaybackService::class.java)
+                        startService(intent)
+                    }
+                    result.success(null)
+                }
+                "setPosition" -> {
+                    SuikanMediaSession.setPosition(
+                        call.argument<Double>("position") ?: 0.0,
+                    )
+                    result.success(null)
+                }
+                "clear" -> {
+                    SuikanMediaSession.clear()
+                    result.success(null)
+                }
+                else -> result.notImplemented()
+            }
+        }
+        // 通知/按钮/线控命令 → Dart
+        SuikanMediaActions.commandSink = { command ->
+            runOnUiThread {
+                channel.invokeMethod("onCommand", command)
+            }
+        }
+        SuikanMediaActions.seekSink = { positionSec ->
+            runOnUiThread {
+                channel.invokeMethod(
+                    "onCommand",
+                    mapOf("command" to "seek", "position" to positionSec),
+                )
+            }
+        }
+    }
+
+    private fun requestAudioFocus(): Boolean {
+        val manager = audioManager ?: return false
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+                .setOnAudioFocusChangeListener(focusChangeListener)
+                .build()
+            audioFocusRequest = request
+            val res = manager.requestAudioFocus(request)
+            hasAudioFocus = res == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+            return hasAudioFocus
+        }
+        @Suppress("DEPRECATION")
+        val res = manager.requestAudioFocus(
+            focusChangeListener,
+            AudioManager.STREAM_MUSIC,
+            AudioManager.AUDIOFOCUS_GAIN,
+        )
+        hasAudioFocus = res == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+        return hasAudioFocus
+    }
+
+    private fun abandonAudioFocus() {
+        val manager = audioManager ?: return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            (audioFocusRequest as? AudioFocusRequest)?.let {
+                @Suppress("DEPRECATION")
+                manager.abandonAudioFocusRequest(it)
+            }
+        } else {
+            @Suppress("DEPRECATION")
+            manager.abandonAudioFocus(focusChangeListener)
+        }
+        audioFocusRequest = null
+        hasAudioFocus = false
     }
 }

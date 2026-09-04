@@ -18,6 +18,13 @@ class BackgroundPlaybackService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        when (intent?.action) {
+            SuikanMediaActions.ACTION_PLAY -> SuikanMediaActions.dispatch("play")
+            SuikanMediaActions.ACTION_PAUSE -> SuikanMediaActions.dispatch("pause")
+            SuikanMediaActions.ACTION_TOGGLE -> SuikanMediaActions.dispatch("toggle")
+            SuikanMediaActions.ACTION_NEXT -> SuikanMediaActions.dispatch("next")
+            SuikanMediaActions.ACTION_PREV -> SuikanMediaActions.dispatch("prev")
+        }
         startForeground(NOTIFICATION_ID, buildNotification())
         return START_STICKY
     }
@@ -29,12 +36,18 @@ class BackgroundPlaybackService : Service() {
             @Suppress("DEPRECATION")
             Notification.Builder(this)
         }
+        // 绑定系统 MediaSession：标题/封面/进度/播放暂停切台按钮由系统据此渲染。
+        val token = SuikanMediaSession.sessionToken()
+        if (token != null) {
+            builder.setStyle(Notification.MediaStyle().setMediaSession(token))
+        } else {
+            builder.setContentTitle("随看").setContentText("正在后台播放")
+        }
         return builder
             .setSmallIcon(applicationInfo.icon)
-            .setContentTitle("随看")
-            .setContentText("正在后台播放直播")
             .setOngoing(true)
             .setShowWhen(false)
+            .setVisibility(Notification.VISIBILITY_PUBLIC)
             .setContentIntent(
                 PendingIntent.getActivity(
                     this,
