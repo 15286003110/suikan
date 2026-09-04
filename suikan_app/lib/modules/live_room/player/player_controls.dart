@@ -325,15 +325,14 @@ Widget _buildFullTopBar(
                 size: 24,
               ),
             ),
-            if (Platform.isAndroid)
-              IconButton(
-                onPressed: controller.enablePIP,
-                icon: const Icon(
-                  Icons.picture_in_picture,
-                  color: Colors.white,
-                  size: 24,
-                ),
+            IconButton(
+              onPressed: controller.enablePIP,
+              icon: const Icon(
+                Icons.picture_in_picture,
+                color: Colors.white,
+                size: 24,
               ),
+            ),
             IconButton(
               onPressed: () => showPlayerSettings(controller),
               icon: const Icon(

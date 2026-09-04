@@ -73,6 +73,18 @@ class PlaySettingsPage extends GetView<AppSettingsController> {
                     ),
                   ),
                 ),
+                AppStyle.divider,
+                Obx(
+                  () => SettingsSwitch(
+                    title: "后台播放",
+                    subtitle: "关闭后退到后台/锁屏立即暂停；开启则后台继续播"
+                        "（30 秒后自动停画面省电）",
+                    value: controller.allowBackgroundPlayback.value,
+                    onChanged: (e) {
+                      controller.setAllowBackgroundPlayback(e);
+                    },
+                  ),
+                ),
                 // AppStyle.divider,
                 // Obx(
                 //   () => SettingsNumber(
@@ -124,18 +136,6 @@ class PlaySettingsPage extends GetView<AppSettingsController> {
                     value: controller.playerGestureControlEnable.value,
                     onChanged: (e) {
                       controller.setPlayerGestureControlEnable(e);
-                    },
-                  ),
-                ),
-                AppStyle.divider,
-                Obx(
-                  () => SettingsSwitch(
-                    title: "纯音频模式",
-                    subtitle:
-                        "只播放声音、不显示画面，并自动切到最低清晰度省流量；关闭后自动还原。退后台只放声音，移动网络下降清晰度，WiFi 不降",
-                    value: controller.audioOnlyBackground.value,
-                    onChanged: (e) {
-                      controller.setAudioOnlyBackground(e);
                     },
                   ),
                 ),

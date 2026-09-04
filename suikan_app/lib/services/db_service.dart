@@ -711,8 +711,32 @@ class DBService extends GetxService {
     return null;
   }
 
+  /// 观看历史条数上限：超出后自动淘汰最旧的记录。
+  /// 历史只增不减（每次进直播间都新增或更新一条），不限量会让 Hive 箱无限
+  /// 增长：启动要全量读出排序、备份快照体积随之变大（历史备份损坏时每份
+  /// 都要等 openBox 超时，2026-08-31 白屏事故就是被多份历史备份拖成 140s）。
+  static const int kHistoryMaxCount = 100;
+
   Future addOrUpdateHistory(History history) async {
-    await runExclusive(() => historyBox.put(safeBoxKey(history.id), history));
+    await runExclusive(() async {
+      await historyBox.put(safeBoxKey(history.id), history);
+      await trimHistoryOverflow();
+    });
+  }
+
+  /// 超出 [kHistoryMaxCount] 时按 updateTime 淘汰最旧的记录，保留最新的。
+  /// 只有超限时才排序（进房写历史的频率很低，代价可忽略）。
+  /// ⚠️ 本方法内部**不得**再调 runExclusive（_writeChain 串行链会自我等待死锁），
+  /// 由调用方负责包裹。
+  Future<void> trimHistoryOverflow() async {
+    final overflow = historyBox.length - kHistoryMaxCount;
+    if (overflow <= 0) {
+      return;
+    }
+    final all = historyBox.values.toList()
+      ..sort((a, b) => a.updateTime.compareTo(b.updateTime));
+    await historyBox
+        .deleteAll(all.take(overflow).map((e) => safeBoxKey(e.id)).toList());
   }
 
   List<History> getHistores() {

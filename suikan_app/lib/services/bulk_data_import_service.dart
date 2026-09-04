@@ -627,6 +627,11 @@ class BulkDataImportService {
         force: true,
       );
     }
+    // 备份导入/P2P 同步可能一次灌入上万条历史，导入完统一裁剪到上限，
+    // 免得别端的海量历史把本端箱撑爆（拖慢启动 + 快照体积暴涨）。
+    await DBService.runExclusive(
+      () => DBService.instance.trimHistoryOverflow(),
+    );
   }
 
   static Future<void> _putShieldValues(

@@ -1624,15 +1624,25 @@ class LiveRoomPage extends GetView<LiveRoomController> {
                 controller.saveScreenshot();
               },
             ),
-            Visibility(
-              visible: Platform.isAndroid,
-              child: ListTile(
-                leading: const Icon(Icons.picture_in_picture),
-                title: const Text("小窗播放"),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () {
-                  Get.back();
-                  controller.enablePIP();
+            ListTile(
+              leading: const Icon(Icons.picture_in_picture),
+              title: const Text("小窗播放"),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () {
+                Get.back();
+                controller.enablePIP();
+              },
+            ),
+            Obx(
+              () => SwitchListTile(
+                secondary: const Icon(Icons.headphones_outlined),
+                title: const Text("后台播放"),
+                subtitle: const Text("关闭后退到后台/锁屏立即暂停"),
+                value: AppSettingsController
+                    .instance.allowBackgroundPlayback.value,
+                onChanged: (v) {
+                  AppSettingsController.instance
+                      .setAllowBackgroundPlayback(v);
                 },
               ),
             ),
