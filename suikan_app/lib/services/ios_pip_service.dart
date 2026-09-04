@@ -22,6 +22,9 @@ class IosPipService {
   /// 小窗里的播放/暂停按钮被点击时触发（参数为是否要播放）
   static void Function(bool playing)? onPlayPause;
 
+  /// 原生侧 PiP 出错/失败原因（用于弹提示，避免"点了没反应"）
+  static void Function(String message)? onError;
+
   static bool _initialized = false;
 
   /// 注册原生回调。在播放器初始化时调用一次即可。
@@ -37,6 +40,9 @@ class IosPipService {
           break;
         case 'onPipState':
           active.value = call.arguments as bool? ?? false;
+          break;
+        case 'onError':
+          onError?.call(call.arguments as String? ?? '小窗播放失败');
           break;
       }
       return null;
