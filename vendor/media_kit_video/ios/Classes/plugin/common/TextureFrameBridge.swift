@@ -1,3 +1,4 @@
+import CoreVideo
 import Foundation
 
 /// 视频帧桥（随看自定义扩展，非 media_kit 上游代码）。
@@ -7,66 +8,25 @@ import Foundation
 /// App 层的 PiP 管理器（SuikanPiPManager），由它转成 CMSampleBuffer 喂给
 /// AVSampleBufferDisplayLayer。
 ///
-/// 这里用 NotificationCenter 而不是直接依赖，是为了让插件 pod 与 App 工程解耦
-/// （互相不 import）。App 侧发 start/stop 通知开关送帧，插件每帧（渲染完成后）
-/// 把 CVPixelBuffer 通过 frameReady 通知带出去。
-///
-/// ⚠️ 只在画中画需要时才打开，避免平时每帧都发通知白白开销。
+/// 用**闭包直调**而不是通知：CVPixelBuffer 是 CoreFoundation 类型，塞进通知的
+/// userInfo（NSDictionary 桥接）既不安全也不该干；闭包在同一进程内直接传对象
+/// 引用，零拷贝、无桥接问题。App 侧在准备 PiP 时把 onFrame 注册进来，
+/// PiP 结束(dispose)时置 nil，平时 deliver 只是读一次空判断，开销可忽略。
 public class TextureFrameBridge: NSObject {
 
-  @objc public static let shared = TextureFrameBridge()
+  /// App 侧（SuikanPiPManager）注册的帧接收回调。
+  /// 回调线程 = 渲染线程（media_kit_video 的 iOS 渲染跑在主线程队列上）。
+  public var onFrame: ((CVPixelBuffer) -> Void)?
 
-  private static let frameReadyName = Notification.Name("com.suikan.pip.frameReady")
-  private static let startName = Notification.Name("com.suikan.pip.frameBridgeStart")
-  private static let stopName = Notification.Name("com.suikan.pip.frameBridgeStop")
-  private static let pixelBufferKey = "pixelBuffer"
-
-  private var _enabled = false
-  private let lock = NSLock()
-
-  /// 是否需要向 App 侧投递视频帧
-  public var enabled: Bool {
-    lock.lock()
-    defer { lock.unlock() }
-    return _enabled
-  }
+  public static let shared = TextureFrameBridge()
 
   private override init() {
     super.init()
-    NotificationCenter.default.addObserver(
-      self,
-      selector: #selector(enableBridging),
-      name: TextureFrameBridge.startName,
-      object: nil
-    )
-    NotificationCenter.default.addObserver(
-      self,
-      selector: #selector(disableBridging),
-      name: TextureFrameBridge.stopName,
-      object: nil
-    )
   }
 
-  @objc private func enableBridging() {
-    lock.lock()
-    _enabled = true
-    lock.unlock()
-  }
-
-  @objc private func disableBridging() {
-    lock.lock()
-    _enabled = false
-    lock.unlock()
-  }
-
-  /// 渲染完成一帧后调用：把 CVPixelBuffer 交给 App 侧的 PiP 渲染层。
-  /// 必须在主线程调用（渲染本身就跑在主线程）。
+  /// 渲染完成一帧后调用（TextureHW.render 末尾）。只有 PiP 需要时才真正回调。
   public func deliver(pixelBuffer: CVPixelBuffer) {
-    guard enabled else { return }
-    NotificationCenter.default.post(
-      name: TextureFrameBridge.frameReadyName,
-      object: nil,
-      userInfo: [TextureFrameBridge.pixelBufferKey: pixelBuffer]
-    )
+    guard let onFrame = onFrame else { return }
+    onFrame(pixelBuffer)
   }
 }

@@ -1,5 +1,7 @@
 import AVFoundation
 import AVKit
+import media_kit_video
+import QuartzCore
 import UIKit
 
 /// 随看 iOS / iPadOS 系统画中画（Picture in Picture）管理器。
@@ -7,14 +9,16 @@ import UIKit
 /// 背景：随看的播放内核是 mpv（media_kit），画面渲染在自己的图层上，
 /// 而苹果的系统画中画只认 AVPlayerLayer 或 AVSampleBufferDisplayLayer。
 /// 因此这里走 AVSampleBufferDisplayLayer 路线：
-///   mpv 解码帧（CVPixelBuffer，由 media_kit_video 的 TextureHW 提供）
+///   mpv 解码帧（CVPixelBuffer，由 vendor media_kit_video 的 TextureHW 渲染出口
+///   → TextureFrameBridge 提供）
 ///     → CMSampleBuffer
 ///     → AVSampleBufferDisplayLayer
 ///     → AVPictureInPictureController.ContentSource
 ///     → 系统小窗
 ///
-/// 帧的投递用 NotificationCenter 与 media_kit_video 解耦（插件 pod 与 App
-/// 互相不 import），只有 PiP 需要时才让插件开始送帧，避免平时白费开销。
+/// 帧传递用 TextureFrameBridge 的闭包直调（不经过通知字典——CVPixelBuffer 是
+/// CoreFoundation 类型，不适合塞 userInfo）。只有 prepare() 之后（PiP 需要时）
+/// onFrame 才被注册，平时零开销。
 class PipVideoView: UIView {
   override class var layerClass: AnyClass {
     AVSampleBufferDisplayLayer.self
@@ -40,7 +44,6 @@ class SuikanPiPManager: NSObject {
   private var timebase: CMTimebase?
   private var isPlaying = true
   private var lastEnqueueTime: CFTimeInterval = 0
-  private var handlingPlayCommand = false
 
   private(set) var isPipActive = false
 
@@ -110,18 +113,15 @@ class SuikanPiPManager: NSObject {
     controller.delegate = self
     // 直播：只要播放/暂停，不要快进快退
     controller.requiresLinearPlayback = true
-    // 切后台时自动进入 PiP
+    // 切后台时自动进入 PiP（若 App 切到后台且满足条件）
     controller.canStartPictureInPictureAutomaticallyFromInline = true
     pipController = controller
 
-    // 让 media_kit_video 开始投递视频帧
-    NotificationCenter.default.post(name: Self.frameBridgeStart, object: nil)
-    NotificationCenter.default.addObserver(
-      self,
-      selector: #selector(handleFrame(_:)),
-      name: Self.frameReady,
-      object: nil
-    )
+    // 注册帧桥：media_kit_video 每渲染完一帧就回调这里（闭包直调，
+    // 不经过通知字典——CVPixelBuffer 是 CF 类型不适合塞 userInfo）。
+    TextureFrameBridge.shared.onFrame = { [weak self] (pixelBuffer: CVPixelBuffer) in
+      self?.handleFrame(pixelBuffer)
+    }
   }
 
   func start() {
@@ -139,8 +139,7 @@ class SuikanPiPManager: NSObject {
 
   /// 释放 PiP 资源并让插件停止送帧。
   func dispose() {
-    NotificationCenter.default.post(name: Self.frameBridgeStop, object: nil)
-    NotificationCenter.default.removeObserver(self, name: Self.frameReady, object: nil)
+    TextureFrameBridge.shared.onFrame = nil
     pipView?.removeFromSuperview()
     pipView = nil
     pipController = nil
@@ -148,15 +147,14 @@ class SuikanPiPManager: NSObject {
     isPipActive = false
   }
 
-  // MARK: - 帧桥
+  // MARK: - 帧处理
 
-  @objc private func handleFrame(_ note: Notification) {
+  private func handleFrame(_ pixelBuffer: CVPixelBuffer) {
     guard isPipActive || pipController != nil else { return }
-    guard let pixelBuffer = note.userInfo?[Self.frameKey] as? CVPixelBuffer else { return }
     guard let layer = pipView?.displayLayer else { return }
     // 背压：渲染层还没消化就丢帧，避免无限堆积
     guard layer.isReadyForMoreMediaData else { return }
-    // 限流到 ~30fps：小窗尺寸本就不大，省 CPU / 功耗
+    // 限流到 ~32fps：小窗尺寸本就不大，省 CPU / 功耗
     let now = CACurrentMediaTime()
     if now - lastEnqueueTime < 1.0 / 32.0 {
       return
@@ -206,13 +204,6 @@ class SuikanPiPManager: NSObject {
     }
     return UIApplication.shared.windows.first(where: { $0.isKeyWindow })?.rootViewController?.view
   }
-
-  // MARK: - 通知名（与 vendor/media_kit_video 约定）
-
-  static let frameReady = Notification.Name("com.suikan.pip.frameReady")
-  static let frameBridgeStart = Notification.Name("com.suikan.pip.frameBridgeStart")
-  static let frameBridgeStop = Notification.Name("com.suikan.pip.frameBridgeStop")
-  static let frameKey = "pixelBuffer"
 }
 
 // MARK: - AVPictureInPictureSampleBufferPlaybackDelegate
@@ -237,7 +228,6 @@ extension SuikanPiPManager: AVPictureInPictureSampleBufferPlaybackDelegate {
     setPlaying playing: Bool
   ) {
     isPlaying = playing
-    handlingPlayCommand = true
     onPlayPause?(playing)
   }
 
