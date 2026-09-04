@@ -22,7 +22,6 @@ import 'package:simple_live_app/app/custom_throttle.dart';
 import 'package:simple_live_app/app/log.dart';
 import 'package:simple_live_app/app/utils.dart';
 import 'package:simple_live_app/services/background_playback_service.dart';
-import 'package:simple_live_app/services/ios_pip_service.dart';
 import 'package:simple_live_app/services/ios_video_output_size.dart';
 import 'package:simple_live_app/services/mpv_options_service.dart';
 import 'package:simple_live_core/simple_live_core.dart';
@@ -1469,21 +1468,6 @@ mixin PlayerSystemMixin on PlayerMixin, PlayerStateMixin, PlayerDanmakuMixin {
   }
 
   Future enablePIP() async {
-    if (Platform.isIOS) {
-      // iOS/iPadOS 系统小窗：播放内核是 mpv，进不了只认 AVPlayer 的系统画中画，
-      // 因此由原生侧把每帧 CVPixelBuffer 转 CMSampleBuffer 喂给
-      // AVSampleBufferDisplayLayer，再交给 AVPictureInPictureController
-      // （见 ios/Runner/SuikanPiPManager.swift）。
-      // 入口即时反馈：若这条 toast 都不出现 = Dart 入口未执行；若出现后
-      // 无后续 = 原生通道/设备问题（onError 会接力报原因）。
-      SmartDialog.showToast("正在进入小窗…");
-      if (!await IosPipService.isSupported()) {
-        SmartDialog.showToast("当前设备不支持小窗播放");
-        return;
-      }
-      await IosPipService.start();
-      return;
-    }
     if (!Platform.isAndroid) {
       SmartDialog.showToast("当前平台暂不支持小窗播放");
       return;
@@ -2313,25 +2297,6 @@ class PlayerController extends BaseController
 
   void initStream() {
     if (Platform.isIOS) {
-      // 系统小窗（画中画）：小窗里的播放/暂停按钮 → 控制 mpv。
-      // 画面由原生侧把每帧 CVPixelBuffer 转成 CMSampleBuffer 送进
-      // AVSampleBufferDisplayLayer（见 SuikanPiPManager）。
-      IosPipService.init();
-      IosPipService.onPlayPause = (playing) {
-        if (playing) {
-          unawaited(player.play());
-        } else {
-          unawaited(player.pause());
-        }
-      };
-      // PiP 启动失败/设备不支持等原因 → 弹提示，避免"点了没反应"
-      IosPipService.onError = (message) {
-        SmartDialog.showToast(message);
-      };
-      // 播放即备好系统小窗控制器（只 prepare 不启动）：让「播放中切后台
-      // 自动弹小窗」(canStartPictureInPictureAutomaticallyFromInline)在系统
-      // 需要的那一刻立刻可用，用户不用先手动点一次小窗。
-      unawaited(IosPipService.prepare());
       _iosOriginalQualityPowerSavingWorker = ever<bool>(
         AppSettingsController.instance.iosOriginalQualityPowerSaving,
         (_) => refreshIosVideoOutputLimit(),

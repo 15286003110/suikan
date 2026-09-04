@@ -35,7 +35,6 @@ import 'package:simple_live_app/routes/route_path.dart';
 import 'package:simple_live_app/services/current_room_service.dart';
 import 'package:simple_live_app/services/db_service.dart';
 import 'package:simple_live_app/services/follow_service.dart';
-import 'package:simple_live_app/services/ios_pip_service.dart';
 import 'package:simple_live_app/services/local_storage_service.dart';
 import 'package:simple_live_app/services/mpv_options_service.dart';
 import 'package:simple_live_app/widgets/filter_button.dart';
@@ -479,13 +478,6 @@ class LiveRoomController extends PlayerController
     WidgetsBinding.instance.addObserver(this);
     if (Platform.isWindows) {
       windowManager.addListener(this);
-    }
-    if (Platform.isIOS) {
-      // iOS 系统画中画激活（含「切后台自动小窗」的延迟启动场景）：
-      // 退后台瞬间 active 可能还是 false，Dart 已按普通后台挂了 30s 降级
-      // timer；等 PiP 真正 didStart 才置 true。这里监听它在 active 变 true
-      // 时立刻取消降级 timer，避免 30s 后 vid=no 掐掉小窗帧源。
-      IosPipService.active.addListener(_onIosPipActiveChanged);
     }
     if (initialDesktopSidePanelCollapsed ||
         DesktopStartupArgs.startupCollapseChat) {
@@ -1681,19 +1673,6 @@ class LiveRoomController extends PlayerController
   @override
   void onClose() async {
     _roomDisposed = true;
-    if (Platform.isIOS) {
-      IosPipService.active.removeListener(_onIosPipActiveChanged);
-    }
-    // iOS 画中画激活时离开直播间：先退出小窗，避免小窗还挂着而播放器
-    // 已销毁（帧源没了 → 小窗画面冻结）
-    if (Platform.isIOS && IosPipService.active.value) {
-      await IosPipService.stop();
-    }
-    if (Platform.isIOS) {
-      // 彻底释放 PiP 控制器与帧桥（standby 保活也停），防离开直播间后
-      // 帧桥常驻空转（每直播间实例 prepare 都会重建，进来再备）。
-      unawaited(IosPipService.dispose());
-    }
     _preloadPlayUrlsFuture = null;
     _preloadPlayHeaders = null;
     _preloadQuality = null;
@@ -2349,11 +2328,6 @@ class LiveRoomController extends PlayerController
   }
 
   Future<void> getPlayUrl() async {
-    // iOS 画中画激活时换流/重开播放：先退出小窗，避免旧帧桥与新播放会话
-    // 打架（否则换台后画面可能花屏/状态错乱）。
-    if (Platform.isIOS && IosPipService.active.value) {
-      await IosPipService.stop();
-    }
     final loadGeneration = _loadGeneration;
     playUrls.clear();
     currentLineInfo.value = "";
@@ -3982,13 +3956,6 @@ ${errorStackTrace ?? ""}''');
     isBackground = true;
     _backgroundedAt = DateTime.now();
     _positionBeforeBackground = _lastKnownPlayerPosition;
-    if (Platform.isIOS && IosPipService.active.value) {
-      // iOS 系统画中画激活：画面已由系统小窗接管，且小窗持续需要视频帧。
-      // 退后台**不能**暂停、也不能走 30s 停画面降级（降级 vid=no 会让小窗
-      // 失去帧源 → 冻结/黑屏）。这里只挂起后台定时器。
-      _suspendBackgroundTimers();
-      return;
-    }
     if (!_allowBackgroundPlayback) {
       unawaited(
         AppSettingsController.instance.saveLastLiveRoom(
@@ -4016,17 +3983,6 @@ ${errorStackTrace ?? ""}''');
   void _exitBackgroundState(String reason) {
     Log.d("返回前台:$reason");
     isBackground = false;
-    if (Platform.isIOS && IosPipService.active.value) {
-      // 画中画激活期间回前台：没有做暂停/降级，无需恢复画面或重开流，
-      // 只恢复后台定时器（画面本就在系统小窗，主界面是占位）。
-      _resumeBackgroundTimers();
-      unawaited(
-        AppSettingsController.instance.setLastLiveRoomResumePending(false),
-      );
-      _backgroundedAt = null;
-      _positionBeforeBackground = null;
-      return;
-    }
     _resumeBackgroundTimers();
     unawaited(
       AppSettingsController.instance.setLastLiveRoomResumePending(false),
@@ -4096,18 +4052,6 @@ ${errorStackTrace ?? ""}''');
 
   /// 退到后台超过阈值后自动停掉视频轨（只留声音，省电）。
   ///
-  /// 全平台统一走同一套逻辑（与手机 / iOS 保持一致）：退后台满 30 秒停掉
-  /// iOS 系统画中画激活监听：PiP 一接管画面立刻取消「后台 30s 停画面」降级，
-  /// 否则 timer 到点 vid=no 会把小窗的帧源掐掉（自动小窗场景下 PiP 是在
-  /// 退后台之后才 didStart，进入后台时 active 还是 false，必须靠监听补刀）。
-  void _onIosPipActiveChanged() {
-    if (!IosPipService.active.value) {
-      return;
-    }
-    _backgroundDowngradeTimer?.cancel();
-    Log.d("PiP 激活，取消后台自动降级 timer（小窗持续要帧）");
-  }
-
   /// 视频轨，返回前台时由 _handleForegroundRestore →
   /// _restoreFromBackgroundAudioOnly 自动恢复画面，无需用户干预。
   ///
@@ -4121,13 +4065,6 @@ ${errorStackTrace ?? ""}''');
     }
     _backgroundDowngradeTimer = Timer(const Duration(seconds: 30), () async {
       if (!isBackground || _backgroundAudioOnly) {
-        return;
-      }
-      // iOS 系统画中画接管中：无论定时器是什么时候挂上的（自动小窗是切后台
-      // 之后才 didStart，取消监听可能存在竞态），到点这一刻再查一次——
-      // PiP 激活时绝不能停视频轨，否则小窗只剩声音、画面冻在最后一帧。
-      if (Platform.isIOS && IosPipService.active.value) {
-        Log.d("降级到点，但 iOS 画中画激活中，跳过停轨");
         return;
       }
       _backgroundAudioOnly = true;

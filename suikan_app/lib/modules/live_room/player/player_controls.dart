@@ -14,7 +14,6 @@ import 'package:simple_live_app/app/utils.dart';
 import 'package:simple_live_app/modules/live_room/live_room_controller.dart';
 import 'package:simple_live_app/modules/live_room/widgets/ios_render_cap_selector.dart';
 import 'package:simple_live_app/modules/live_room/vod/vod_episode_panel.dart';
-import 'package:simple_live_app/services/ios_pip_service.dart';
 import 'package:simple_live_app/widgets/superchat_card.dart';
 import 'package:simple_live_core/simple_live_core.dart';
 import 'package:window_manager/window_manager.dart';
@@ -326,14 +325,15 @@ Widget _buildFullTopBar(
                 size: 24,
               ),
             ),
-            IconButton(
-              onPressed: controller.enablePIP,
-              icon: const Icon(
-                Icons.picture_in_picture,
-                color: Colors.white,
-                size: 24,
+            if (Platform.isAndroid)
+              IconButton(
+                onPressed: controller.enablePIP,
+                icon: const Icon(
+                  Icons.picture_in_picture,
+                  color: Colors.white,
+                  size: 24,
+                ),
               ),
-            ),
             IconButton(
               onPressed: () => showPlayerSettings(controller),
               icon: const Icon(
@@ -745,83 +745,73 @@ Widget buildDanmuView(VideoState videoState, LiveRoomController controller) {
     child: Obx(
       () {
         controller.danmakuViewVersion.value;
-        // iOS 画中画激活：画面已进系统小窗，主界面弹幕一并收掉
-        // （省 GPU，也避免弹幕在小窗占位层上继续飘/掉帧）。
-        // 用 ValueListenableBuilder 监听 IosPipService.active（Flutter ValueNotifier），
-        // 不能塞进 Obx 里——Obx 只跟踪 GetX 的 Rx，混用会触发
-        // GetX "improper use of a GetX has been detected" 报错覆盖整个播放器。
-        return ValueListenableBuilder<bool>(
-          valueListenable: IosPipService.active,
-          builder: (context, isPipActive, _) {
-            return Offstage(
-              offstage: !controller.showDanmakuState.value || isPipActive,
-              child: Padding(
-                padding: controller.fullScreenState.value
-                    ? EdgeInsets.only(
-                        top: AppSettingsController.instance.danmuTopMargin.value,
-                        bottom: AppSettingsController.instance.danmuBottomMargin.value,
-                      )
-                    : EdgeInsets.zero,
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    final viewportHeight = constraints.maxHeight > 0
-                        ? constraints.maxHeight
-                        : MediaQuery.sizeOf(context).height;
-                    controller.updateDanmakuViewportHeight(viewportHeight);
-                    final settings = AppSettingsController.instance;
-                    final resolvedLineCount = settings.resolveDanmuTargetLineCount(
+        return Offstage(
+          offstage: !controller.showDanmakuState.value,
+          child: Padding(
+            padding: controller.fullScreenState.value
+                ? EdgeInsets.only(
+                    top: AppSettingsController.instance.danmuTopMargin.value,
+                    bottom: AppSettingsController.instance.danmuBottomMargin.value,
+                  )
+                : EdgeInsets.zero,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final viewportHeight = constraints.maxHeight > 0
+                    ? constraints.maxHeight
+                    : MediaQuery.sizeOf(context).height;
+                controller.updateDanmakuViewportHeight(viewportHeight);
+                final settings = AppSettingsController.instance;
+                final resolvedLineCount = settings.resolveDanmuTargetLineCount(
+                  viewportHeight: viewportHeight,
+                  area: settings.danmuArea.value,
+                  fontSize: settings.danmuSize.value,
+                  lineCount: settings.danmuLineCount.value,
+                );
+                final hideDanmu = resolvedLineCount <= 0;
+                return DanmakuScreen(
+                  key: controller.globalDanmuKey,
+                  createdController: controller.initDanmakuController,
+                  option: DanmakuOption(
+                    fontSize: settings.danmuSize.value,
+                    fontFamily: Platform.isWindows ? "Microsoft YaHei" : null,
+                    area: settings.resolveDanmuEffectiveArea(
                       viewportHeight: viewportHeight,
                       area: settings.danmuArea.value,
                       fontSize: settings.danmuSize.value,
                       lineCount: settings.danmuLineCount.value,
-                    );
-                    final hideDanmu = resolvedLineCount <= 0;
-                    return DanmakuScreen(
-                      key: controller.globalDanmuKey,
-                      createdController: controller.initDanmakuController,
-                      option: DanmakuOption(
-                        fontSize: settings.danmuSize.value,
-                        fontFamily: Platform.isWindows ? "Microsoft YaHei" : null,
-                        area: settings.resolveDanmuEffectiveArea(
-                          viewportHeight: viewportHeight,
-                          area: settings.danmuArea.value,
-                          fontSize: settings.danmuSize.value,
-                          lineCount: settings.danmuLineCount.value,
-                        ),
-                        lineHeight: settings.resolveDanmuLineHeight(
-                          viewportHeight: viewportHeight,
-                          area: settings.danmuArea.value,
-                          fontSize: settings.danmuSize.value,
-                          lineCount: settings.danmuLineCount.value,
-                        ),
-                        duration: settings.danmuSpeed.value.toInt(),
-                        opacity: settings.danmuOpacity.value,
-                        fontWeight: settings.danmuFontWeight.value,
-                        // iPad 弹幕降帧：ProMotion 机型（iPad Pro）上 Flutter 界面
-                        // 会跑 120Hz，而弹幕是整块全屏 CustomPaint、每帧重绘，
-                        // 按 120fps 走等于白烧一倍填充率。这里限定 60fps；滚动
-                        // 位置仍由库内 _tick 按时间推进，速度不受影响。
-                        //
-                        // 只在 iOS 传值：安卓上 Timer 降帧实测抖动 10~50ms、反而
-                        // 更卡（2.2.0 已因此回退过一次），iOS 的定时器精度足够，
-                        // 且 60fps 本就是目标帧率，不损失观感。
-                        frameRate: Platform.isIOS ? 60.0 : null,
-                        // 拍板项 A：把「描边宽度」设置项接到 showStroke。
-                        // 描边宽度 0 = 关闭描边（每条弹幕少一个 strokeParagraph + 每帧
-                        // 少画一遍，CPU 绘制量直接减半）；>0 保持描边（宽度仍由
-                        // canvas_danmaku 库内 generateStrokeParagraph 硬编码 2）。
-                        showStroke: settings.danmuStrokeWidth.value > 0,
-                        hideTop: hideDanmu,
-                        hideBottom: hideDanmu,
-                        hideScroll: hideDanmu,
-                        hideSpecial: hideDanmu,
-                      ),
-                    );
-                  },
-                ),
-              ),
-            );
-          },
+                    ),
+                    lineHeight: settings.resolveDanmuLineHeight(
+                      viewportHeight: viewportHeight,
+                      area: settings.danmuArea.value,
+                      fontSize: settings.danmuSize.value,
+                      lineCount: settings.danmuLineCount.value,
+                    ),
+                    duration: settings.danmuSpeed.value.toInt(),
+                    opacity: settings.danmuOpacity.value,
+                    fontWeight: settings.danmuFontWeight.value,
+                    // iPad 弹幕降帧：ProMotion 机型（iPad Pro）上 Flutter 界面
+                    // 会跑 120Hz，而弹幕是整块全屏 CustomPaint、每帧重绘，
+                    // 按 120fps 走等于白烧一倍填充率。这里限定 60fps；滚动
+                    // 位置仍由库内 _tick 按时间推进，速度不受影响。
+                    //
+                    // 只在 iOS 传值：安卓上 Timer 降帧实测抖动 10~50ms、反而
+                    // 更卡（2.2.0 已因此回退过一次），iOS 的定时器精度足够，
+                    // 且 60fps 本就是目标帧率，不损失观感。
+                    frameRate: Platform.isIOS ? 60.0 : null,
+                    // 拍板项 A：把「描边宽度」设置项接到 showStroke。
+                    // 描边宽度 0 = 关闭描边（每条弹幕少一个 strokeParagraph + 每帧
+                    // 少画一遍，CPU 绘制量直接减半）；>0 保持描边（宽度仍由
+                    // canvas_danmaku 库内 generateStrokeParagraph 硬编码 2）。
+                    showStroke: settings.danmuStrokeWidth.value > 0,
+                    hideTop: hideDanmu,
+                    hideBottom: hideDanmu,
+                    hideScroll: hideDanmu,
+                    hideSpecial: hideDanmu,
+                  ),
+                );
+              },
+            ),
+          ),
         );
       },
     ),
