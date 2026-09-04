@@ -48,6 +48,34 @@ import 'package:window_manager/window_manager.dart';
 import 'package:path/path.dart' as p;
 import 'package:dynamic_color/dynamic_color.dart';
 
+/// 强制崩溃日志(2026-09-04)：不依赖「写日志文件」设置(默认关)，
+/// 任何 Dart 层异常都落一份现场，便于定位偶发闪退。
+/// 安卓优先写 /sdcard/Download(免权限且 adb 可读)，桌面写应用数据目录。
+Future<void> _writeCrashLog(String tag, Object error, StackTrace? stack) async {
+  try {
+    final lines = StringBuffer()
+      ..writeln('[$tag] ${DateTime.now()}')
+      ..writeln('$error');
+    if (stack != null) {
+      lines.writeln('$stack');
+    }
+    if (Platform.isAndroid) {
+      final f = File('/sdcard/Download/suikan_crash.log');
+      if (!f.parent.existsSync()) f.parent.createSync(recursive: true);
+      f.writeAsStringSync(lines.toString(), mode: FileMode.append);
+    } else {
+      try {
+        final dir = await getApplicationSupportDirectory();
+        final f = File('${dir.path}/suikan_crash.log');
+        if (!f.parent.existsSync()) f.parent.createSync(recursive: true);
+        f.writeAsStringSync(lines.toString(), mode: FileMode.append);
+      } catch (_) {}
+    }
+  } catch (_) {
+    // 崩溃日志写不写得出都不影响主流程
+  }
+}
+
 void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
   // 图片缓存上限必须在 runApp 之前设好，否则第一屏已经用默认值解码过了
@@ -81,6 +109,7 @@ void main(List<String> args) async {
   // 全局异常兜底：release 模式下未捕获的 widget 异常默认渲染为空白页，
   // 这里改为显示可读错误，避免“只有空白页面”且无从排查。
   FlutterError.onError = (details) {
+    _writeCrashLog('FlutterError', details.exception, details.stack);
     Log.e('FlutterError: ${details.exception}', details.stack ?? StackTrace.current);
   };
   ErrorWidget.builder = (details) {
@@ -98,6 +127,15 @@ void main(List<String> args) async {
       ),
     );
   };
+  // 🔴 引擎级/异步未捕获异常兜底（2026-09-04）：
+  // release 下任何 zone 外的 async 错误（网络回调 / Timer / Stream / FFI 回调）
+  // 默认都会让 Dart isolate 崩溃 → app 直接闪退退出（“偶发闪退、重开就好”的
+  // 典型成因）。这里返回 true 吞掉并记录，把“闪退”降级为“只掉一次日志”。
+  PlatformDispatcher.instance.onError = (Object error, StackTrace stack) {
+    _writeCrashLog('uncaught', error, stack);
+    Log.e('[uncaught] $error', stack);
+    return true;
+  };
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
   //设置状态栏为透明
   SystemUiOverlayStyle systemUiOverlayStyle = const SystemUiOverlayStyle(
@@ -106,8 +144,15 @@ void main(List<String> args) async {
     systemNavigationBarColor: Colors.transparent,
   );
   SystemChrome.setSystemUIOverlayStyle(systemUiOverlayStyle);
-  runApp(const MyApp());
-  unawaited(setupDesktopWindowLifecycle());
+  runZonedGuarded<Future<void>>(() async {
+    runApp(const MyApp());
+    unawaited(setupDesktopWindowLifecycle());
+  }, (Object error, StackTrace stack) {
+    // zone 内任何未捕获异步错误(网络回调/Timer/Stream/GetX)都到这里，
+    // 记录现场并吞掉，避免 isolate 崩溃导致 app 闪退退出。
+    _writeCrashLog('zone', error, stack);
+    Log.e('[zone error] $error', stack);
+  });
 }
 
 Future<String?> resolveHivePath(List<String> args) async {
