@@ -139,16 +139,48 @@ class _FnOsBrowsePageState extends State<FnOsBrowsePage> {
   Future<void> _openSeries(FnOsTvSeries series) async {
     // 电视剧：解析第一季第一集后直接进播放页；剧集 guid 传给播放页拉季/集列表。
     final site = FnOsService.instance.siteForServer(widget.server.id);
-    if (site == null) return;
+    if (site == null) {
+      // 此前静默 return，用户点了完全没反应（看着像"进不去播放页"）。
+      SmartDialog.showToast("未找到该影视站点，请在设置里重新添加");
+      return;
+    }
     try {
-      final detail =
-          await FnOsService.instance.fetchTvSeriesDetail(widget.server, series);
-      if (detail.seasons.isEmpty) {
+      // ⚠️ 关键：必须用官方 season/list 接口取季。
+      // item/list 的 Season parent_guid 关系实测大量失配（见 FnOsService 注释），
+      // 之前直接用 series.seasons（parent_guid 匹配结果）→ 大批量剧集为空季
+      // → 弹"该剧暂无剧集"进不去播放页。
+      var seasons = <FnOsSeason>[];
+      try {
+        seasons =
+            await FnOsService.instance.getSeasons(widget.server, series.guid);
+      } catch (_) {
+        // 接口失败走下面的兜底
+      }
+      // 兜底 1：列表构建时按 parent_guid 匹配到的季
+      if (seasons.isEmpty) {
+        seasons = series.seasons;
+      }
+      // 兜底 2：该条目本身就是"季"（部分库没有剧层级，顶层即 Season）
+      if (seasons.isEmpty) {
+        final directEps = await FnOsService.instance
+            .getEpisodes(widget.server, series.guid);
+        if (directEps.isNotEmpty) {
+          AppNavigator.toLiveRoomDetail(
+            site: site,
+            roomId: directEps.first.guid,
+            isVod: true,
+            vodSeriesGuid: series.guid,
+          );
+          return;
+        }
         SmartDialog.showToast("该剧暂无剧集");
         return;
       }
-      final eps = await FnOsService.instance
-          .getEpisodes(widget.server, detail.seasons.first.guid);
+      var eps = seasons.first.episodes;
+      if (eps.isEmpty) {
+        eps = await FnOsService.instance
+            .getEpisodes(widget.server, seasons.first.guid);
+      }
       if (eps.isEmpty) {
         SmartDialog.showToast("该剧暂无剧集");
         return;

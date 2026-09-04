@@ -523,7 +523,13 @@ class FnOsService extends GetxService {
   /// 优先按 TV → Season → Episode 的 parent_guid 关系组装；
   /// 若某部电视剧没有显式 Season 节点（实测部分库会出现），则按 tv_title 匹配 + season_number 合成季。
   List<FnOsTvSeries> _buildSeries(List<Map<String, dynamic>> items) {
-    final seriesList = items.where((e) => (e['type'] ?? '') == 'TV').toList();
+    // 兼容不同飞牛版本：剧的顶层类型可能是 'TV'，也可能是 'Series'。
+    final seriesList = items
+        .where((e) {
+          final t = (e['type'] ?? '').toString();
+          return t == 'TV' || t == 'Series';
+        })
+        .toList();
     final result = <FnOsTvSeries>[];
     final allEpisodes = items.where((e) => (e['type'] ?? '') == 'Episode').toList();
     final allSeasons = items.where((e) => (e['type'] ?? '') == 'Season').toList();

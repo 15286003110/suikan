@@ -190,7 +190,17 @@ class FnOsCastMember {
 /// 通用字段解析工具。
 class FnOsFieldUtils {
   static String titleFromJson(Map<String, dynamic> j) {
-    for (final k in const ['title', 'tv_title', 'original_title', 'name', 'parent_title']) {
+    // 兜底顺序：title → 剧集标题 → 原名 → 名称 → 父级标题 → 祖先名。
+    // 末尾的 ancestor_name / season_name 用于部分库把剧名刮削成 "Season N" 时，
+    // 至少能退回有意义的名称而不是 type 名。
+    for (final k in const [
+      'title',
+      'tv_title',
+      'original_title',
+      'name',
+      'ancestor_name',
+      'parent_title',
+    ]) {
       final v = j[k];
       if (v is String && v.trim().isNotEmpty) return v.trim();
     }
