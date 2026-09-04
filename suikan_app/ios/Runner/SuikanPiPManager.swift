@@ -16,9 +16,9 @@ import UIKit
 ///     → AVPictureInPictureController.ContentSource
 ///     → 系统小窗
 ///
-/// 帧传递用 TextureFrameBridge 的闭包直调（不经过通知字典——CVPixelBuffer 是
-/// CoreFoundation 类型，不适合塞 userInfo）。只有 prepare() 之后（PiP 需要时）
-/// onFrame 才被注册，平时零开销。
+/// 性能红线：CMSampleBuffer 的创建必须**只在 PiP 激活期间**进行，否则每帧在主线程
+/// 做格式转换会把 UI 线程拖垮（iPad 实机已踩：点小窗没弹出来但帧桥还挂着 →
+/// 聊天栏/UI 动画整体跳帧）。
 class PipVideoView: UIView {
   override class var layerClass: AnyClass {
     AVSampleBufferDisplayLayer.self
@@ -38,12 +38,19 @@ class SuikanPiPManager: NSObject {
   var onPlayPause: ((Bool) -> Void)?
   /// PiP 启动/停止状态变化 → 回传给 Dart 更新 UI
   var onPipStateChanged: ((Bool) -> Void)?
+  /// PiP 相关错误/原因 → 回传给 Dart 弹提示（不再静默失败）
+  var onError: ((String) -> Void)?
 
   private var pipController: AVPictureInPictureController?
   private var pipView: PipVideoView?
   private var timebase: CMTimebase?
+  private var formatDescription: CMVideoFormatDescription?
   private var isPlaying = true
   private var lastEnqueueTime: CFTimeInterval = 0
+  /// 是否允许向渲染层投递帧（仅 PiP 启动中/激活中为 true）
+  private var receiveFrames = false
+  /// 启动 watchdog 是否已触发
+  private var startWatchdogTriggered = false
 
   private(set) var isPipActive = false
 
@@ -73,11 +80,7 @@ class SuikanPiPManager: NSObject {
   func prepare() {
     guard pipController == nil else { return }
     guard AVPictureInPictureController.isPictureInPictureSupported() else {
-      NSLog("[SuikanPiP] 设备不支持画中画")
-      return
-    }
-    guard let rootView = Self.keyRootView() else {
-      NSLog("[SuikanPiP] 取不到根视图")
+      onError?("当前设备不支持画中画")
       return
     }
 
@@ -102,7 +105,13 @@ class SuikanPiPManager: NSObject {
       timebase = tb
     }
 
-    rootView.insertSubview(view, at: 0)
+    // 能挂到根视图更好（PiP 转场/恢复有参考系）；挂不上也不影响 PiP 本体，
+    // 系统画中画只认 layer 内容。别再因为 rootView 为 nil 而静默失败。
+    if let rootView = Self.keyRootView() {
+      rootView.insertSubview(view, at: 0)
+    } else {
+      NSLog("[SuikanPiP] 取不到根视图，PiP 内容层不入视图树（不影响功能）")
+    }
     pipView = view
 
     let source = AVPictureInPictureController.ContentSource(
@@ -113,24 +122,37 @@ class SuikanPiPManager: NSObject {
     controller.delegate = self
     // 直播：只要播放/暂停，不要快进快退
     controller.requiresLinearPlayback = true
-    // 切后台时自动进入 PiP（若 App 切到后台且满足条件）
-    controller.canStartPictureInPictureAutomaticallyFromInline = true
     pipController = controller
-
-    // 注册帧桥：media_kit_video 每渲染完一帧就回调这里（闭包直调，
-    // 不经过通知字典——CVPixelBuffer 是 CF 类型不适合塞 userInfo）。
-    TextureFrameBridge.shared.onFrame = { [weak self] (pixelBuffer: CVPixelBuffer) in
-      self?.handleFrame(pixelBuffer)
-    }
   }
 
   func start() {
     prepare()
-    guard let controller = pipController else { return }
+    guard let controller = pipController else {
+      onError?("小窗未就绪")
+      return
+    }
     if controller.isPictureInPictureActive {
       return
     }
+    // 注册帧桥并开始预热帧（PiP 启动动画需要 layer 里有内容）
+    startWatchdogTriggered = false
+    receiveFrames = true
+    TextureFrameBridge.shared.onFrame = { [weak self] (pixelBuffer: CVPixelBuffer) in
+      self?.handleFrame(pixelBuffer)
+    }
     controller.startPictureInPicture()
+
+    // watchdog：2.5 秒内没真正激活 → 判定失败，收掉帧桥并回报原因。
+    // 否则帧桥会一直挂着，每帧在主线程转 CMSampleBuffer 拖垮 UI。
+    DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in
+      guard let self = self else { return }
+      guard !self.startWatchdogTriggered else { return }
+      self.startWatchdogTriggered = true
+      if !self.isPipActive {
+        self.dispose()
+        self.onError?("小窗未能启动，请稍后重试")
+      }
+    }
   }
 
   func stop() {
@@ -140,6 +162,8 @@ class SuikanPiPManager: NSObject {
   /// 释放 PiP 资源并让插件停止送帧。
   func dispose() {
     TextureFrameBridge.shared.onFrame = nil
+    receiveFrames = false
+    formatDescription = nil
     pipView?.removeFromSuperview()
     pipView = nil
     pipController = nil
@@ -150,7 +174,8 @@ class SuikanPiPManager: NSObject {
   // MARK: - 帧处理
 
   private func handleFrame(_ pixelBuffer: CVPixelBuffer) {
-    guard isPipActive || pipController != nil else { return }
+    // 性能红线：只有 PiP 启动中/激活中才收帧；否则直接在渲染线程丢弃。
+    guard receiveFrames else { return }
     guard let layer = pipView?.displayLayer else { return }
     // 背压：渲染层还没消化就丢帧，避免无限堆积
     guard layer.isReadyForMoreMediaData else { return }
@@ -165,13 +190,23 @@ class SuikanPiPManager: NSObject {
   }
 
   private func makeSampleBuffer(pixelBuffer: CVPixelBuffer) -> CMSampleBuffer? {
-    var formatDesc: CMVideoFormatDescription?
-    let status = CMVideoFormatDescriptionCreateForImageBuffer(
-      allocator: kCFAllocatorDefault,
-      imageBuffer: pixelBuffer,
-      formatDescriptionOut: &formatDesc
-    )
-    guard status == noErr, let format = formatDesc else { return nil }
+    // format description 与 pixelBuffer 尺寸/格式绑定，尺寸没变就复用，
+    // 避免每帧都创建（主线程开销大户）。
+    if let fd = formatDescription,
+       CMVideoFormatDescriptionGetDimensions(fd).width == CVPixelBufferGetWidth(pixelBuffer),
+       CMVideoFormatDescriptionGetDimensions(fd).height == CVPixelBufferGetHeight(pixelBuffer) {
+      // 复用已缓存的 format
+    } else {
+      var newFd: CMVideoFormatDescription?
+      let st = CMVideoFormatDescriptionCreateForImageBuffer(
+        allocator: kCFAllocatorDefault,
+        imageBuffer: pixelBuffer,
+        formatDescriptionOut: &newFd
+      )
+      guard st == noErr, let fd = newFd else { return nil }
+      formatDescription = fd
+    }
+    guard let fd = formatDescription else { return nil }
 
     var timing = CMSampleTimingInfo()
     timing.duration = CMTimeMake(value: 1, timescale: 600)
@@ -186,7 +221,7 @@ class SuikanPiPManager: NSObject {
     let createStatus = CMSampleBufferCreateReadyWithImageBuffer(
       allocator: kCFAllocatorDefault,
       imageBuffer: pixelBuffer,
-      formatDescription: format,
+      formatDescription: fd,
       sampleTiming: &timing,
       sampleBufferOut: &sampleBuffer
     )
@@ -250,10 +285,18 @@ extension SuikanPiPManager: AVPictureInPictureSampleBufferPlaybackDelegate {
 
 extension SuikanPiPManager: AVPictureInPictureControllerDelegate {
 
+  func pictureInPictureControllerWillStartPictureInPicture(
+    _ pictureInPictureController: AVPictureInPictureController
+  ) {
+    // 保持 receiveFrames = true（start() 已开启预热）
+  }
+
   func pictureInPictureControllerDidStartPictureInPicture(
     _ pictureInPictureController: AVPictureInPictureController
   ) {
     isPipActive = true
+    startWatchdogTriggered = true
+    receiveFrames = true
     onPipStateChanged?(true)
   }
 
@@ -270,7 +313,10 @@ extension SuikanPiPManager: AVPictureInPictureControllerDelegate {
     failedToStartPictureInPictureWithError error: Error
   ) {
     NSLog("[SuikanPiP] 启动画中画失败: \(error)")
+    startWatchdogTriggered = true
+    let detail = (error as NSError).localizedDescription
     dispose()
+    onError?("小窗启动失败：\(detail)")
   }
 
   func pictureInPictureController(

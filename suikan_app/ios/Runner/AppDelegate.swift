@@ -57,6 +57,10 @@ import UserNotifications
       SuikanPiPManager.shared.onPipStateChanged = { active in
         pipChannel.invokeMethod("onPipState", arguments: active)
       }
+      // PiP 启动失败/设备不支持等原因 → 弹提示（不再静默）
+      SuikanPiPManager.shared.onError = { message in
+        pipChannel.invokeMethod("onError", arguments: message)
+      }
     }
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }

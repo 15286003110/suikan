@@ -2321,6 +2321,10 @@ class PlayerController extends BaseController
           unawaited(player.pause());
         }
       };
+      // PiP 启动失败/设备不支持等原因 → 弹提示，避免"点了没反应"
+      IosPipService.onError = (message) {
+        SmartDialog.showToast(message);
+      };
       _iosOriginalQualityPowerSavingWorker = ever<bool>(
         AppSettingsController.instance.iosOriginalQualityPowerSaving,
         (_) => refreshIosVideoOutputLimit(),
