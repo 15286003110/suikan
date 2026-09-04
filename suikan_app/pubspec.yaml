@@ -1,5 +1,5 @@
 name: simple_live_app
-version: 2.2.3+20057
+version: 2.2.3+20058
 publish_to: none
 description: "随看 App"
 environment:
@@ -99,8 +99,11 @@ dependency_overrides:
   path_provider_android: 2.2.15
   # media_kit 1.2.6 在 Android 17(小米 17)上 MediaKit.ensureInitialized()
   # 永久卡死(不崩溃、不返回)→ 白屏。取证日志证明 main() 停在该调用前。
-  # 钉回 1.2.0。上游修复后移除。
-  media_kit: 1.2.0
+  # 钉回 1.2.0 并 vendor 到 ../vendor/media_kit,回移植上游 1.2.6 的
+  # dispose 修复(close NativeCallable 前 mpv_set_wakeup_callback 置空,
+  # 防 Flutter 3.38+ mpv 线程调用已删 FFI 回调 → SIGABRT / 引擎纹理崩)。
+  media_kit:
+    path: ../vendor/media_kit
 
 flutter_launcher_icons:
   android: true
