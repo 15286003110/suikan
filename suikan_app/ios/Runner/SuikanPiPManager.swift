@@ -49,6 +49,10 @@ class SuikanPiPManager: NSObject {
   private var lastEnqueueTime: CFTimeInterval = 0
   /// 是否允许向渲染层投递帧（仅 PiP 启动中/激活中为 true）
   private var receiveFrames = false
+  /// 等待预热帧后真正触发 startPictureInPicture
+  private var pendingStart = false
+  /// 已成功入队的帧数（PiP 启动时 layer 必须有内容，否则系统不弹）
+  private var enqueuedFrames = 0
   /// 启动 watchdog 是否已触发
   private var startWatchdogTriggered = false
 
@@ -134,17 +138,19 @@ class SuikanPiPManager: NSObject {
     if controller.isPictureInPictureActive {
       return
     }
-    // 注册帧桥并开始预热帧（PiP 启动动画需要 layer 里有内容）
+    // 先注册帧桥预热几帧，再真正 startPictureInPicture —— 系统要求 PiP
+    // 启动那一刻渲染层里已经有内容（iPad 实机：直接 start 但 layer 空 → 不弹）。
     startWatchdogTriggered = false
+    pendingStart = true
+    enqueuedFrames = 0
     receiveFrames = true
     TextureFrameBridge.shared.onFrame = { [weak self] (pixelBuffer: CVPixelBuffer) in
       self?.handleFrame(pixelBuffer)
     }
-    controller.startPictureInPicture()
 
-    // watchdog：2.5 秒内没真正激活 → 判定失败，收掉帧桥并回报原因。
+    // watchdog：4 秒内没真正激活 → 判定失败，收掉帧桥并回报原因。
     // 否则帧桥会一直挂着，每帧在主线程转 CMSampleBuffer 拖垮 UI。
-    DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in
+    DispatchQueue.main.asyncAfter(deadline: .now() + 4.0) { [weak self] in
       guard let self = self else { return }
       guard !self.startWatchdogTriggered else { return }
       self.startWatchdogTriggered = true
@@ -152,6 +158,35 @@ class SuikanPiPManager: NSObject {
         self.dispose()
         self.onError?("小窗未能启动，请稍后重试")
       }
+    }
+  }
+
+  /// 预热帧足够后（且 layer 已有内容）触发系统 PiP。
+  private func maybeStartPip() {
+    guard pendingStart else { return }
+    guard enqueuedFrames >= 2 else { return }
+    pendingStart = false
+    guard let controller = pipController else {
+      dispose()
+      return
+    }
+    // 让 layer 消化首帧再启动，避免 PiP 动画取不到画面
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+      guard let self = self else { return }
+      guard let controller = self.pipController else { return }
+      if controller.isPictureInPictureActive {
+        return
+      }
+      // 触发前再确保一次音频会话（mpv 播放过程中可能改过 category，
+      // PiP 要求 playback 且 active，否则 isPictureInPicturePossible 为 false）
+      self.configureAudioSession()
+      if !controller.isPictureInPicturePossible {
+        self.startWatchdogTriggered = true
+        self.dispose()
+        self.onError?("系统暂不允许小窗（请确认正在播放且有声音）")
+        return
+      }
+      controller.startPictureInPicture()
     }
   }
 
@@ -163,6 +198,8 @@ class SuikanPiPManager: NSObject {
   func dispose() {
     TextureFrameBridge.shared.onFrame = nil
     receiveFrames = false
+    pendingStart = false
+    enqueuedFrames = 0
     formatDescription = nil
     pipView?.removeFromSuperview()
     pipView = nil
@@ -187,6 +224,8 @@ class SuikanPiPManager: NSObject {
     lastEnqueueTime = now
     guard let sampleBuffer = makeSampleBuffer(pixelBuffer: pixelBuffer) else { return }
     layer.enqueue(sampleBuffer)
+    enqueuedFrames += 1
+    maybeStartPip()
   }
 
   private func makeSampleBuffer(pixelBuffer: CVPixelBuffer) -> CMSampleBuffer? {
