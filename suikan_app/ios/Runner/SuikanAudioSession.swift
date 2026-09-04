@@ -24,6 +24,11 @@ final class SuikanAudioSession: NSObject {
 
   private var isConfigured = false
 
+  /// 会话是否已激活（AVAudioSession **没有** isActive 属性，只有 setActive 类方法，
+  /// 直接写 session.isActive 会编译失败："Value of type 'AVAudioSession' has no
+  /// member 'isActive'"。是否激活只能由本类自己跟踪）。
+  private var activated = false
+
   private override init() {
     super.init()
     registerNotifications()
@@ -43,6 +48,7 @@ final class SuikanAudioSession: NSObject {
     configure()
     do {
       try AVAudioSession.sharedInstance().setActive(true)
+      activated = true
     } catch {
       NSLog("[SuikanAudio] setActive 失败: \(error)")
     }
@@ -53,6 +59,7 @@ final class SuikanAudioSession: NSObject {
     applyCategory()
     do {
       try AVAudioSession.sharedInstance().setActive(true)
+      activated = true
     } catch {
       NSLog("[SuikanAudio] 退后台前激活失败: \(error)")
     }
@@ -63,6 +70,7 @@ final class SuikanAudioSession: NSObject {
     do {
       try AVAudioSession.sharedInstance().setActive(
         false, options: .notifyOthersOnDeactivation)
+      activated = false
     } catch {
       NSLog("[SuikanAudio] 释放会话失败: \(error)")
     }
@@ -126,24 +134,31 @@ final class SuikanAudioSession: NSObject {
       applyCategory()
       do {
         try AVAudioSession.sharedInstance().setActive(true)
+        activated = true
       } catch {
         NSLog("[SuikanAudio] 中断后恢复会话失败: \(error)")
       }
       NSLog("[SuikanAudio] 中断结束，恢复播放=\(shouldResume)")
       onInterruptionEndedShouldResume?(shouldResume)
-    @unknown default:
+    default:
+      // 注意：AVAudioSession.InterruptionType 在 Swift 里是 **struct**（不是 enum），
+      // 写 @unknown default 会编译失败（'@unknown' 只支持 non-frozen enum），
+      // 因此这里只能用普通 default。
       break
     }
   }
 
   @objc private func handleRouteChange(_ note: Notification) {
-    // 拔耳机 / 切蓝牙后确保会话仍激活（是否暂停由产品策略决定，这里只保会话）
-    if AVAudioSession.sharedInstance().isOtherAudioPlaying {
-      return
-    }
-    if !AVAudioSession.sharedInstance().isActive {
-      applyCategory()
-      try? AVAudioSession.sharedInstance().setActive(true)
+    // 拔耳机 / 切蓝牙后确保会话仍激活（是否暂停由产品策略决定，这里只保会话）。
+    // 只在"我们自己激活过"时才补激活，避免在没播放时去抢音频。
+    // 注：不能用 session.isActive（该成员不存在，云端编译会失败），
+    // 也不能用 isOtherAudioPlaying（已 deprecated）。
+    guard activated else { return }
+    applyCategory()
+    do {
+      try AVAudioSession.sharedInstance().setActive(true)
+    } catch {
+      NSLog("[SuikanAudio] 路由变化后激活失败: \(error)")
     }
   }
 
