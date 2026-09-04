@@ -743,8 +743,12 @@ class LiveRoomPage extends GetView<LiveRoomController> {
         ),
         // iOS 系统画中画激活时：画面已收进系统小窗，主界面盖住避免双画面
         // （mpv 继续播，小窗画面由原生帧桥提供；退出 PiP 自动恢复主画面）。
-        Obx(
-          () => IosPipService.active.value
+        // 用 ValueListenableBuilder 而非 GetX Obx 监听 IosPipService.active
+        // （它是 Flutter 的 ValueNotifier，不是 GetX 的 Rx/Obx 跟踪不到，
+        // 会触发 GetX "improper use" 报错覆盖整个播放器画面）。
+        ValueListenableBuilder<bool>(
+          valueListenable: IosPipService.active,
+          builder: (context, isPipActive, _) => isPipActive
               ? Positioned.fill(
                   child: GestureDetector(
                     behavior: HitTestBehavior.opaque,
