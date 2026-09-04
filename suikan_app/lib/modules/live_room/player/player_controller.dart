@@ -2328,6 +2328,10 @@ class PlayerController extends BaseController
       IosPipService.onError = (message) {
         SmartDialog.showToast(message);
       };
+      // 播放即备好系统小窗控制器（只 prepare 不启动）：让「播放中切后台
+      // 自动弹小窗」(canStartPictureInPictureAutomaticallyFromInline)在系统
+      // 需要的那一刻立刻可用，用户不用先手动点一次小窗。
+      unawaited(IosPipService.prepare());
       _iosOriginalQualityPowerSavingWorker = ever<bool>(
         AppSettingsController.instance.iosOriginalQualityPowerSaving,
         (_) => refreshIosVideoOutputLimit(),

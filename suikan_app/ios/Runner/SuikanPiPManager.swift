@@ -63,6 +63,24 @@ class SuikanPiPManager: NSObject {
 
   private override init() {
     super.init()
+    // iOS 画中画期间 App 退后台的保活：系统是否挂起进程取决于音频会话是否
+    // 处于 playback+active。PiP 启动后若会话被其它源改掉/失活，后台会断帧
+    // → 小窗停播。每次退后台前重新确认一次会话。
+    NotificationCenter.default.addObserver(
+      forName: UIApplication.didEnterBackgroundNotification,
+      object: nil,
+      queue: .main
+    ) { [weak self] _ in
+      // 仅 PiP 已激活/正在启动时才需要保活；未开 PiP 时不动会话
+      // （避免与纯音频/普通后台逻辑抢会话）。
+      guard let self = self else { return }
+      guard self.pipController != nil else { return }
+      self.configureAudioSession()
+    }
+  }
+
+  deinit {
+    NotificationCenter.default.removeObserver(self)
   }
 
   var isSupported: Bool {
@@ -122,6 +140,13 @@ class SuikanPiPManager: NSObject {
     controller.delegate = self
     // 直播：只要播放/暂停，不要快进快退
     controller.requiresLinearPlayback = true
+    // 播放中把 App 切到后台/其它 App → **自动**弹出系统小窗继续播
+    // （B站/优酷同款体验：不用先手动点小窗，切走即画中画）。
+    // iOS 14+/sampleBuffer ContentSource 均支持；首次使用时系统会弹
+    // 「允许后台播放画中画吗」类引导，之后记住用户偏好。
+    if #available(iOS 14.2, *) {
+      controller.canStartPictureInPictureAutomaticallyFromInline = true
+    }
     pipController = controller
   }
 
