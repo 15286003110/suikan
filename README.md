@@ -38,8 +38,8 @@ https://github.com/mobingchong/suikan/releases
 ## 仓库说明
 
 * 【停更】[原作者仓库 xiaoyaocz/dart\_simple\_live](https://github.com/xiaoyaocz/dart_simple_live)
-* 【在更】https://github.com/June6699/dart\_simple\_live
-* 【TDV】https://github.com/chen-zeong/dtv\_mobile
+* 【在更】[https://github.com/June6699/dart\_simple\_live](https://github.com/June6699/dart_simple_live)
+* 【TDV】[https://github.com/chen-zeong/dtv\_mobile](https://github.com/chen-zeong/dtv_mobile)
 
 ## 支持平台
 
