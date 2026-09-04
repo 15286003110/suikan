@@ -192,6 +192,62 @@ class LiveRoomController extends PlayerController
     return null;
   }
 
+  /// 查找上一集：同季内上一集，跨季继续；无则 null。
+  FnOsEpisode? _prevVodEpisode(String currentGuid) {
+    for (final season in vodSeasons) {
+      for (var i = 0; i < season.episodes.length; i++) {
+        if (season.episodes[i].guid == currentGuid) {
+          if (i - 1 >= 0) return season.episodes[i - 1];
+          final idx = vodSeasons.indexOf(season);
+          if (idx - 1 >= 0 && vodSeasons[idx - 1].episodes.isNotEmpty) {
+            return vodSeasons[idx - 1].episodes.last;
+          }
+          return null;
+        }
+      }
+    }
+    return null;
+  }
+
+  /// 系统媒体中心「下一首」：影视=下一集，直播=切下一线路（只有一条线路则无动作）。
+  @override
+  Future<void> onMediaNext() async {
+    if (isVod) {
+      final next = _nextVodEpisode(rxRoomId.value);
+      if (next != null) {
+        await playVodEpisode(next);
+      }
+    } else if (playUrls.length > 1) {
+      await changePlayLine((currentLineIndex + 1) % playUrls.length);
+    }
+  }
+
+  /// 系统媒体中心「上一首」：影视=上一集，直播=切上一线路。
+  @override
+  Future<void> onMediaPrev() async {
+    if (isVod) {
+      final prev = _prevVodEpisode(rxRoomId.value);
+      if (prev != null) {
+        await playVodEpisode(prev);
+      }
+    } else if (playUrls.length > 1) {
+      await changePlayLine(
+        (currentLineIndex - 1 + playUrls.length) % playUrls.length,
+      );
+    }
+  }
+
+  /// 系统媒体中心进度拖动：仅影视 seek；直播忽略。
+  @override
+  Future<void> onMediaSeek(Duration position) async {
+    if (!isVod) return;
+    await player.seek(position);
+  }
+
+  /// 仅影视在系统媒体中心显示实时进度。
+  @override
+  bool shouldSyncMediaProgress() => isVod;
+
   LiveRoomController({
     required this.pSite,
     required this.pRoomId,
@@ -2005,13 +2061,30 @@ class LiveRoomController extends PlayerController
       detail.value = loadedDetail;
       // 系统媒体中心（锁屏/控制中心/通知栏）显示当前房间信息：
       // 标题=直播间标题，副标题=主播名（点播则为平台名）。
+      // 直播：封面+可切台（线路数>1）；影视：时长/进度+可切集。
       if (Platform.isIOS || Platform.isAndroid) {
+        final curGuid = rxRoomId.value;
         unawaited(
           MediaControlService.update(
             title: loadedDetail.title.isEmpty ? "随看直播" : loadedDetail.title,
             artist: loadedDetail.userName,
             isLive: !isVod,
             playing: player.state.playing,
+            coverUrl: loadedDetail.cover.isEmpty
+                ? loadedDetail.userAvatar
+                : loadedDetail.cover,
+            duration: isVod
+                ? player.state.duration.inSeconds.toDouble()
+                : null,
+            position: isVod
+                ? player.state.position.inSeconds.toDouble()
+                : null,
+            canNext: isVod
+                ? _nextVodEpisode(curGuid) != null
+                : playUrls.length > 1,
+            canPrev: isVod
+                ? _prevVodEpisode(curGuid) != null
+                : playUrls.length > 1,
           ),
         );
       }

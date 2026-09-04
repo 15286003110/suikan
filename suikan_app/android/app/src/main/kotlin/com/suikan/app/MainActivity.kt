@@ -339,30 +339,66 @@ class MainActivity : FlutterActivity() {
     // MARK: - 系统媒体控制（通知栏播放/暂停，零新增依赖）
 
     private fun setupMediaControl(flutterEngine: FlutterEngine) {
+        SuikanMediaSession.ensure(this)
         val channel = MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             MEDIA_CHANNEL,
         )
         channel.setMethodCallHandler { call, result ->
             when (call.method) {
+                "update" -> {
+                    SuikanMediaSession.update(
+                        title = call.argument<String>("title") ?: "随看",
+                        artist = call.argument<String>("artist") ?: "",
+                        isLive = call.argument<Boolean>("isLive") ?: true,
+                        coverUrl = call.argument<String>("coverUrl"),
+                        durationSec = call.argument<Double>("duration"),
+                        positionSec = call.argument<Double>("position"),
+                        canNext = call.argument<Boolean>("canNext") ?: false,
+                        canPrev = call.argument<Boolean>("canPrev") ?: false,
+                    )
+                    result.success(null)
+                }
                 "setPlaying" -> {
                     val playing = call.argument<Boolean>("playing") ?: false
                     val changed = playing != SuikanMediaActions.isPlaying()
                     SuikanMediaActions.setPlaying(playing)
-                    // 状态变化时重建通知，切换"播放/暂停"按钮
+                    SuikanMediaSession.setPlaying(
+                        playing,
+                        call.argument<Double>("position"),
+                    )
+                    // 状态变化时重建通知（MediaSession 会自动更新，这里兜底刷新）
                     if (changed) {
                         val intent = Intent(this, BackgroundPlaybackService::class.java)
                         startService(intent)
                     }
                     result.success(null)
                 }
+                "setPosition" -> {
+                    SuikanMediaSession.setPosition(
+                        call.argument<Double>("position") ?: 0.0,
+                    )
+                    result.success(null)
+                }
+                "clear" -> {
+                    SuikanMediaSession.clear()
+                    result.success(null)
+                }
                 else -> result.notImplemented()
             }
         }
-        // 通知/按钮命令 → Dart
+        // 通知/按钮/线控命令 → Dart
         SuikanMediaActions.commandSink = { command ->
             runOnUiThread {
                 channel.invokeMethod("onCommand", command)
+            }
+        }
+        SuikanMediaActions.seekSink = { positionSec ->
+            runOnUiThread {
+                channel.invokeMethod(
+                    "onCommand",
+                    mapOf("command" to "seek", "position" to positionSec),
+                )
             }
         }
     }

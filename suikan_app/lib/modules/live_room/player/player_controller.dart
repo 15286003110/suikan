@@ -2318,16 +2318,69 @@ class PlayerController extends BaseController
     }
   }
 
+  /// 系统媒体中心「下一首」命令（直播=切下一线路，影视=下一集）。
+  /// 具体行为由子类 LiveRoomController override 实现。
+  Future<void> onMediaNext() async {}
+
+  /// 系统媒体中心「上一首」命令（直播=切上一线路，影视=上一集）。
+  Future<void> onMediaPrev() async {}
+
+  /// 系统媒体中心进度拖动命令（仅影视；直播忽略）。
+  Future<void> onMediaSeek(Duration position) async {}
+
+  /// 是否需要在系统媒体中心显示实时进度（仅影视返回 true）。
+  bool shouldSyncMediaProgress() => false;
+
+  /// 影视播放中周期同步进度到系统媒体中心（锁屏/通知栏进度条走动）。
+  Timer? _mediaProgressTimer;
+
+  void _startMediaProgressSync() {
+    if (_mediaProgressTimer != null || !shouldSyncMediaProgress()) {
+      return;
+    }
+    _mediaProgressTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (!player.state.playing) {
+        return;
+      }
+      unawaited(
+        MediaControlService.setPosition(
+          player.state.position.inSeconds.toDouble(),
+        ),
+      );
+    });
+  }
+
+  void _stopMediaProgressSync() {
+    _mediaProgressTimer?.cancel();
+    _mediaProgressTimer = null;
+  }
+
   void initStream() {
     if (Platform.isIOS || Platform.isAndroid) {
       MediaControlService.init();
-      MediaControlService.onCommand = (command) {
-        switch (command) {
+      MediaControlService.onCommand = (cmd) {
+        switch (cmd.command) {
           case 'play':
             unawaited(player.play());
             break;
           case 'pause':
             unawaited(player.pause());
+            break;
+          case 'next':
+            // 直播=切下一线路，影视=下一集（子类 LiveRoomController override）
+            unawaited(onMediaNext());
+            break;
+          case 'prev':
+            // 直播=切上一线路，影视=上一集
+            unawaited(onMediaPrev());
+            break;
+          case 'seek':
+            final pos = cmd.position;
+            if (pos != null) {
+              unawaited(
+                onMediaSeek(Duration(milliseconds: (pos * 1000).round())),
+              );
+            }
             break;
           default:
             if (player.state.playing) {
@@ -2429,8 +2482,15 @@ class PlayerController extends BaseController
         refreshIosVideoOutputLimit(force: true);
         // 只有持续播放一段时间才清零，避免坏流在每次重开后立刻绕过上限。
         _scheduleStablePlaybackReset(generation);
+        // 影视播放中周期同步进度到系统媒体中心（锁屏进度条走动）。
+        if (Platform.isIOS || Platform.isAndroid) {
+          _startMediaProgressSync();
+        }
       } else {
         _cancelStablePlaybackTimer();
+        if (Platform.isIOS || Platform.isAndroid) {
+          _stopMediaProgressSync();
+        }
         // 暂停 / 停止 / 播放结束都要释放屏幕常亮。原来只在 mediaEnd、
         // mediaError、exitFullScreen 三处释放，手动暂停或退后台暂停之后
         // 标志会一直残留到下次终止流程，白耗电。
@@ -2544,6 +2604,7 @@ class PlayerController extends BaseController
     if (Platform.isIOS) {
       _iosAudioChannel?.setMethodCallHandler(null);
     }
+    _stopMediaProgressSync();
     _cancelStablePlaybackTimer();
     _errorSubscription?.cancel();
     _completedSubscription?.cancel();

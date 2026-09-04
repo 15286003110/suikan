@@ -98,11 +98,24 @@ import UserNotifications
           title: args["title"] as? String ?? "随看",
           artist: args["artist"] as? String ?? "",
           isLive: args["isLive"] as? Bool ?? true,
-          playing: args["playing"] as? Bool ?? false
+          playing: args["playing"] as? Bool ?? false,
+          coverUrl: args["coverUrl"] as? String,
+          duration: args["duration"] as? Double,
+          position: args["position"] as? Double,
+          canNext: args["canNext"] as? Bool ?? false,
+          canPrev: args["canPrev"] as? Bool ?? false
         )
         result(nil)
       case "setPlaying":
-        SuikanMediaControl.shared.setPlaying(args["playing"] as? Bool ?? false)
+        SuikanMediaControl.shared.setPlaying(
+          args["playing"] as? Bool ?? false,
+          position: args["position"] as? Double
+        )
+        result(nil)
+      case "setPosition":
+        SuikanMediaControl.shared.setPosition(
+          args["position"] as? Double ?? 0
+        )
         result(nil)
       case "clear":
         SuikanMediaControl.shared.clear()
