@@ -716,6 +716,16 @@ class BiliBiliSite implements LiveSite {
 
   static String kImgKey = '';
   static String kSubKey = '';
+  /// WBI 口令(img_key/sub_key)的获取时刻。
+  ///
+  /// 官方 bilibili-API-collect 说明这两个口令**每日更替**，最佳实践明确要求：
+  /// "Rotate WBI keys - Cache for 1-24 hours with automatic refresh"。
+  /// 以前这里只判 isNotEmpty，取到一次就用到进程结束 —— TV/桌面端长期不重启
+  /// 时口令早已过期，之后所有 WBI 请求都会因签名错误被拒（表现为某天起
+  /// B站弹幕/播放信息取不到，重启 App 又好）。
+  static DateTime _wbiKeysFetchedAt = DateTime.fromMillisecondsSinceEpoch(0);
+  /// 取官方建议区间中段：12 小时刷新一次。
+  static const Duration _wbiKeysTtl = Duration(hours: 12);
   static const List<int> mixinKeyEncTab = [
     46,
     47,
@@ -782,8 +792,17 @@ class BiliBiliSite implements LiveSite {
     44,
     52,
   ];
-  Future<(String, String)> getWbiKeys() async {
-    if (kImgKey.isNotEmpty && kSubKey.isNotEmpty) {
+  /// 获取 WBI 口令，带 12 小时 TTL。
+  ///
+  /// [forceRefresh] 用于"签名疑似失效"时强制重取一次再重试请求
+  /// （比如接口返回 -352 风控校验失败，可能就是口令过期导致签名不对）。
+  Future<(String, String)> getWbiKeys({bool forceRefresh = false}) async {
+    final withinTtl =
+        DateTime.now().difference(_wbiKeysFetchedAt) < _wbiKeysTtl;
+    if (!forceRefresh &&
+        withinTtl &&
+        kImgKey.isNotEmpty &&
+        kSubKey.isNotEmpty) {
       return (kImgKey, kSubKey);
     }
     // 获取最新的 img_key 和 sub_key
@@ -799,6 +818,7 @@ class BiliBiliSite implements LiveSite {
 
     kImgKey = imgKey;
     kSubKey = subKey;
+    _wbiKeysFetchedAt = DateTime.now();
 
     return (imgKey, subKey);
   }
