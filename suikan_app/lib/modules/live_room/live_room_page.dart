@@ -10,6 +10,7 @@ import 'package:simple_live_app/app/app_style.dart';
 import 'package:simple_live_app/app/constant.dart';
 import 'package:simple_live_app/app/controller/app_settings_controller.dart';
 import 'package:simple_live_app/app/utils.dart';
+import 'package:simple_live_app/services/ios_pip_service.dart';
 import 'package:simple_live_app/modules/live_room/live_room_controller.dart';
 import 'package:simple_live_app/modules/live_room/player/player_controls.dart';
 import 'package:simple_live_app/modules/live_room/vod/vod_episode_panel.dart';
@@ -727,6 +728,51 @@ class LiveRoomPage extends GetView<LiveRoomController> {
                             SizedBox(height: 6),
                             Text(
                               "点按恢复画面",
+                              style: TextStyle(
+                                color: Colors.white38,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                )
+              : const SizedBox.shrink(),
+        ),
+        // iOS 系统画中画激活时：画面已收进系统小窗，主界面盖住避免双画面
+        // （mpv 继续播，小窗画面由原生帧桥提供；退出 PiP 自动恢复主画面）。
+        Obx(
+          () => IosPipService.active.value
+              ? Positioned.fill(
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () {
+                      IosPipService.stop();
+                    },
+                    child: const ColoredBox(
+                      color: Color(0xFF14141A),
+                      child: Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.picture_in_picture_alt_outlined,
+                              size: 72,
+                              color: Colors.white38,
+                            ),
+                            SizedBox(height: 12),
+                            Text(
+                              "画中画播放中",
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 15,
+                              ),
+                            ),
+                            SizedBox(height: 6),
+                            Text(
+                              "点按退出小窗",
                               style: TextStyle(
                                 color: Colors.white38,
                                 fontSize: 12,
