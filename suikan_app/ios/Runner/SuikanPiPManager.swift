@@ -46,12 +46,12 @@ class SuikanPiPManager: NSObject {
   private var formatDescription: CMVideoFormatDescription?
   private var isPlaying = true
   private var lastEnqueueTime: CFTimeInterval = 0
-  /// 是否允许向渲染层投递帧（仅 PiP 启动中/激活中为 true）
+  /// 是否允许向渲染层投递帧。prepare 起**常驻开启**（standby 保活：低频喂帧，
+  /// 让 layer 始终有最近内容，系统「切后台自动画中画」才有画面可弹）；
+  /// 只有 dispose（离开直播间）才关闭。
   private var receiveFrames = false
-  /// 等待预热帧后真正触发 startPictureInPicture
+  /// 等待预热帧后真正触发 startPictureInPicture（仅手动点击入口使用）
   private var pendingStart = false
-  /// 已成功入队的帧数（PiP 启动时 layer 必须有内容，否则系统不弹）
-  private var enqueuedFrames = 0
   /// 启动 watchdog 是否已触发
   private var startWatchdogTriggered = false
 
@@ -148,6 +148,15 @@ class SuikanPiPManager: NSObject {
       controller.canStartPictureInPictureAutomaticallyFromInline = true
     }
     pipController = controller
+
+    // standby 保活：注册帧桥并低频喂帧（2fps）。系统自动画中画要求
+    // 「启动那一刻渲染层有内容」，不常驻喂帧 layer 就是空的 → 自动小窗
+    // 永远不会弹（2026-09-04 实测：canStartPictureInPictureAutomatically
+    // =true 但从不喂帧，切后台毫无反应）。
+    receiveFrames = true
+    TextureFrameBridge.shared.onFrame = { [weak self] (pixelBuffer: CVPixelBuffer) in
+      self?.handleFrame(pixelBuffer)
+    }
   }
 
   func start() {
@@ -159,24 +168,19 @@ class SuikanPiPManager: NSObject {
     if controller.isPictureInPictureActive {
       return
     }
-    // 先注册帧桥预热几帧，再真正 startPictureInPicture —— 系统要求 PiP
-    // 启动那一刻渲染层里已经有内容（iPad 实机：直接 start 但 layer 空 → 不弹）。
+    // standby 保活已在持续喂帧（layer 有内容），直接走启动。
     startWatchdogTriggered = false
     pendingStart = true
-    enqueuedFrames = 0
-    receiveFrames = true
-    TextureFrameBridge.shared.onFrame = { [weak self] (pixelBuffer: CVPixelBuffer) in
-      self?.handleFrame(pixelBuffer)
-    }
+    maybeStartPip()
 
-    // watchdog：4 秒内没真正激活 → 判定失败，收掉帧桥并回报原因。
-    // 否则帧桥会一直挂着，每帧在主线程转 CMSampleBuffer 拖垮 UI。
+    // watchdog：4 秒内没真正激活 → 判定失败，回到 standby 并回报原因
+    // （不 dispose：用户还在直播间，之后「切后台自动小窗」仍要 layer 有内容）。
     DispatchQueue.main.asyncAfter(deadline: .now() + 4.0) { [weak self] in
       guard let self = self else { return }
       guard !self.startWatchdogTriggered else { return }
       self.startWatchdogTriggered = true
       if !self.isPipActive {
-        self.dispose()
+        self.pendingStart = false
         self.onError?("小窗未能启动，请稍后重试")
       }
     }
@@ -185,10 +189,8 @@ class SuikanPiPManager: NSObject {
   /// 预热帧足够后（且 layer 已有内容）触发系统 PiP。
   private func maybeStartPip() {
     guard pendingStart else { return }
-    guard enqueuedFrames >= 2 else { return }
     pendingStart = false
     guard let controller = pipController else {
-      dispose()
       return
     }
     // 让 layer 消化首帧再启动，避免 PiP 动画取不到画面
@@ -203,7 +205,6 @@ class SuikanPiPManager: NSObject {
       self.configureAudioSession()
       if !controller.isPictureInPicturePossible {
         self.startWatchdogTriggered = true
-        self.dispose()
         self.onError?("系统暂不允许小窗（请确认正在播放且有声音）")
         return
       }
@@ -215,12 +216,13 @@ class SuikanPiPManager: NSObject {
     pipController?.stopPictureInPicture()
   }
 
-  /// 释放 PiP 资源并让插件停止送帧。
+  /// 彻底释放 PiP 资源并停止送帧（离开直播间时由 Dart 调用；幂等）。
+  /// 注意：用户退出小窗（didStop）**不**走这里 —— 回到 standby 低频喂帧，
+  /// 以便再次「切后台自动小窗」时 layer 仍有内容。
   func dispose() {
     TextureFrameBridge.shared.onFrame = nil
     receiveFrames = false
     pendingStart = false
-    enqueuedFrames = 0
     formatDescription = nil
     pipView?.removeFromSuperview()
     pipView = nil
@@ -230,11 +232,22 @@ class SuikanPiPManager: NSObject {
 
   // MARK: - 帧处理
 
+  /// 渲染线程每帧都会进来（60fps），这里只做轻量判断。
+  /// standby（未启动/未激活）限 2fps 保活喂帧；启动中/激活后限 ~32fps。
   private func handleFrame(_ pixelBuffer: CVPixelBuffer) {
-    // 性能红线：只有 PiP 启动中/激活中才收帧；否则直接在渲染线程丢弃。
     guard receiveFrames else { return }
-    // 重活（CMVideoFormatDescription/CMSampleBuffer 创建 + enqueue）移到
-    // 后台串行队列，主线程只做一次布尔判断。实测主线程转帧会拖垮 UI。
+    let minInterval: CFTimeInterval =
+      (pendingStart || isPipActive) ? (1.0 / 32.0) : 0.5
+    let now = CACurrentMediaTime()
+    if now - lastEnqueueTime < minInterval {
+      return
+    }
+    // 粗背压：层还没消化就不投（丢帧，避免无限堆积）
+    guard let layer = pipView?.displayLayer, layer.isReadyForMoreMediaData else {
+      return
+    }
+    // 重活（CMSampleBuffer 转换 + enqueue）投到后台串行队列保序，
+    // 渲染线程只做上面的时间/背压判断。
     frameQueue.async { [weak self] in
       guard let self = self else { return }
       self.enqueueFrame(pixelBuffer)
@@ -244,23 +257,15 @@ class SuikanPiPManager: NSObject {
   private func enqueueFrame(_ pixelBuffer: CVPixelBuffer) {
     guard receiveFrames else { return }
     guard let layer = pipView?.displayLayer else { return }
-    // 背压：渲染层还没消化就丢帧，避免无限堆积
+    // 双保险（handleFrame 已限流/背压，这里再查一次防止队列堆积）
     guard layer.isReadyForMoreMediaData else { return }
-    // 限流到 ~32fps：小窗尺寸本就不大，省 CPU / 功耗
     let now = CACurrentMediaTime()
-    if now - lastEnqueueTime < 1.0 / 32.0 {
+    if now - lastEnqueueTime < 0.1 {
       return
     }
     lastEnqueueTime = now
     guard let sampleBuffer = makeSampleBuffer(pixelBuffer: pixelBuffer) else { return }
     layer.enqueue(sampleBuffer)
-    enqueuedFrames += 1
-    // 预热足够后触发 PiP 启动（回主线程操作 controller）
-    if pendingStart && enqueuedFrames >= 2 {
-      DispatchQueue.main.async { [weak self] in
-        self?.maybeStartPip()
-      }
-    }
   }
 
   private func makeSampleBuffer(pixelBuffer: CVPixelBuffer) -> CMSampleBuffer? {
@@ -392,9 +397,11 @@ extension SuikanPiPManager: AVPictureInPictureControllerDelegate {
   func pictureInPictureControllerDidStopPictureInPicture(
     _ pictureInPictureController: AVPictureInPictureController
   ) {
+    // 用户退出小窗 → 回到 standby（不 dispose）：保留 controller 与
+    // 2fps 保活喂帧，让之后「切后台自动小窗」/再次手动点小窗立即可用。
     isPipActive = false
+    pendingStart = false
     onPipStateChanged?(false)
-    dispose()
   }
 
   func pictureInPictureController(
@@ -404,7 +411,7 @@ extension SuikanPiPManager: AVPictureInPictureControllerDelegate {
     NSLog("[SuikanPiP] 启动画中画失败: \(error)")
     startWatchdogTriggered = true
     let detail = (error as NSError).localizedDescription
-    dispose()
+    pendingStart = false
     onError?("小窗启动失败：\(detail)")
   }
 

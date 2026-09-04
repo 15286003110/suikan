@@ -70,6 +70,9 @@ import UserNotifications
       case "stop":
         SuikanPiPManager.shared.stop()
         result(nil)
+      case "dispose":
+        SuikanPiPManager.shared.dispose()
+        result(nil)
       case "isActive":
         result(SuikanPiPManager.shared.isPipActive)
       default:
