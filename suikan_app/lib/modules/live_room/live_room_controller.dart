@@ -1689,6 +1689,11 @@ class LiveRoomController extends PlayerController
     if (Platform.isIOS && IosPipService.active.value) {
       await IosPipService.stop();
     }
+    if (Platform.isIOS) {
+      // 彻底释放 PiP 控制器与帧桥（standby 保活也停），防离开直播间后
+      // 帧桥常驻空转（每直播间实例 prepare 都会重建，进来再备）。
+      unawaited(IosPipService.dispose());
+    }
     _preloadPlayUrlsFuture = null;
     _preloadPlayHeaders = null;
     _preloadQuality = null;

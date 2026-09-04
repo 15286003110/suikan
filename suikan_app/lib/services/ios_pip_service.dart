@@ -69,6 +69,10 @@ class IosPipService {
   /// 退出小窗
   static Future<void> stop() => _channel.invokeMethod('stop');
 
+  /// 彻底释放小窗控制器与帧桥（离开直播间时调用，幂等）。
+  /// 注意：stop 只退出小窗、保留待命（standby），dispose 才真正清理资源。
+  static Future<void> dispose() => _channel.invokeMethod('dispose');
+
   static Future<bool> isActive() async {
     try {
       return await _channel.invokeMethod<bool>('isActive') ?? false;
