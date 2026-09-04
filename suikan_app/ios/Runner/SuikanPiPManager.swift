@@ -43,7 +43,6 @@ class SuikanPiPManager: NSObject {
 
   private var pipController: AVPictureInPictureController?
   private var pipView: PipVideoView?
-  private var timebase: CMTimebase?
   private var formatDescription: CMVideoFormatDescription?
   private var isPlaying = true
   private var lastEnqueueTime: CFTimeInterval = 0
@@ -57,6 +56,10 @@ class SuikanPiPManager: NSObject {
   private var startWatchdogTriggered = false
 
   private(set) var isPipActive = false
+
+  /// 帧处理专用串行队列：CMSampleBuffer 的转换/入队开销不小，绝不能放在
+  /// 主线程（实测：主线程转帧会让聊天栏/UI 跳帧）。串行保证帧序不乱。
+  private let frameQueue = DispatchQueue(label: "com.suikan.pip.frameQueue", qos: .userInitiated)
 
   private override init() {
     super.init()
@@ -95,22 +98,15 @@ class SuikanPiPManager: NSObject {
     view.alpha = 0.01
     view.frame = CGRect(x: 0, y: 0, width: 640, height: 360)
     view.isUserInteractionEnabled = false
+    view.displayLayer.videoGravity = .resizeAspect
 
-    var tb: CMTimebase?
-    CMTimebaseCreateWithSourceClock(
-      allocator: kCFAllocatorDefault,
-      sourceClock: CMClockGetHostTimeClock(),
-      timebaseOut: &tb
-    )
-    if let tb = tb {
-      CMTimebaseSetTime(tb, time: CMTime.zero)
-      CMTimebaseSetRate(tb, rate: 1.0)
-      view.displayLayer.controlTimebase = tb
-      timebase = tb
-    }
+    // 业界标准做法（腾讯云 TRTC 画中画 / Secure ShellFish 等成功案例）：
+    // 用 DisplayImmediately 标记逐帧直显，**不设 controlTimebase**——
+    // 苹果文档明确提示二者同时使用不推荐，且无 timebase 时各帧按
+    // 帧携带的 pts 或 DisplayImmediately 立即上屏。
 
-    // 能挂到根视图更好（PiP 转场/恢复有参考系）；挂不上也不影响 PiP 本体，
-    // 系统画中画只认 layer 内容。别再因为 rootView 为 nil 而静默失败。
+    // 把内容层挂进根视图（腾讯云做法是把 layer 加进 VC.view），
+    // 供系统识别转场/恢复的参考视图；挂不上也不阻塞功能。
     if let rootView = Self.keyRootView() {
       rootView.insertSubview(view, at: 0)
     } else {
@@ -204,7 +200,6 @@ class SuikanPiPManager: NSObject {
     pipView?.removeFromSuperview()
     pipView = nil
     pipController = nil
-    timebase = nil
     isPipActive = false
   }
 
@@ -212,6 +207,16 @@ class SuikanPiPManager: NSObject {
 
   private func handleFrame(_ pixelBuffer: CVPixelBuffer) {
     // 性能红线：只有 PiP 启动中/激活中才收帧；否则直接在渲染线程丢弃。
+    guard receiveFrames else { return }
+    // 重活（CMVideoFormatDescription/CMSampleBuffer 创建 + enqueue）移到
+    // 后台串行队列，主线程只做一次布尔判断。实测主线程转帧会拖垮 UI。
+    frameQueue.async { [weak self] in
+      guard let self = self else { return }
+      self.enqueueFrame(pixelBuffer)
+    }
+  }
+
+  private func enqueueFrame(_ pixelBuffer: CVPixelBuffer) {
     guard receiveFrames else { return }
     guard let layer = pipView?.displayLayer else { return }
     // 背压：渲染层还没消化就丢帧，避免无限堆积
@@ -225,7 +230,12 @@ class SuikanPiPManager: NSObject {
     guard let sampleBuffer = makeSampleBuffer(pixelBuffer: pixelBuffer) else { return }
     layer.enqueue(sampleBuffer)
     enqueuedFrames += 1
-    maybeStartPip()
+    // 预热足够后触发 PiP 启动（回主线程操作 controller）
+    if pendingStart && enqueuedFrames >= 2 {
+      DispatchQueue.main.async { [weak self] in
+        self?.maybeStartPip()
+      }
+    }
   }
 
   private func makeSampleBuffer(pixelBuffer: CVPixelBuffer) -> CMSampleBuffer? {
@@ -248,13 +258,11 @@ class SuikanPiPManager: NSObject {
     guard let fd = formatDescription else { return nil }
 
     var timing = CMSampleTimingInfo()
-    timing.duration = CMTimeMake(value: 1, timescale: 600)
+    timing.duration = CMTime.invalid
     timing.decodeTimeStamp = CMTime.invalid
-    if let tb = timebase {
-      timing.presentationTimeStamp = CMTimebaseGetTime(tb)
-    } else {
-      timing.presentationTimeStamp = CMTime.zero
-    }
+    // 直播实时画面用 DisplayImmediately 逐帧直显，pts 仅供系统参考；
+    // 给一个单调推进的 host clock 值即可。
+    timing.presentationTimeStamp = CMClockGetTime(CMClockGetHostTimeClock())
 
     var sampleBuffer: CMSampleBuffer?
     let createStatus = CMSampleBufferCreateReadyWithImageBuffer(
@@ -264,7 +272,23 @@ class SuikanPiPManager: NSObject {
       sampleTiming: &timing,
       sampleBufferOut: &sampleBuffer
     )
-    guard createStatus == noErr else { return nil }
+    guard createStatus == noErr, let sampleBuffer = sampleBuffer else { return nil }
+
+    // 逐帧立即上屏——业界成功案例（腾讯云 TRTC / Secure ShellFish）的共同点：
+    // 不标 DisplayImmediately，PiP 画面会不刷新/黑屏/一直 loading。
+    if let attrs = CMSampleBufferGetSampleAttachmentsArray(
+      sampleBuffer, createIfNecessary: true
+    ), CFArrayGetCount(attrs) > 0 {
+      let dict = unsafeBitCast(
+        CFArrayGetValueAtIndex(attrs, 0),
+        to: CFMutableDictionary.self
+      )
+      CFDictionarySetValue(
+        dict,
+        Unmanaged.passUnretained(kCMSampleAttachmentKey_DisplayImmediately).toOpaque(),
+        Unmanaged.passUnretained(kCFBooleanTrue).toOpaque()
+      )
+    }
     return sampleBuffer
   }
 
@@ -284,11 +308,12 @@ class SuikanPiPManager: NSObject {
 
 extension SuikanPiPManager: AVPictureInPictureSampleBufferPlaybackDelegate {
 
-  /// 直播流：可播放时间范围无限（系统据此显示为直播，不画进度条）
+  /// 直播流：可播放时间范围负无穷~正无穷（实时内容标准返回；范围不对
+  /// 会让 PiP 一直转 loading）
   func pictureInPictureControllerTimeRangeForPlayback(
     _ pictureInPictureController: AVPictureInPictureController
   ) -> CMTimeRange {
-    CMTimeRange(start: CMTime.zero, duration: CMTime.positiveInfinity)
+    CMTimeRange(start: CMTime.negativeInfinity, duration: CMTime.positiveInfinity)
   }
 
   func pictureInPictureControllerIsPlaybackPaused(
