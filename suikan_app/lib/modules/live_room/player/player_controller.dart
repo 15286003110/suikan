@@ -3074,7 +3074,18 @@ class PlayerController extends BaseController
       disposeStream();
       disposeDanmakuController();
       await resetSystem();
-      await player.dispose();
+      // 🔴 dispose 竞态规避（2026-09-04，真机崩溃栈实锤）：
+      // dropbox 多起 SIGABRT "Callback invoked after it has been deleted"
+      // （tid=Thread-8 = mpv 工作线程，栈在 FfiCallbackMetadata::TrampolinePage）。
+      // media_kit 的 Player.dispose() 会立即删除 Dart FFI 回调，但 mpv 的
+      // 事件线程在 stop 之后仍在排空剩余事件，稍后调用已删回调 → VM abort。
+      // 上游 PR #1356 未合并、1.2.0~1.2.6 均未修复（#1324）。规避：stop 之后
+      // 延迟 500ms 再 dispose，让 mpv 线程把 stop 相关事件全部处理完，
+      // 命中竞态的概率大幅下降。closePlayerResources 是 fire-and-forget
+      // 路径（页面已 pop），延迟不影响 UI 手感。
+      final playerToDispose = player;
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+      await playerToDispose.dispose();
     } finally {
       if (identical(_playerShutdownGate, shutdownGate)) {
         _playerShutdownGate = null;
