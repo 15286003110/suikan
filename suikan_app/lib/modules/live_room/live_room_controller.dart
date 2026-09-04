@@ -35,6 +35,7 @@ import 'package:simple_live_app/routes/route_path.dart';
 import 'package:simple_live_app/services/current_room_service.dart';
 import 'package:simple_live_app/services/db_service.dart';
 import 'package:simple_live_app/services/follow_service.dart';
+import 'package:simple_live_app/services/ios_pip_service.dart';
 import 'package:simple_live_app/services/local_storage_service.dart';
 import 'package:simple_live_app/services/mpv_options_service.dart';
 import 'package:simple_live_app/widgets/filter_button.dart';
@@ -1673,6 +1674,11 @@ class LiveRoomController extends PlayerController
   @override
   void onClose() async {
     _roomDisposed = true;
+    // iOS 画中画激活时离开直播间：先退出小窗，避免小窗还挂着而播放器
+    // 已销毁（帧源没了 → 小窗画面冻结）
+    if (Platform.isIOS && IosPipService.active.value) {
+      await IosPipService.stop();
+    }
     _preloadPlayUrlsFuture = null;
     _preloadPlayHeaders = null;
     _preloadQuality = null;
@@ -2328,6 +2334,11 @@ class LiveRoomController extends PlayerController
   }
 
   Future<void> getPlayUrl() async {
+    // iOS 画中画激活时换流/重开播放：先退出小窗，避免旧帧桥与新播放会话
+    // 打架（否则换台后画面可能花屏/状态错乱）。
+    if (Platform.isIOS && IosPipService.active.value) {
+      await IosPipService.stop();
+    }
     final loadGeneration = _loadGeneration;
     playUrls.clear();
     currentLineInfo.value = "";
@@ -3956,6 +3967,13 @@ ${errorStackTrace ?? ""}''');
     isBackground = true;
     _backgroundedAt = DateTime.now();
     _positionBeforeBackground = _lastKnownPlayerPosition;
+    if (Platform.isIOS && IosPipService.active.value) {
+      // iOS 系统画中画激活：画面已由系统小窗接管，且小窗持续需要视频帧。
+      // 退后台**不能**暂停、也不能走 30s 停画面降级（降级 vid=no 会让小窗
+      // 失去帧源 → 冻结/黑屏）。这里只挂起后台定时器。
+      _suspendBackgroundTimers();
+      return;
+    }
     if (!_allowBackgroundPlayback) {
       unawaited(
         AppSettingsController.instance.saveLastLiveRoom(
@@ -3983,6 +4001,17 @@ ${errorStackTrace ?? ""}''');
   void _exitBackgroundState(String reason) {
     Log.d("返回前台:$reason");
     isBackground = false;
+    if (Platform.isIOS && IosPipService.active.value) {
+      // 画中画激活期间回前台：没有做暂停/降级，无需恢复画面或重开流，
+      // 只恢复后台定时器（画面本就在系统小窗，主界面是占位）。
+      _resumeBackgroundTimers();
+      unawaited(
+        AppSettingsController.instance.setLastLiveRoomResumePending(false),
+      );
+      _backgroundedAt = null;
+      _positionBeforeBackground = null;
+      return;
+    }
     _resumeBackgroundTimers();
     unawaited(
       AppSettingsController.instance.setLastLiveRoomResumePending(false),
