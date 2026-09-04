@@ -32,6 +32,9 @@
 
 添加自定义直播源M3U 与飞牛影视库
 
+下载地址：
+https://github.com/mobingchong/suikan/releases
+
 ## 仓库说明
 
 * 【停更】[原作者仓库 xiaoyaocz/dart\_simple\_live](https://github.com/xiaoyaocz/dart_simple_live)
