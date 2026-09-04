@@ -4123,6 +4123,13 @@ ${errorStackTrace ?? ""}''');
       if (!isBackground || _backgroundAudioOnly) {
         return;
       }
+      // iOS 系统画中画接管中：无论定时器是什么时候挂上的（自动小窗是切后台
+      // 之后才 didStart，取消监听可能存在竞态），到点这一刻再查一次——
+      // PiP 激活时绝不能停视频轨，否则小窗只剩声音、画面冻在最后一帧。
+      if (Platform.isIOS && IosPipService.active.value) {
+        Log.d("降级到点，但 iOS 画中画激活中，跳过停轨");
+        return;
+      }
       _backgroundAudioOnly = true;
       // 降档要重开流，会中断 1~2 秒声音。WiFi/有线流量不值钱，不值得为此打断听感；
       // 只有移动数据才降档省流量。停轨（省电）与网络类型无关，始终执行。
