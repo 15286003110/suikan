@@ -442,6 +442,9 @@ class LiveRoomController extends PlayerController
   DateTime? _backgroundedAt;
   Duration? _positionBeforeWindowBlur;
   DateTime? _windowBlurredAt;
+  /// 桌面端窗口是否处于最小化（用于区分"从最小化恢复"与其它 restore 事件，
+  /// 免得最大化/还原等场景误触发回前台逻辑）。
+  bool _windowMinimized = false;
   Future<void>? _playerReopeningFuture;
   int? _playerReopeningGeneration;
   bool _roomDisposed = false;
@@ -3931,54 +3934,70 @@ ${errorStackTrace ?? ""}''');
 
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.hidden) {
-      Log.d("进入后台:$state");
-      isBackground = true;
-      _backgroundedAt = DateTime.now();
-      _positionBeforeBackground = _lastKnownPlayerPosition;
-      if (!_allowBackgroundPlayback) {
-        unawaited(
-          AppSettingsController.instance.saveLastLiveRoom(
-            siteId: site.id,
-            roomId: roomId,
-            resumePending: true,
-          ),
-        );
-        // 明确暂停：不依赖 Video 控件的构建期参数，改设置后当次即可生效。
-        unawaited(
-          player.pause().catchError((Object e) {
-            Log.d("退后台暂停失败: $e");
-          }),
-        );
-      } else {
-        // 允许后台播放：退后台后自动降级为纯音频，只解码声音、不解码画面。
-        _scheduleBackgroundAudioOnlyDowngrade();
-      }
-      // 无论是否允许后台播放都要停：后台不需要刷新热度/SuperChat/事件流/
-      // 开播时长，Surface 检查在纯音频下还会把 width=null 误判成异常。
-      _suspendBackgroundTimers();
+      _enterBackgroundState(state.toString());
     } else if (state == AppLifecycleState.resumed) {
       Log.d("返回前台");
+      // 定时关闭倒计时只在移动端生命周期里刷新（桌面端走窗口事件路径）。
       _refreshAutoExitCountdown();
-      isBackground = false;
-      _resumeBackgroundTimers();
-      unawaited(
-        AppSettingsController.instance.setLastLiveRoomResumePending(false),
-      );
-      _refreshDanmakuOverlay("返回前台");
-      var backgroundedAt = _backgroundedAt;
-      var positionBeforeBackground = _positionBeforeBackground;
-      _backgroundedAt = null;
-      _positionBeforeBackground = null;
-      unawaited(
-        _handleForegroundRestore(
-          since: backgroundedAt,
-          previousPosition: positionBeforeBackground,
-        ),
-      );
+      _exitBackgroundState("应用回到前台");
     } else if (state == AppLifecycleState.inactive) {
       Log.d("应用短暂失焦:$state");
       unawaited(syncAutoPipOnLeave());
     }
+  }
+
+  /// 进入「后台」态的统一处理：移动端退到后台（paused/hidden）与桌面端
+  /// **窗口最小化**都走这里，由「后台播放」总开关裁决（手动纯音频按其自身
+  /// 规则豁免，见 [_allowBackgroundPlayback]）：
+  /// - 不允许后台 → 明确暂停并记续播点（回前台续播）
+  /// - 允许后台   → 继续播，30 秒后自动停画面只解码声音（回前台自动恢复画面）
+  void _enterBackgroundState(String reason) {
+    Log.d("进入后台:$reason");
+    isBackground = true;
+    _backgroundedAt = DateTime.now();
+    _positionBeforeBackground = _lastKnownPlayerPosition;
+    if (!_allowBackgroundPlayback) {
+      unawaited(
+        AppSettingsController.instance.saveLastLiveRoom(
+          siteId: site.id,
+          roomId: roomId,
+          resumePending: true,
+        ),
+      );
+      // 明确暂停：不依赖 Video 控件的构建期参数，改设置后当次即可生效。
+      unawaited(
+        player.pause().catchError((Object e) {
+          Log.d("退后台暂停失败: $e");
+        }),
+      );
+    } else {
+      // 允许后台播放：退后台后自动降级为纯音频，只解码声音、不解码画面。
+      _scheduleBackgroundAudioOnlyDowngrade();
+    }
+    // 无论是否允许后台播放都要停：后台不需要刷新热度/SuperChat/事件流/
+    // 开播时长，Surface 检查在纯音频下还会把 width=null 误判成异常。
+    _suspendBackgroundTimers();
+  }
+
+  /// 回到「前台」态的统一处理（移动端 resumed / 桌面端窗口从最小化恢复）。
+  void _exitBackgroundState(String reason) {
+    Log.d("返回前台:$reason");
+    isBackground = false;
+    _resumeBackgroundTimers();
+    unawaited(
+      AppSettingsController.instance.setLastLiveRoomResumePending(false),
+    );
+    _refreshDanmakuOverlay("返回前台");
+    var backgroundedAt = _backgroundedAt;
+    var positionBeforeBackground = _positionBeforeBackground;
+    _backgroundedAt = null;
+    _positionBeforeBackground = null;
+    unawaited(
+      _handleForegroundRestore(
+        since: backgroundedAt,
+        previousPosition: positionBeforeBackground,
+      ),
+    );
   }
 
   Future<void> _recoverPlaybackAfterForeground(
@@ -4296,6 +4315,27 @@ ${errorStackTrace ?? ""}''');
     clearTransientPlayerOverlays();
     _windowBlurredAt = DateTime.now();
     _positionBeforeWindowBlur = _lastKnownPlayerPosition;
+  }
+
+  @override
+  void onWindowMinimize() {
+    // 桌面端「退后台」= 窗口最小化，与移动端对齐后同样由「后台播放」总开关
+    // 裁决。单纯失焦（切到别的窗口）不算后台：桌面多窗口是常态，边看边干活
+    // 不该被暂停或降级。桌面小窗是主窗口缩小置顶，只要没最小化就照常播放。
+    _windowMinimized = true;
+    if (isBackground) {
+      return;
+    }
+    _enterBackgroundState("窗口最小化");
+  }
+
+  @override
+  void onWindowRestore() {
+    if (!_windowMinimized) {
+      return;
+    }
+    _windowMinimized = false;
+    _exitBackgroundState("窗口从最小化恢复");
   }
 
   @override
