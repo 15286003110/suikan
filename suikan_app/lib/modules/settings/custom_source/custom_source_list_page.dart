@@ -285,9 +285,13 @@ class _CustomSourceEditDialogState extends State<CustomSourceEditDialog> {
                     style: theme.textTheme.titleSmall,
                   ),
                 ),
-                Switch(
-                  value: autoRefresh,
-                  onChanged: (v) => setState(() => autoRefresh = v),
+                Transform.scale(
+                  scale: 0.75,
+                  child: Switch(
+                    value: autoRefresh,
+                    onChanged: (v) => setState(() => autoRefresh = v),
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
                 ),
               ],
             ),

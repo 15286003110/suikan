@@ -3771,11 +3771,9 @@ class LiveRoomController extends PlayerController
       child: ListView(
         children: [
           Obx(
-            () => SwitchListTile(
-              title: Text(
-                "启用定时关闭",
-                style: Get.textTheme.titleMedium,
-              ),
+            () => SettingsSwitch(
+              title: "启用定时关闭",
+              titleStyle: Get.textTheme.titleMedium,
               value: autoExitEnable.value,
               onChanged: (e) {
                 autoExitEnable.value = e;

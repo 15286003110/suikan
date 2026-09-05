@@ -5,6 +5,7 @@ import 'package:simple_live_app/app/constant.dart';
 import 'package:simple_live_app/app/sites.dart';
 import 'package:simple_live_app/modules/settings/indexed_settings/indexed_settings_controller.dart';
 import 'package:simple_live_app/widgets/settings/settings_card.dart';
+import 'package:simple_live_app/widgets/settings/settings_switch.dart';
 
 class IndexedSettingsPage extends GetView<IndexedSettingsController> {
   const IndexedSettingsPage({Key? key}) : super(key: key);
@@ -59,15 +60,14 @@ class IndexedSettingsPage extends GetView<IndexedSettingsController> {
                 children: Sites.allSites.values
                     .map((site) {
                   final hidden = controller.hiddenSites.contains(site.id);
-                  return SwitchListTile(
+                  return SettingsSwitch(
                     key: ValueKey(site.id),
-                    visualDensity: VisualDensity.compact,
-                    secondary: Image.asset(
+                    leading: Image.asset(
                       site.logo,
                       width: 24,
                       height: 24,
                     ),
-                    title: Text(site.name),
+                    title: site.name,
                     value: !hidden,
                     onChanged: (show) {
                       final ok = controller.toggleHiddenSite(

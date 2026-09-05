@@ -79,14 +79,19 @@ class PlaybackPageSettingsPage extends GetView<IndexedSettingsController> {
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Switch(
-                            value: enabled,
-                            onChanged: (value) {
-                              controller.setLiveRoomQuickAccessEnabled(
-                                key,
-                                value,
-                              );
-                            },
+                          Transform.scale(
+                            scale: 0.75,
+                            child: Switch(
+                              value: enabled,
+                              onChanged: (value) {
+                                controller.setLiveRoomQuickAccessEnabled(
+                                  key,
+                                  value,
+                                );
+                              },
+                              materialTapTargetSize:
+                                  MaterialTapTargetSize.shrinkWrap,
+                            ),
                           ),
                           const Icon(Icons.drag_handle),
                         ],
@@ -207,9 +212,13 @@ class PlaybackPageSettingsPage extends GetView<IndexedSettingsController> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Obx(
-            () => Switch(
-              value: controller.contributionRankEnable.value,
-              onChanged: controller.setContributionRankEnable,
+            () => Transform.scale(
+              scale: 0.75,
+              child: Switch(
+                value: controller.contributionRankEnable.value,
+                onChanged: controller.setContributionRankEnable,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
             ),
           ),
           const Icon(Icons.drag_handle),
@@ -221,9 +230,13 @@ class PlaybackPageSettingsPage extends GetView<IndexedSettingsController> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Obx(
-            () => Switch(
-              value: controller.liveEventFlowEnable.value,
-              onChanged: controller.setLiveEventFlowEnable,
+            () => Transform.scale(
+              scale: 0.75,
+              child: Switch(
+                value: controller.liveEventFlowEnable.value,
+                onChanged: controller.setLiveEventFlowEnable,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
             ),
           ),
           const Icon(Icons.drag_handle),

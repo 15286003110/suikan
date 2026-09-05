@@ -16,6 +16,7 @@ import 'package:simple_live_app/widgets/filter_button.dart';
 import 'package:simple_live_app/widgets/follow_user_item.dart';
 import 'package:simple_live_app/widgets/live_room_grid_layout.dart';
 import 'package:simple_live_app/widgets/page_grid_view.dart';
+import 'package:simple_live_app/widgets/settings/settings_switch.dart';
 
 class FollowUserPage extends GetView<FollowUserController> {
   const FollowUserPage({Key? key}) : super(key: key);
@@ -475,23 +476,22 @@ class FollowUserPage extends GetView<FollowUserController> {
                     ],
                   ),
                   const SizedBox(height: 8),
-                  SwitchListTile(
+                  SettingsSwitch(
                     contentPadding: EdgeInsets.zero,
-                    title: const Text("展示直播封面"),
-                                        value: settings.followShowLiveCover.value,
+                    title: "展示直播封面",
+                    value: settings.followShowLiveCover.value,
                     onChanged: controller.setShowLiveCover,
                   ),
-                  const SizedBox(height: 8),
-                  SwitchListTile(
+                  SettingsSwitch(
                     contentPadding: EdgeInsets.zero,
-                    title: const Text("仅显示开播"),
-                                        value: settings.followOnlyLive.value,
+                    title: "仅显示开播",
+                    value: settings.followOnlyLive.value,
                     onChanged: controller.setOnlyLive,
                   ),
-                  SwitchListTile(
+                  SettingsSwitch(
                     contentPadding: EdgeInsets.zero,
-                    title: const Text("进入关注页后自动刷新"),
-                    subtitle: const Text("先显示本地列表，再异步全量刷新；关注过多时极易触发抖音限制"),
+                    title: "进入关注页后自动刷新",
+                    subtitle: "先显示本地列表，再异步全量刷新；关注过多时极易触发抖音限制",
                     value: settings.followRefreshOnEnter.value,
                     onChanged: (value) async {
                       if (value) {

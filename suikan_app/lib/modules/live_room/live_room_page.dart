@@ -1641,10 +1641,10 @@ class LiveRoomPage extends GetView<LiveRoomController> {
               ),
             ),
             Obx(
-              () => SwitchListTile(
-                secondary: const Icon(Icons.headphones_outlined),
-                title: const Text("后台播放"),
-                                value: AppSettingsController
+              () => SettingsSwitch(
+                leading: const Icon(Icons.headphones_outlined),
+                title: "后台播放",
+                value: AppSettingsController
                     .instance.allowBackgroundPlayback.value,
                 onChanged: (v) {
                   AppSettingsController.instance

@@ -11,11 +11,17 @@ class SettingsSwitch extends StatelessWidget {
   final bool value;
   final String title;
   final String? subtitle;
+  final Widget? leading;
+  final TextStyle? titleStyle;
+  final EdgeInsetsGeometry? contentPadding;
   final Function(bool) onChanged;
   const SettingsSwitch({
     required this.value,
     required this.title,
     this.subtitle,
+    this.leading,
+    this.titleStyle,
+    this.contentPadding,
     required this.onChanged,
     super.key,
   });
@@ -25,14 +31,16 @@ class SettingsSwitch extends StatelessWidget {
     final theme = Theme.of(context);
     final Widget titleWidget = Text(
       title,
-      style: theme.textTheme.bodyLarge,
+      style: titleStyle ?? theme.textTheme.bodyLarge,
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
     );
     return ListTile(
       dense: true,
       visualDensity: const VisualDensity(horizontal: -4, vertical: -2),
-      contentPadding: AppStyle.edgeInsetsL16.copyWith(right: 12),
+      contentPadding:
+          contentPadding ?? AppStyle.edgeInsetsL16.copyWith(right: 12),
+      leading: leading,
       title: subtitle == null
           ? titleWidget
           : Column(

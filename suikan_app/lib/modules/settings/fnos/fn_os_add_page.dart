@@ -357,9 +357,15 @@ class _FnOsAddPageState extends State<FnOsAddPage> {
                             style: theme.textTheme.bodySmall,
                           ),
                         ),
-                        Switch(
-                          value: autoRefresh,
-                          onChanged: (v) => setState(() => autoRefresh = v),
+                        Transform.scale(
+                          scale: 0.75,
+                          child: Switch(
+                            value: autoRefresh,
+                            onChanged: (v) =>
+                                setState(() => autoRefresh = v),
+                            materialTapTargetSize:
+                                MaterialTapTargetSize.shrinkWrap,
+                          ),
                         ),
                       ],
                     ),
