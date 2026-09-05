@@ -107,7 +107,8 @@ class MinePage extends StatelessWidget {
           children: [
             AppStyle.vGap12,
             ListTile(
-            visualDensity: VisualDensity.compact,
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               leading: Image.asset(
                 'assets/images/logo.png',
                 width: 56,
@@ -121,238 +122,71 @@ class MinePage extends StatelessWidget {
               trailing: const Icon(Icons.chevron_right),
               onTap: () => _showAbout(context),
             ),
+            _row(Remix.history_line, "观看记录", () {
+              AppNavigator.toHistory();
+            }),
+            _row(Remix.account_circle_line, "账号管理", () {
+              Get.toNamed(RoutePath.kSettingsAccount);
+            }),
+            _row(Icons.devices, "数据同步", () {
+              Get.toNamed(RoutePath.kSync);
+            }),
+            _row(Icons.playlist_play, "自定义直播源", () {
+              Get.to(() => const CustomSourceListPage());
+            }),
+            _row(Icons.movie_outlined, "NAS影视库", () {
+              Get.to(() => const FnOsListPage());
+            }),
+            _row(Remix.link, "链接解析", () {
+              Get.toNamed(RoutePath.kTools);
+            }),
+            _row(Remix.moon_line, "外观设置", () {
+              Get.toNamed(RoutePath.kAppstyleSetting);
+            }),
+            _row(Remix.home_2_line, "主页设置", () {
+              Get.toNamed(RoutePath.kSettingsIndexed);
+            }),
+            _row(Remix.play_circle_line, "直播间设置", () {
+              Get.toNamed(RoutePath.kSettingsPlay);
+            }),
+            _row(Icons.tune, "播放页设置", () {
+              Get.toNamed(RoutePath.kSettingsPlaybackPage);
+            }),
+            if (PlatformUtils.supportsInlineMultiRoom)
+              _row(Remix.layout_grid_line, "多开设置", () {
+                Get.toNamed(RoutePath.kSettingsMultiRoom);
+              }),
+            _row(Remix.text, "弹幕设置", () {
+              Get.toNamed(RoutePath.kSettingsDanmu);
+            }),
+            _row(Remix.heart_line, "关注设置", () {
+              Get.toNamed(RoutePath.kSettingsFollow);
+            }),
+            _row(Remix.timer_2_line, "定时关闭", () {
+              Get.toNamed(RoutePath.kSettingsAutoExit);
+            }),
+            _row(Remix.apps_line, "其他设置", () {
+              Get.toNamed(RoutePath.kSettingsOther);
+            }),
             AppStyle.vGap12,
-            _buildCard(
-              context,
-              children: [
-                ListTile(
-                visualDensity: VisualDensity.compact,
-                  leading: const Icon(Remix.history_line),
-                  title: const Text("观看记录"),
-                  trailing: const Icon(
-                    Icons.chevron_right,
-                    color: Colors.grey,
-                  ),
-                  onTap: () {
-                    AppNavigator.toHistory();
-                  },
-                ),
-              ],
-            ),
-            AppStyle.vGap12,
-            _buildCard(
-              context,
-              children: [
-                ListTile(
-                visualDensity: VisualDensity.compact,
-                  leading: const Icon(Remix.account_circle_line),
-                  title: const Text("账号管理"),
-                  trailing: const Icon(
-                    Icons.chevron_right,
-                    color: Colors.grey,
-                  ),
-                  onTap: () {
-                    Get.toNamed(RoutePath.kSettingsAccount);
-                  },
-                ),
-                ListTile(
-                visualDensity: VisualDensity.compact,
-                  leading: const Icon(Icons.devices),
-                  title: const Text("数据同步"),
-                  trailing: const Icon(
-                    Icons.chevron_right,
-                    color: Colors.grey,
-                  ),
-                  onTap: () {
-                    Get.toNamed(RoutePath.kSync);
-                  },
-                ),
-              ],
-            ),
-            AppStyle.vGap12,
-            _buildCard(
-              context,
-              children: [
-                ListTile(
-                visualDensity: VisualDensity.compact,
-                  leading: const Icon(Icons.playlist_play),
-                  title: const Text("自定义直播源"),
-                  trailing: const Icon(
-                    Icons.chevron_right,
-                    color: Colors.grey,
-                  ),
-                  onTap: () {
-                    Get.to(() => const CustomSourceListPage());
-                  },
-                ),
-                ListTile(
-                visualDensity: VisualDensity.compact,
-                  leading: const Icon(Icons.movie_outlined),
-                  title: const Text("NAS影视库"),
-                  trailing: const Icon(
-                    Icons.chevron_right,
-                    color: Colors.grey,
-                  ),
-                  onTap: () {
-                    Get.to(() => const FnOsListPage());
-                  },
-                ),
-                ListTile(
-                visualDensity: VisualDensity.compact,
-                  leading: const Icon(Remix.link),
-                  title: const Text("链接解析"),
-                  trailing: const Icon(
-                    Icons.chevron_right,
-                    color: Colors.grey,
-                  ),
-                  onTap: () {
-                    Get.toNamed(RoutePath.kTools);
-                  },
-                ),
-              ],
-            ),
-            AppStyle.vGap12,
-            _buildCard(
-              context,
-              children: [
-                ListTile(
-                visualDensity: VisualDensity.compact,
-                  leading: const Icon(Remix.moon_line),
-                  title: const Text("外观设置"),
-                  trailing: const Icon(
-                    Icons.chevron_right,
-                    color: Colors.grey,
-                  ),
-                  onTap: () {
-                    Get.toNamed(RoutePath.kAppstyleSetting);
-                  },
-                ),
-                ListTile(
-                visualDensity: VisualDensity.compact,
-                  leading: const Icon(Remix.home_2_line),
-                  title: const Text("主页设置"),
-                  trailing: const Icon(
-                    Icons.chevron_right,
-                    color: Colors.grey,
-                  ),
-                  onTap: () {
-                    Get.toNamed(RoutePath.kSettingsIndexed);
-                  },
-                ),
-                ListTile(
-                visualDensity: VisualDensity.compact,
-                  leading: const Icon(Remix.play_circle_line),
-                  title: const Text("直播间设置"),
-                  trailing: const Icon(
-                    Icons.chevron_right,
-                    color: Colors.grey,
-                  ),
-                  onTap: () {
-                    Get.toNamed(RoutePath.kSettingsPlay);
-                  },
-                ),
-                ListTile(
-                visualDensity: VisualDensity.compact,
-                  leading: const Icon(Icons.tune),
-                  title: const Text("播放页设置"),
-                  trailing: const Icon(
-                    Icons.chevron_right,
-                    color: Colors.grey,
-                  ),
-                  onTap: () {
-                    Get.toNamed(RoutePath.kSettingsPlaybackPage);
-                  },
-                ),
-                if (PlatformUtils.supportsInlineMultiRoom)
-                  ListTile(
-                  visualDensity: VisualDensity.compact,
-                    leading: const Icon(Remix.layout_grid_line),
-                    title: const Text("多开设置"),
-                    trailing: const Icon(
-                      Icons.chevron_right,
-                      color: Colors.grey,
-                    ),
-                    onTap: () {
-                      Get.toNamed(RoutePath.kSettingsMultiRoom);
-                    },
-                  ),
-                ListTile(
-                visualDensity: VisualDensity.compact,
-                  leading: const Icon(Remix.text),
-                  title: const Text("弹幕设置"),
-                  trailing: const Icon(
-                    Icons.chevron_right,
-                    color: Colors.grey,
-                  ),
-                  onTap: () {
-                    Get.toNamed(RoutePath.kSettingsDanmu);
-                  },
-                ),
-                ListTile(
-                visualDensity: VisualDensity.compact,
-                  leading: const Icon(Remix.heart_line),
-                  title: const Text("关注设置"),
-                  trailing: const Icon(
-                    Icons.chevron_right,
-                    color: Colors.grey,
-                  ),
-                  onTap: () {
-                    Get.toNamed(RoutePath.kSettingsFollow);
-                  },
-                ),
-                ListTile(
-                visualDensity: VisualDensity.compact,
-                  leading: const Icon(Remix.timer_2_line),
-                  title: const Text("定时关闭"),
-                  trailing: const Icon(
-                    Icons.chevron_right,
-                    color: Colors.grey,
-                  ),
-                  onTap: () {
-                    Get.toNamed(RoutePath.kSettingsAutoExit);
-                  },
-                ),
-                ListTile(
-                visualDensity: VisualDensity.compact,
-                  leading: const Icon(Remix.apps_line),
-                  title: const Text("其他设置"),
-                  trailing: const Icon(
-                    Icons.chevron_right,
-                    color: Colors.grey,
-                  ),
-                  onTap: () {
-                    Get.toNamed(RoutePath.kSettingsOther);
-                  },
-                ),
-              ],
-            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildCard(
-    BuildContext context, {
-    required List<Widget> children,
-  }) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Theme(
-          data: Theme.of(context).copyWith(
-            listTileTheme: ListTileThemeData(
-              shape: RoundedRectangleBorder(borderRadius: AppStyle.radius8),
-            ),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: children,
-          ),
-        ),
-      ],
+  Widget _row(IconData icon, String title, VoidCallback onTap) {
+    return ListTile(
+      visualDensity: VisualDensity.compact,
+      contentPadding:
+          const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
+      leading: Icon(icon),
+      title: Text(title),
+      trailing: const Icon(
+        Icons.chevron_right,
+        color: Colors.grey,
+      ),
+      onTap: onTap,
     );
   }
 }
