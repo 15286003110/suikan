@@ -140,7 +140,6 @@ class MinePage extends StatelessWidget {
             AppStyle.vGap12,
             _buildCard(
               context,
-              title: "账号与同步",
               children: [
                 ListTile(
                   leading: const Icon(Remix.account_circle_line),
@@ -153,7 +152,6 @@ class MinePage extends StatelessWidget {
                     Get.toNamed(RoutePath.kSettingsAccount);
                   },
                 ),
-                const Divider(height: 1, indent: 56, endIndent: 12),
                 ListTile(
                   leading: const Icon(Icons.devices),
                   title: const Text("数据同步"),
@@ -170,7 +168,6 @@ class MinePage extends StatelessWidget {
             AppStyle.vGap12,
             _buildCard(
               context,
-              title: "内容与工具",
               children: [
                 ListTile(
                   leading: const Icon(Icons.playlist_play),
@@ -183,7 +180,6 @@ class MinePage extends StatelessWidget {
                     Get.to(() => const CustomSourceListPage());
                   },
                 ),
-                const Divider(height: 1, indent: 56, endIndent: 12),
                 ListTile(
                   leading: const Icon(Icons.movie_outlined),
                   title: const Text("NAS影视库"),
@@ -195,7 +191,6 @@ class MinePage extends StatelessWidget {
                     Get.to(() => const FnOsListPage());
                   },
                 ),
-                const Divider(height: 1, indent: 56, endIndent: 12),
                 ListTile(
                   leading: const Icon(Remix.link),
                   title: const Text("链接解析"),
@@ -212,7 +207,6 @@ class MinePage extends StatelessWidget {
             AppStyle.vGap12,
             _buildCard(
               context,
-              title: "设置",
               children: [
                 ListTile(
                   leading: const Icon(Remix.moon_line),
@@ -225,7 +219,6 @@ class MinePage extends StatelessWidget {
                     Get.toNamed(RoutePath.kAppstyleSetting);
                   },
                 ),
-                const Divider(height: 1, indent: 56, endIndent: 12),
                 ListTile(
                   leading: const Icon(Remix.home_2_line),
                   title: const Text("主页设置"),
@@ -237,7 +230,6 @@ class MinePage extends StatelessWidget {
                     Get.toNamed(RoutePath.kSettingsIndexed);
                   },
                 ),
-                const Divider(height: 1, indent: 56, endIndent: 12),
                 ListTile(
                   leading: const Icon(Remix.play_circle_line),
                   title: const Text("直播间设置"),
@@ -249,7 +241,6 @@ class MinePage extends StatelessWidget {
                     Get.toNamed(RoutePath.kSettingsPlay);
                   },
                 ),
-                const Divider(height: 1, indent: 56, endIndent: 12),
                 ListTile(
                   leading: const Icon(Icons.tune),
                   title: const Text("播放页设置"),
@@ -261,7 +252,6 @@ class MinePage extends StatelessWidget {
                     Get.toNamed(RoutePath.kSettingsPlaybackPage);
                   },
                 ),
-                const Divider(height: 1, indent: 56, endIndent: 12),
                 if (PlatformUtils.supportsInlineMultiRoom)
                   ListTile(
                     leading: const Icon(Remix.layout_grid_line),
@@ -275,7 +265,6 @@ class MinePage extends StatelessWidget {
                     },
                   ),
                 if (PlatformUtils.supportsInlineMultiRoom)
-                  const Divider(height: 1, indent: 56, endIndent: 12),
                 ListTile(
                   leading: const Icon(Remix.text),
                   title: const Text("弹幕设置"),
@@ -287,7 +276,6 @@ class MinePage extends StatelessWidget {
                     Get.toNamed(RoutePath.kSettingsDanmu);
                   },
                 ),
-                const Divider(height: 1, indent: 56, endIndent: 12),
                 ListTile(
                   leading: const Icon(Remix.heart_line),
                   title: const Text("关注设置"),
@@ -299,7 +287,6 @@ class MinePage extends StatelessWidget {
                     Get.toNamed(RoutePath.kSettingsFollow);
                   },
                 ),
-                const Divider(height: 1, indent: 56, endIndent: 12),
                 ListTile(
                   leading: const Icon(Remix.timer_2_line),
                   title: const Text("定时关闭"),
@@ -311,7 +298,6 @@ class MinePage extends StatelessWidget {
                     Get.toNamed(RoutePath.kSettingsAutoExit);
                   },
                 ),
-                const Divider(height: 1, indent: 56, endIndent: 12),
                 ListTile(
                   leading: const Icon(Remix.apps_line),
                   title: const Text("其他设置"),
@@ -334,21 +320,11 @@ class MinePage extends StatelessWidget {
   Widget _buildCard(
     BuildContext context, {
     required List<Widget> children,
-    String? title,
   }) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (title != null) ...[
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
-            child: Text(
-              title,
-              style: Get.textTheme.titleSmall,
-            ),
-          ),
-        ],
         Theme(
           data: Theme.of(context).copyWith(
             listTileTheme: ListTileThemeData(
