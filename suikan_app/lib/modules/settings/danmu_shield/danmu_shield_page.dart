@@ -47,8 +47,7 @@ class DanmuShieldPage extends GetView<DanmuShieldController> {
               Obx(
                 () => SettingsSwitch(
                   title: "启用弹幕屏蔽",
-                  subtitle: "关闭后，关键词和用户屏蔽都会暂时失效",
-                  value: settings.danmuShieldEnable.value,
+                                    value: settings.danmuShieldEnable.value,
                   onChanged: settings.setDanmuShieldEnable,
                 ),
               ),
@@ -64,8 +63,7 @@ class DanmuShieldPage extends GetView<DanmuShieldController> {
               Obx(
                 () => SettingsSwitch(
                   title: "启用用户屏蔽",
-                  subtitle: "可按平台分别管理，也可在直播间点击用户名快速处理",
-                  value: settings.danmuUserShieldEnable.value,
+                                    value: settings.danmuUserShieldEnable.value,
                   onChanged: settings.setDanmuUserShieldEnable,
                 ),
               ),

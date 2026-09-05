@@ -73,7 +73,8 @@ class PlaybackPageSettingsPage extends GetView<IndexedSettingsController> {
                       key: ValueKey("quick_$key"),
                       leading: Icon(item.iconData),
                       title: Text(item.title),
-                      subtitle: Text(item.subtitle),
+                      subtitle:
+                          item.subtitle == null ? null : Text(item.subtitle!),
                       visualDensity: VisualDensity.compact,
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,

@@ -71,8 +71,7 @@ class OtherSettingsPage extends GetView<OtherSettingsController> {
                   value: AppSettingsController
                       .instance.rememberWindowPlacement.value,
                   title: "记住窗口大小和位置",
-                  subtitle: "开启后恢复上次普通窗口位置和最大化状态",
-                  onChanged:
+                                    onChanged:
                       AppSettingsController.instance.setRememberWindowPlacement,
                 ),
               ),
@@ -241,7 +240,7 @@ class OtherSettingsPage extends GetView<OtherSettingsController> {
                   () => SettingsSwitch(
                     value: AppSettingsController.instance.logEnable.value,
                     title: "开启日志记录",
-                    subtitle: "开启后将记录调试日志，可以将日志文件提供给开发者用于排查问题",
+                    subtitle: "记录调试日志供开发者排查问题",
                     onChanged: controller.setLogEnable,
                   ),
                 ),

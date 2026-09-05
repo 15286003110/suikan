@@ -59,8 +59,7 @@ class AccountController extends GetxController {
             child: ListTile(
               leading: const Icon(Icons.account_circle_outlined),
               title: const Text("Web登录"),
-              subtitle: const Text("填写用户名密码登录"),
-              trailing: const Icon(Icons.chevron_right),
+                            trailing: const Icon(Icons.chevron_right),
               onTap: () {
                 Get.back();
                 Get.toNamed(RoutePath.kBiliBiliWebLogin);
@@ -70,8 +69,7 @@ class AccountController extends GetxController {
           ListTile(
             leading: const Icon(Icons.qr_code),
             title: const Text("扫码登录"),
-            subtitle: const Text("使用哔哩哔哩APP扫描二维码登录"),
-            trailing: const Icon(Icons.chevron_right),
+                        trailing: const Icon(Icons.chevron_right),
             onTap: () {
               Get.back();
               Get.toNamed(RoutePath.kBiliBiliQRLogin);
@@ -80,8 +78,7 @@ class AccountController extends GetxController {
           ListTile(
             leading: const Icon(Icons.edit_outlined),
             title: const Text("Cookie登录"),
-            subtitle: const Text("手动输入Cookie登录"),
-            trailing: const Icon(Icons.chevron_right),
+                        trailing: const Icon(Icons.chevron_right),
             onTap: () {
               Get.back();
               doBiliBiliCookieLogin();
@@ -134,8 +131,7 @@ class AccountController extends GetxController {
           ListTile(
             leading: const Icon(Icons.edit_outlined),
             title: const Text("Cookie登录"),
-            subtitle: const Text("手动粘贴自己的 www.douyin.com 完整 Cookie"),
-            trailing: const Icon(Icons.chevron_right),
+                        trailing: const Icon(Icons.chevron_right),
             onTap: () {
               Get.back();
               doDouyinCookieConfig();
@@ -145,8 +141,7 @@ class AccountController extends GetxController {
             ListTile(
               leading: const Icon(Icons.visibility_outlined),
               title: const Text("查看当前 Cookie"),
-              subtitle: const Text("可直接查看当前保存内容"),
-              trailing: const Icon(Icons.chevron_right),
+                            trailing: const Icon(Icons.chevron_right),
               onTap: () {
                 Get.back();
                 showCurrentDouyinCookie();
@@ -156,8 +151,7 @@ class AccountController extends GetxController {
             ListTile(
               leading: const Icon(Icons.copy_all_outlined),
               title: const Text("导出到剪贴板"),
-              subtitle: const Text("复制当前 Cookie 文本"),
-              trailing: const Icon(Icons.chevron_right),
+                            trailing: const Icon(Icons.chevron_right),
               onTap: () {
                 Get.back();
                 exportDouyinCookieToClipboard();
@@ -167,8 +161,7 @@ class AccountController extends GetxController {
             ListTile(
               leading: const Icon(Icons.file_open_outlined),
               title: const Text("从文件导入 Cookie"),
-              subtitle: const Text("选择电脑传到手机上的 txt/cookie 文件"),
-              trailing: const Icon(Icons.chevron_right),
+                            trailing: const Icon(Icons.chevron_right),
               onTap: () async {
                 Get.back();
                 await importDouyinCookieFromFile();
@@ -245,8 +238,7 @@ class AccountController extends GetxController {
             ListTile(
               leading: const Icon(Icons.visibility_outlined),
               title: const Text("查看当前 Cookie"),
-              subtitle: const Text("可直接查看当前保存内容"),
-              trailing: const Icon(Icons.chevron_right),
+                            trailing: const Icon(Icons.chevron_right),
               onTap: () {
                 Get.back();
                 showCurrentKuaishouCookie();
@@ -256,8 +248,7 @@ class AccountController extends GetxController {
             ListTile(
               leading: const Icon(Icons.copy_all_outlined),
               title: const Text("导出到剪贴板"),
-              subtitle: const Text("复制当前 Cookie 文本"),
-              trailing: const Icon(Icons.chevron_right),
+                            trailing: const Icon(Icons.chevron_right),
               onTap: () {
                 Get.back();
                 exportKuaishouCookieToClipboard();
@@ -267,8 +258,7 @@ class AccountController extends GetxController {
             ListTile(
               leading: const Icon(Icons.file_open_outlined),
               title: const Text("从文件导入 Cookie"),
-              subtitle: const Text("选择电脑传到手机上的 txt/cookie 文件"),
-              trailing: const Icon(Icons.chevron_right),
+                            trailing: const Icon(Icons.chevron_right),
               onTap: () async {
                 Get.back();
                 await importKuaishouCookieFromFile();

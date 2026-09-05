@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
@@ -132,8 +131,7 @@ class MinePage extends StatelessWidget {
             ListTile(
               leading: const Icon(Icons.playlist_play),
               title: const Text("自定义直播源"),
-              subtitle: const Text("导入 M3U 直播源，自由观看"),
-              trailing: const Icon(
+                            trailing: const Icon(
                 Icons.chevron_right,
                 color: Colors.grey,
               ),
@@ -149,8 +147,7 @@ class MinePage extends StatelessWidget {
             ListTile(
               leading: const Icon(Icons.movie_outlined),
               title: const Text("NAS影视库"),
-              subtitle: const Text("添加飞牛影视，浏览并播放 NAS 里的视频"),
-              trailing: const Icon(
+                            trailing: const Icon(
                 Icons.chevron_right,
                 color: Colors.grey,
               ),

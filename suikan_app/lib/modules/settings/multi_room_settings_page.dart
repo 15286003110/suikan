@@ -27,8 +27,7 @@ class MultiRoomSettingsPage extends GetView<AppSettingsController> {
                 Obx(
                   () => SettingsSwitch(
                     title: "默认收起聊天区",
-                    subtitle: "从关注页多开时，独立直播窗口默认只保留展开按钮",
-                    value: controller.multiRoomCollapseChat.value,
+                                        value: controller.multiRoomCollapseChat.value,
                     onChanged: controller.setMultiRoomCollapseChat,
                   ),
                 ),

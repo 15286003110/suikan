@@ -1368,8 +1368,7 @@ class LiveRoomPage extends GetView<LiveRoomController> {
               Obx(
                 () => SettingsSwitch(
                   title: "重点动态",
-                  subtitle: "汇总短时间内重复较多的弹幕内容",
-                  value:
+                                    value:
                       AppSettingsController.instance.liveEventFlowEnable.value,
                   onChanged: (e) {
                     AppSettingsController.instance.setLiveEventFlowEnable(e);
@@ -1383,8 +1382,7 @@ class LiveRoomPage extends GetView<LiveRoomController> {
               Obx(
                 () => SettingsSwitch(
                   title: "全屏显示重点动态",
-                  subtitle: "在播放器全屏时显示当前重复弹幕摘要",
-                  value: AppSettingsController
+                                    value: AppSettingsController
                       .instance.liveEventFlowOverlayEnable.value,
                   onChanged: AppSettingsController
                       .instance.setLiveEventFlowOverlayEnable,
@@ -1526,8 +1524,7 @@ class LiveRoomPage extends GetView<LiveRoomController> {
                     title: controller.site.id == Constant.kDouyu
                         ? "显示亲密榜"
                         : "显示贡献榜",
-                    subtitle: "关闭后会隐藏排行榜标签页，降低对官方功能的替代感",
-                    value: AppSettingsController
+                                        value: AppSettingsController
                         .instance.contributionRankEnable.value,
                     onChanged: (e) {
                       AppSettingsController.instance
@@ -1647,8 +1644,7 @@ class LiveRoomPage extends GetView<LiveRoomController> {
               () => SwitchListTile(
                 secondary: const Icon(Icons.headphones_outlined),
                 title: const Text("后台播放"),
-                subtitle: const Text("关闭后退到后台/锁屏立即暂停"),
-                value: AppSettingsController
+                                value: AppSettingsController
                     .instance.allowBackgroundPlayback.value,
                 onChanged: (v) {
                   AppSettingsController.instance

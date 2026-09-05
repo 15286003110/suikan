@@ -478,16 +478,14 @@ class FollowUserPage extends GetView<FollowUserController> {
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
                     title: const Text("展示直播封面"),
-                    subtitle: const Text("开启后显示直播间封面图；关闭时只显示主播头像和信息"),
-                    value: settings.followShowLiveCover.value,
+                                        value: settings.followShowLiveCover.value,
                     onChanged: controller.setShowLiveCover,
                   ),
                   const SizedBox(height: 8),
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
                     title: const Text("仅显示开播"),
-                    subtitle: const Text("在当前平台/状态分组结果上再只保留已开播主播"),
-                    value: settings.followOnlyLive.value,
+                                        value: settings.followOnlyLive.value,
                     onChanged: controller.setOnlyLive,
                   ),
                   SwitchListTile(

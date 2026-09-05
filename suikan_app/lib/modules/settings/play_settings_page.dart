@@ -1,18 +1,13 @@
 import 'dart:io';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/get.dart';
-import 'package:path/path.dart' as p;
 import 'package:simple_live_app/app/app_style.dart';
 import 'package:simple_live_app/app/controller/app_settings_controller.dart';
-import 'package:simple_live_app/widgets/settings/settings_action.dart';
 import 'package:simple_live_app/widgets/settings/settings_card.dart';
 import 'package:simple_live_app/widgets/settings/settings_menu.dart';
 import 'package:simple_live_app/widgets/settings/settings_number.dart';
 import 'package:simple_live_app/widgets/settings/settings_switch.dart';
-import 'package:url_launcher/url_launcher_string.dart';
 
 class PlaySettingsPage extends GetView<AppSettingsController> {
   const PlaySettingsPage({Key? key}) : super(key: key);
@@ -41,9 +36,6 @@ class PlaySettingsPage extends GetView<AppSettingsController> {
                   () => SettingsSwitch(
                     title: Platform.isIOS ? "硬件加速" : "硬件解码",
                     value: controller.hardwareDecode.value,
-                    subtitle: Platform.isIOS
-                        ? "建议保持开启；关闭后更耗电，仅在排查黑屏时临时使用"
-                        : "播放失败可尝试关闭此选项",
                     onChanged: (e) {
                       controller.setHardwareDecode(e);
                     },
@@ -53,8 +45,7 @@ class PlaySettingsPage extends GetView<AppSettingsController> {
                 if (Platform.isIOS)
                   Obx(
                     () => SettingsSwitch(
-                      title: "原画省电优化",
-                      subtitle: "限制渲染纹理以省电（大屏设备可能降低清晰度）；异常或画质不合预期时可关闭",
+                      title: "省电模式(降低清晰度)",
                       value: controller.iosOriginalQualityPowerSaving.value,
                       onChanged: controller.setIosOriginalQualityPowerSaving,
                     ),
@@ -64,8 +55,7 @@ class PlaySettingsPage extends GetView<AppSettingsController> {
                   () => Visibility(
                     visible: Platform.isAndroid,
                     child: SettingsSwitch(
-                      title: "兼容模式",
-                      subtitle: "若播放卡顿可尝试打开此选项",
+                      title: "卡顿兼容模式",
                       value: controller.playerCompatMode.value,
                       onChanged: (e) {
                         controller.setPlayerCompatMode(e);
@@ -77,8 +67,6 @@ class PlaySettingsPage extends GetView<AppSettingsController> {
                 Obx(
                   () => SettingsSwitch(
                     title: "后台播放",
-                    subtitle: "关闭后退到后台/锁屏立即暂停；开启则后台继续播"
-                        "（30 秒后自动停画面省电）",
                     value: controller.allowBackgroundPlayback.value,
                     onChanged: (e) {
                       controller.setAllowBackgroundPlayback(e);
@@ -120,8 +108,7 @@ class PlaySettingsPage extends GetView<AppSettingsController> {
                 AppStyle.divider,
                 Obx(
                   () => SettingsSwitch(
-                    title: "使用HTTPS链接",
-                    subtitle: "将http链接替换为https",
+                    title: "强制 HTTPS 播放",
                     value: controller.playerForceHttps.value,
                     onChanged: (e) {
                       controller.setPlayerForceHttps(e);
@@ -132,7 +119,6 @@ class PlaySettingsPage extends GetView<AppSettingsController> {
                 Obx(
                   () => SettingsSwitch(
                     title: "滑动调节音量/亮度",
-                    subtitle: "播放页左右两侧上下滑动调节亮度和音量",
                     value: controller.playerGestureControlEnable.value,
                     onChanged: (e) {
                       controller.setPlayerGestureControlEnable(e);
@@ -166,7 +152,6 @@ class PlaySettingsPage extends GetView<AppSettingsController> {
                 Obx(
                   () => SettingsSwitch(
                     title: "关播后自动换下一个直播间",
-                    subtitle: "当前房间确认已下播后，自动切到关注列表里下一个正在直播的房间",
                     value: controller.autoSwitchNextOnLiveEnd.value,
                     onChanged: (e) {
                       controller.setAutoSwitchNextOnLiveEnd(e);
@@ -177,7 +162,6 @@ class PlaySettingsPage extends GetView<AppSettingsController> {
                 Obx(
                   () => SettingsSwitch(
                     title: "播放失败后自动换下一个直播间",
-                    subtitle: "当前房间重试和线路切换都失败后，自动切到下一个正在直播的房间",
                     value: controller.autoSwitchNextOnPlaybackFailure.value,
                     onChanged: (e) {
                       controller.setAutoSwitchNextOnPlaybackFailure(e);
@@ -202,8 +186,7 @@ class PlaySettingsPage extends GetView<AppSettingsController> {
                   () => Visibility(
                     visible: Platform.isAndroid,
                     child: SettingsSwitch(
-                      title: "退出时自动小窗",
-                      subtitle: "按 Home 键或系统手势退到后台时进入小窗；应用内返回仍回到主页",
+                      title: "退后台自动小窗",
                       value: controller.autoPipOnExit.value,
                       onChanged: (e) {
                         controller.setAutoPipOnExit(e);

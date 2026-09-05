@@ -124,8 +124,7 @@ class DanmuSettingsView extends GetView<AppSettingsController> {
               Obx(
                 () => SettingsSwitch(
                   title: "启用弹幕屏蔽",
-                  subtitle: "关闭后，关键词和用户屏蔽都会暂时失效",
-                  value: controller.danmuShieldEnable.value,
+                                    value: controller.danmuShieldEnable.value,
                   onChanged: controller.setDanmuShieldEnable,
                 ),
               ),
@@ -141,8 +140,7 @@ class DanmuSettingsView extends GetView<AppSettingsController> {
               Obx(
                 () => SettingsSwitch(
                   title: "启用用户屏蔽",
-                  subtitle: "也可以在直播间点击用户名，快速屏蔽或取消屏蔽",
-                  value: controller.danmuUserShieldEnable.value,
+                                    value: controller.danmuUserShieldEnable.value,
                   onChanged: controller.setDanmuUserShieldEnable,
                 ),
               ),
@@ -168,7 +166,7 @@ class DanmuSettingsView extends GetView<AppSettingsController> {
             children: [
               Obx(
                 () => SettingsSwitch(
-                  title: "默认开启",
+                  title: "显示弹幕",
                   value: controller.danmuEnable.value,
                   onChanged: controller.setDanmuEnable,
                 ),
@@ -185,8 +183,7 @@ class DanmuSettingsView extends GetView<AppSettingsController> {
               Obx(
                 () => SettingsSwitch(
                   title: "重点动态",
-                  subtitle: "汇总短时间内重复较多的弹幕内容",
-                  value: controller.liveEventFlowEnable.value,
+                                    value: controller.liveEventFlowEnable.value,
                   onChanged: controller.setLiveEventFlowEnable,
                 ),
               ),
@@ -194,8 +191,7 @@ class DanmuSettingsView extends GetView<AppSettingsController> {
               Obx(
                 () => SettingsSwitch(
                   title: "全屏显示重点动态",
-                  subtitle: "在播放器全屏时显示当前重复弹幕摘要",
-                  value: controller.liveEventFlowOverlayEnable.value,
+                                    value: controller.liveEventFlowOverlayEnable.value,
                   onChanged: controller.setLiveEventFlowOverlayEnable,
                 ),
               ),

@@ -49,7 +49,6 @@ class Constant {
     "event_flow": LiveRoomTabItem(
       iconData: Remix.pulse_line,
       title: "动态",
-      subtitle: "展示短时间内重复较多的弹幕内容",
     ),
     "settings": LiveRoomTabItem(
       iconData: Remix.settings_3_line,
@@ -61,17 +60,14 @@ class Constant {
     "follow": LiveRoomQuickAccessItem(
       iconData: Remix.play_list_2_line,
       title: "关注列表",
-      subtitle: "快速切到已关注的直播间",
     ),
     "history": LiveRoomQuickAccessItem(
       iconData: Remix.history_line,
       title: "观看历史",
-      subtitle: "打开已经看过的直播间记录",
     ),
     "recommendation": LiveRoomQuickAccessItem(
       iconData: Remix.apps_2_line,
       title: "同类推荐",
-      subtitle: "按当前分区查找相似直播间",
     ),
     "contribution_rank": LiveRoomQuickAccessItem(
       iconData: Remix.bar_chart_grouped_line,
@@ -113,11 +109,11 @@ class LiveRoomTabItem {
 class LiveRoomQuickAccessItem {
   final IconData iconData;
   final String title;
-  final String subtitle;
+  final String? subtitle;
 
   LiveRoomQuickAccessItem({
     required this.iconData,
     required this.title,
-    required this.subtitle,
+    this.subtitle,
   });
 }
