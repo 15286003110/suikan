@@ -1364,7 +1364,39 @@ class LiveRoomPage extends GetView<LiveRoomController> {
                   },
                 ),
               ),
-              AppStyle.divider,
+              if (controller.supportsContributionRank) ...[
+                AppStyle.divider,
+                Obx(
+                  () => SettingsSwitch(
+                    title: controller.site.id == Constant.kDouyu
+                        ? "显示亲密榜"
+                        : "显示贡献榜",
+                                        value: AppSettingsController
+                        .instance.contributionRankEnable.value,
+                    onChanged: (e) {
+                      AppSettingsController.instance
+                          .setContributionRankEnable(e);
+                      if (e) {
+                        controller.fetchContributionRank(forceRefresh: true);
+                      }
+                    },
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        Padding(
+          padding: AppStyle.edgeInsetsA12,
+          child: Text(
+            "重点动态",
+            style: Get.textTheme.titleSmall,
+          ),
+        ),
+        SettingsCard(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
               Obx(
                 () => SettingsSwitch(
                   title: "重点动态",
@@ -1444,7 +1476,20 @@ class LiveRoomPage extends GetView<LiveRoomController> {
                       AppSettingsController.instance.setLiveEventFlowLimit,
                 ),
               ),
-              AppStyle.divider,
+            ],
+          ),
+        ),
+        Padding(
+          padding: AppStyle.edgeInsetsA12,
+          child: Text(
+            "过滤",
+            style: Get.textTheme.titleSmall,
+          ),
+        ),
+        SettingsCard(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
               Obx(
                 () => SettingsSwitch(
                   title: "重复弹幕过滤",
@@ -1495,6 +1540,7 @@ class LiveRoomPage extends GetView<LiveRoomController> {
                   },
                 );
               }),
+              AppStyle.divider,
               Obx(() {
                 if (AppSettingsController.instance.danmuDedupeStrictMode) {
                   return const SizedBox.shrink();
@@ -1517,25 +1563,6 @@ class LiveRoomPage extends GetView<LiveRoomController> {
                   ],
                 );
               }),
-              if (controller.supportsContributionRank) ...[
-                AppStyle.divider,
-                Obx(
-                  () => SettingsSwitch(
-                    title: controller.site.id == Constant.kDouyu
-                        ? "显示亲密榜"
-                        : "显示贡献榜",
-                                        value: AppSettingsController
-                        .instance.contributionRankEnable.value,
-                    onChanged: (e) {
-                      AppSettingsController.instance
-                          .setContributionRankEnable(e);
-                      if (e) {
-                        controller.fetchContributionRank(forceRefresh: true);
-                      }
-                    },
-                  ),
-                ),
-              ],
             ],
           ),
         ),

@@ -66,48 +66,6 @@ class PlaySettingsPage extends GetView<AppSettingsController> {
                 AppStyle.divider,
                 Obx(
                   () => SettingsSwitch(
-                    title: "后台播放",
-                    value: controller.allowBackgroundPlayback.value,
-                    onChanged: (e) {
-                      controller.setAllowBackgroundPlayback(e);
-                    },
-                  ),
-                ),
-                // AppStyle.divider,
-                // Obx(
-                //   () => SettingsNumber(
-                //     title: "缓冲区大小",
-                //     subtitle: "若播放卡顿可尝试调高此选项",
-                //     value: controller.playerBufferSize.value,
-                //     min: 32,
-                //     max: 1024,
-                //     step: 4,
-                //     unit: "MB",
-                //     onChanged: (e) {
-                //       controller.setPlayerBufferSize(e);
-                //     },
-                //   ),
-                // ),
-                AppStyle.divider,
-                Obx(
-                  () => SettingsMenu<int>(
-                    title: "画面尺寸",
-                    value: controller.scaleMode.value,
-                    valueMap: const {
-                      0: "适应",
-                      1: "拉伸",
-                      2: "铺满",
-                      3: "16:9",
-                      4: "4:3",
-                    },
-                    onChanged: (e) {
-                      controller.setScaleMode(e);
-                    },
-                  ),
-                ),
-                AppStyle.divider,
-                Obx(
-                  () => SettingsSwitch(
                     title: "强制 HTTPS 播放",
                     value: controller.playerForceHttps.value,
                     onChanged: (e) {
@@ -115,13 +73,36 @@ class PlaySettingsPage extends GetView<AppSettingsController> {
                     },
                   ),
                 ),
-                AppStyle.divider,
+              ],
+            ),
+          ),
+          Padding(
+            padding: AppStyle.edgeInsetsA12.copyWith(top: 24),
+            child: Text(
+              "手势与全屏",
+              style: Get.textTheme.titleSmall,
+            ),
+          ),
+          SettingsCard(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
                 Obx(
                   () => SettingsSwitch(
                     title: "滑动调节音量/亮度",
                     value: controller.playerGestureControlEnable.value,
                     onChanged: (e) {
                       controller.setPlayerGestureControlEnable(e);
+                    },
+                  ),
+                ),
+                AppStyle.divider,
+                Obx(
+                  () => SettingsSwitch(
+                    title: "进入直播间自动全屏",
+                    value: controller.autoFullScreen.value,
+                    onChanged: (e) {
+                      controller.setAutoFullScreen(e);
                     },
                   ),
                 ),
@@ -139,16 +120,6 @@ class PlaySettingsPage extends GetView<AppSettingsController> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Obx(
-                  () => SettingsSwitch(
-                    title: "进入直播间自动全屏",
-                    value: controller.autoFullScreen.value,
-                    onChanged: (e) {
-                      controller.setAutoFullScreen(e);
-                    },
-                  ),
-                ),
-                AppStyle.divider,
                 Obx(
                   () => SettingsSwitch(
                     title: "关播后自动换下一个直播间",
@@ -170,32 +141,6 @@ class PlaySettingsPage extends GetView<AppSettingsController> {
                 ),
                 AppStyle.divider,
                 Obx(
-                  () => Visibility(
-                    visible: Platform.isAndroid,
-                    child: SettingsSwitch(
-                      title: "进入小窗隐藏弹幕",
-                      value: controller.pipHideDanmu.value,
-                      onChanged: (e) {
-                        controller.setPIPHideDanmu(e);
-                      },
-                    ),
-                  ),
-                ),
-                if (Platform.isAndroid) AppStyle.divider,
-                Obx(
-                  () => Visibility(
-                    visible: Platform.isAndroid,
-                    child: SettingsSwitch(
-                      title: "退后台自动小窗",
-                      value: controller.autoPipOnExit.value,
-                      onChanged: (e) {
-                        controller.setAutoPipOnExit(e);
-                      },
-                    ),
-                  ),
-                ),
-                AppStyle.divider,
-                Obx(
                   () => SettingsSwitch(
                     title: "播放器中显示SC",
                     value: controller.playershowSuperChat.value,
@@ -210,12 +155,58 @@ class PlaySettingsPage extends GetView<AppSettingsController> {
           Padding(
             padding: AppStyle.edgeInsetsA12.copyWith(top: 24),
             child: Text(
-              "清晰度",
+              "后台与小窗",
               style: Get.textTheme.titleSmall,
             ),
           ),
           SettingsCard(
             child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Obx(
+                  () => SettingsSwitch(
+                    title: "后台播放",
+                    value: controller.allowBackgroundPlayback.value,
+                    onChanged: (e) {
+                      controller.setAllowBackgroundPlayback(e);
+                    },
+                  ),
+                ),
+                if (Platform.isAndroid) AppStyle.divider,
+                if (Platform.isAndroid)
+                  Obx(
+                    () => SettingsSwitch(
+                      title: "退后台自动小窗",
+                      value: controller.autoPipOnExit.value,
+                      onChanged: (e) {
+                        controller.setAutoPipOnExit(e);
+                      },
+                    ),
+                  ),
+                if (Platform.isAndroid) AppStyle.divider,
+                if (Platform.isAndroid)
+                  Obx(
+                    () => SettingsSwitch(
+                      title: "进入小窗隐藏弹幕",
+                      value: controller.pipHideDanmu.value,
+                      onChanged: (e) {
+                        controller.setPIPHideDanmu(e);
+                      },
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: AppStyle.edgeInsetsA12.copyWith(top: 24),
+            child: Text(
+              "清晰度与画面",
+              style: Get.textTheme.titleSmall,
+            ),
+          ),
+          SettingsCard(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Obx(
                   () => SettingsMenu<int>(
@@ -243,6 +234,23 @@ class PlaySettingsPage extends GetView<AppSettingsController> {
                     },
                     onChanged: (e) {
                       controller.setQualityLevelCellular(e);
+                    },
+                  ),
+                ),
+                AppStyle.divider,
+                Obx(
+                  () => SettingsMenu<int>(
+                    title: "画面尺寸",
+                    value: controller.scaleMode.value,
+                    valueMap: const {
+                      0: "适应",
+                      1: "拉伸",
+                      2: "铺满",
+                      3: "16:9",
+                      4: "4:3",
+                    },
+                    onChanged: (e) {
+                      controller.setScaleMode(e);
                     },
                   ),
                 ),
@@ -301,4 +309,3 @@ class PlaySettingsPage extends GetView<AppSettingsController> {
     );
   }
 }
-

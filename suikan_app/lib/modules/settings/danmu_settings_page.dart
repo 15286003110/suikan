@@ -179,7 +179,20 @@ class DanmuSettingsView extends GetView<AppSettingsController> {
                   onChanged: controller.setDanmuRenderEmoji,
                 ),
               ),
-              AppStyle.divider,
+            ],
+          ),
+        ),
+        Padding(
+          padding: AppStyle.edgeInsetsA12.copyWith(top: 24),
+          child: Text(
+            "重点动态",
+            style: Get.textTheme.titleSmall,
+          ),
+        ),
+        SettingsCard(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
               Obx(
                 () => SettingsSwitch(
                   title: "重点动态",
@@ -243,7 +256,20 @@ class DanmuSettingsView extends GetView<AppSettingsController> {
                   onChanged: controller.setLiveEventFlowLimit,
                 ),
               ),
-              AppStyle.divider,
+            ],
+          ),
+        ),
+        Padding(
+          padding: AppStyle.edgeInsetsA12.copyWith(top: 24),
+          child: Text(
+            "过滤",
+            style: Get.textTheme.titleSmall,
+          ),
+        ),
+        SettingsCard(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
               Obx(
                 () => SettingsSwitch(
                   title: "重复弹幕过滤",
@@ -289,6 +315,7 @@ class DanmuSettingsView extends GetView<AppSettingsController> {
                   },
                 );
               }),
+              AppStyle.divider,
               Obx(() {
                 if (controller.danmuDedupeStrictMode) {
                   return const SizedBox.shrink();
@@ -308,7 +335,20 @@ class DanmuSettingsView extends GetView<AppSettingsController> {
                   ],
                 );
               }),
-              AppStyle.divider,
+            ],
+          ),
+        ),
+        Padding(
+          padding: AppStyle.edgeInsetsA12.copyWith(top: 24),
+          child: Text(
+            "样式",
+            style: Get.textTheme.titleSmall,
+          ),
+        ),
+        SettingsCard(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
               Obx(
                 () => SettingsNumber(
                   title: "显示区域",
@@ -454,6 +494,7 @@ class DanmuSettingsView extends GetView<AppSettingsController> {
                   onChanged: (e) => controller.setDanmuDelayMs(e),
                 ),
               ),
+              AppStyle.divider,
               if (siteId != null) ...[
                 AppStyle.divider,
                 Obx(

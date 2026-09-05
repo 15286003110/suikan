@@ -14,6 +14,83 @@ import 'package:url_launcher/url_launcher_string.dart';
 class MinePage extends StatelessWidget {
   const MinePage({Key? key}) : super(key: key);
 
+  void _showAbout(BuildContext context) {
+    Get.dialog(
+      Dialog(
+        shape: RoundedRectangleBorder(borderRadius: AppStyle.radius12),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 24, 24, 12),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Image.asset(
+                    'assets/images/logo.png',
+                    width: 56,
+                    height: 56,
+                  ),
+                  AppStyle.vGap8,
+                  const Text(
+                    "随看",
+                    style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const Text(
+                    "随开随看 · 想看就看",
+                    style: TextStyle(color: Colors.grey, fontSize: 13),
+                  ),
+                  AppStyle.vGap4,
+                  Text(
+                    "Ver ${Utils.packageInfo.version}",
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.primary,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1, indent: 16, endIndent: 16),
+            ListTile(
+              dense: true,
+              leading: const Icon(Remix.error_warning_line),
+              title: const Text("免责声明"),
+              trailing: const Icon(
+                Icons.chevron_right,
+                color: Colors.grey,
+              ),
+              onTap: () {
+                Get.back();
+                Utils.showStatement();
+              },
+            ),
+            ListTile(
+              dense: true,
+              leading: const Icon(Remix.github_line),
+              title: const Text("开源主页"),
+              trailing: const Icon(
+                Icons.chevron_right,
+                color: Colors.grey,
+              ),
+              onTap: () {
+                Get.back();
+                launchUrlString(
+                  "https://github.com/mobingchong/suikan",
+                  mode: LaunchMode.externalApplication,
+                );
+              },
+            ),
+            AppStyle.vGap4,
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return AnnotatedRegion<SystemUiOverlayStyle>(
@@ -41,24 +118,9 @@ class MinePage extends StatelessWidget {
               ),
               subtitle: const Text("随开随看 · 想看就看"),
               trailing: const Icon(Icons.chevron_right),
-              onTap: () {
-                Get.dialog(AboutDialog(
-                  applicationIcon: Image.asset(
-                    'assets/images/logo.png',
-                    width: 48,
-                    height: 48,
-                  ),
-                  applicationName: "随看",
-                  applicationVersion: "随开随看 · 想看就看",
-                  applicationLegalese: "Ver ${Utils.packageInfo.version}",
-                ));
-              },
+              onTap: () => _showAbout(context),
             ),
-            Divider(
-              indent: 12,
-              endIndent: 12,
-              color: Colors.grey.withAlpha(25),
-            ),
+            AppStyle.vGap12,
             _buildCard(
               context,
               children: [
@@ -75,93 +137,82 @@ class MinePage extends StatelessWidget {
                 ),
               ],
             ),
-            Divider(
-              indent: 12,
-              endIndent: 12,
-              color: Colors.grey.withAlpha(25),
-            ),
-            ListTile(
-              leading: const Icon(Remix.account_circle_line),
-              title: const Text("账号管理"),
-              trailing: const Icon(
-                Icons.chevron_right,
-                color: Colors.grey,
-              ),
-              onTap: () {
-                Get.toNamed(RoutePath.kSettingsAccount);
-              },
-            ),
-            Divider(
-              indent: 12,
-              endIndent: 12,
-              color: Colors.grey.withAlpha(25),
-            ),
-            ListTile(
-              leading: const Icon(Icons.devices),
-              title: const Text("数据同步"),
-              trailing: const Icon(
-                Icons.chevron_right,
-                color: Colors.grey,
-              ),
-              onTap: () {
-                Get.toNamed(RoutePath.kSync);
-              },
-            ),
-            Divider(
-              indent: 12,
-              endIndent: 12,
-              color: Colors.grey.withAlpha(25),
-            ),
-            ListTile(
-              leading: const Icon(Remix.link),
-              title: const Text("链接解析"),
-              trailing: const Icon(
-                Icons.chevron_right,
-                color: Colors.grey,
-              ),
-              onTap: () {
-                Get.toNamed(RoutePath.kTools);
-              },
-            ),
-            Divider(
-              indent: 12,
-              endIndent: 12,
-              color: Colors.grey.withAlpha(25),
-            ),
-            ListTile(
-              leading: const Icon(Icons.playlist_play),
-              title: const Text("自定义直播源"),
-                            trailing: const Icon(
-                Icons.chevron_right,
-                color: Colors.grey,
-              ),
-              onTap: () {
-                Get.to(() => const CustomSourceListPage());
-              },
-            ),
-            Divider(
-              indent: 12,
-              endIndent: 12,
-              color: Colors.grey.withAlpha(25),
-            ),
-            ListTile(
-              leading: const Icon(Icons.movie_outlined),
-              title: const Text("NAS影视库"),
-                            trailing: const Icon(
-                Icons.chevron_right,
-                color: Colors.grey,
-              ),
-              onTap: () {
-                Get.to(() => const FnOsListPage());
-              },
-            ),
-            Divider(
-              indent: 12,
-              endIndent: 12,
-              color: Colors.grey.withAlpha(25),
-            ),
+            AppStyle.vGap12,
             _buildCard(
               context,
+              title: "账号与同步",
+              children: [
+                ListTile(
+                  leading: const Icon(Remix.account_circle_line),
+                  title: const Text("账号管理"),
+                  trailing: const Icon(
+                    Icons.chevron_right,
+                    color: Colors.grey,
+                  ),
+                  onTap: () {
+                    Get.toNamed(RoutePath.kSettingsAccount);
+                  },
+                ),
+                const Divider(height: 1, indent: 56, endIndent: 12),
+                ListTile(
+                  leading: const Icon(Icons.devices),
+                  title: const Text("数据同步"),
+                  trailing: const Icon(
+                    Icons.chevron_right,
+                    color: Colors.grey,
+                  ),
+                  onTap: () {
+                    Get.toNamed(RoutePath.kSync);
+                  },
+                ),
+              ],
+            ),
+            AppStyle.vGap12,
+            _buildCard(
+              context,
+              title: "内容与工具",
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.playlist_play),
+                  title: const Text("自定义直播源"),
+                  trailing: const Icon(
+                    Icons.chevron_right,
+                    color: Colors.grey,
+                  ),
+                  onTap: () {
+                    Get.to(() => const CustomSourceListPage());
+                  },
+                ),
+                const Divider(height: 1, indent: 56, endIndent: 12),
+                ListTile(
+                  leading: const Icon(Icons.movie_outlined),
+                  title: const Text("NAS影视库"),
+                  trailing: const Icon(
+                    Icons.chevron_right,
+                    color: Colors.grey,
+                  ),
+                  onTap: () {
+                    Get.to(() => const FnOsListPage());
+                  },
+                ),
+                const Divider(height: 1, indent: 56, endIndent: 12),
+                ListTile(
+                  leading: const Icon(Remix.link),
+                  title: const Text("链接解析"),
+                  trailing: const Icon(
+                    Icons.chevron_right,
+                    color: Colors.grey,
+                  ),
+                  onTap: () {
+                    Get.toNamed(RoutePath.kTools);
+                  },
+                ),
+              ],
+            ),
+            AppStyle.vGap12,
+            _buildCard(
+              context,
+              title: "设置",
               children: [
                 ListTile(
                   leading: const Icon(Remix.moon_line),
@@ -174,6 +225,7 @@ class MinePage extends StatelessWidget {
                     Get.toNamed(RoutePath.kAppstyleSetting);
                   },
                 ),
+                const Divider(height: 1, indent: 56, endIndent: 12),
                 ListTile(
                   leading: const Icon(Remix.home_2_line),
                   title: const Text("主页设置"),
@@ -185,6 +237,19 @@ class MinePage extends StatelessWidget {
                     Get.toNamed(RoutePath.kSettingsIndexed);
                   },
                 ),
+                const Divider(height: 1, indent: 56, endIndent: 12),
+                ListTile(
+                  leading: const Icon(Remix.play_circle_line),
+                  title: const Text("直播间设置"),
+                  trailing: const Icon(
+                    Icons.chevron_right,
+                    color: Colors.grey,
+                  ),
+                  onTap: () {
+                    Get.toNamed(RoutePath.kSettingsPlay);
+                  },
+                ),
+                const Divider(height: 1, indent: 56, endIndent: 12),
                 ListTile(
                   leading: const Icon(Icons.tune),
                   title: const Text("播放页设置"),
@@ -196,17 +261,7 @@ class MinePage extends StatelessWidget {
                     Get.toNamed(RoutePath.kSettingsPlaybackPage);
                   },
                 ),
-                ListTile(
-                  leading: const Icon(Remix.play_circle_line),
-                  title: const Text("直播设置"),
-                  trailing: const Icon(
-                    Icons.chevron_right,
-                    color: Colors.grey,
-                  ),
-                  onTap: () {
-                    Get.toNamed(RoutePath.kSettingsPlay);
-                  },
-                ),
+                const Divider(height: 1, indent: 56, endIndent: 12),
                 if (PlatformUtils.supportsInlineMultiRoom)
                   ListTile(
                     leading: const Icon(Remix.layout_grid_line),
@@ -219,6 +274,8 @@ class MinePage extends StatelessWidget {
                       Get.toNamed(RoutePath.kSettingsMultiRoom);
                     },
                   ),
+                if (PlatformUtils.supportsInlineMultiRoom)
+                  const Divider(height: 1, indent: 56, endIndent: 12),
                 ListTile(
                   leading: const Icon(Remix.text),
                   title: const Text("弹幕设置"),
@@ -230,6 +287,7 @@ class MinePage extends StatelessWidget {
                     Get.toNamed(RoutePath.kSettingsDanmu);
                   },
                 ),
+                const Divider(height: 1, indent: 56, endIndent: 12),
                 ListTile(
                   leading: const Icon(Remix.heart_line),
                   title: const Text("关注设置"),
@@ -241,6 +299,7 @@ class MinePage extends StatelessWidget {
                     Get.toNamed(RoutePath.kSettingsFollow);
                   },
                 ),
+                const Divider(height: 1, indent: 56, endIndent: 12),
                 ListTile(
                   leading: const Icon(Remix.timer_2_line),
                   title: const Text("定时关闭"),
@@ -252,6 +311,7 @@ class MinePage extends StatelessWidget {
                     Get.toNamed(RoutePath.kSettingsAutoExit);
                   },
                 ),
+                const Divider(height: 1, indent: 56, endIndent: 12),
                 ListTile(
                   leading: const Icon(Remix.apps_line),
                   title: const Text("其他设置"),
@@ -265,57 +325,43 @@ class MinePage extends StatelessWidget {
                 ),
               ],
             ),
-            Divider(
-              indent: 12,
-              endIndent: 12,
-              color: Colors.grey.withAlpha(25),
-            ),
-            _buildCard(
-              context,
-              children: [
-                const ListTile(
-                  leading: Icon(Remix.error_warning_line),
-                  title: Text("免责声明"),
-                  trailing: Icon(
-                    Icons.chevron_right,
-                    color: Colors.grey,
-                  ),
-                  onTap: Utils.showStatement,
-                ),
-                ListTile(
-                  leading: const Icon(Remix.github_line),
-                  title: const Text("开源主页"),
-                  trailing: const Icon(
-                    Icons.chevron_right,
-                    color: Colors.grey,
-                  ),
-                  onTap: () {
-                    launchUrlString(
-                      "https://github.com/mobingchong/suikan",
-                      mode: LaunchMode.externalApplication,
-                    );
-                  },
-                ),
-              ],
-            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildCard(BuildContext context, {required List<Widget> children}) {
-    return Theme(
-      data: Theme.of(context).copyWith(
-        listTileTheme: ListTileThemeData(
-          shape: RoundedRectangleBorder(borderRadius: AppStyle.radius8),
+  Widget _buildCard(
+    BuildContext context, {
+    required List<Widget> children,
+    String? title,
+  }) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (title != null) ...[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
+            child: Text(
+              title,
+              style: Get.textTheme.titleSmall,
+            ),
+          ),
+        ],
+        Theme(
+          data: Theme.of(context).copyWith(
+            listTileTheme: ListTileThemeData(
+              shape: RoundedRectangleBorder(borderRadius: AppStyle.radius8),
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: children,
+          ),
         ),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: children,
-      ),
+      ],
     );
   }
 }
