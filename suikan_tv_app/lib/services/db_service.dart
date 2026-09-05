@@ -682,7 +682,8 @@ class DBService extends GetxService {
   /// 历史只增不减（每次进直播间都新增或更新一条），不限量会让 Hive 箱无限
   /// 增长：启动要全量读出排序、备份快照体积随之变大（历史备份损坏时每份
   /// 都要等 openBox 超时，2026-08-31 白屏事故就是被多份历史备份拖成 140s）。
-  static const int kHistoryMaxCount = 100;
+  /// 50 条够日常回看（2026-09-05 用户反馈 100 太多）。
+  static const int kHistoryMaxCount = 50;
 
   Future addOrUpdateHistory(History history) async {
     await runExclusive(() async {
