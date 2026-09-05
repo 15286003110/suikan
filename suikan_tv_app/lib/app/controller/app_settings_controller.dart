@@ -36,9 +36,6 @@ class AppSettingsController extends GetxController {
   static const int kLiveEventFlowDefaultMinCount = 5;
   static const int kLiveEventFlowMinCount = 2;
   static const int kLiveEventFlowMaxCount = 100;
-  static const int kMultiRoomDefaultGap = 8;
-  static const int kMultiRoomMinGap = 0;
-  static const int kMultiRoomMaxGap = 24;
   static const List<int> kUpdateFollowThreadOptions = [
     0,
     1,
@@ -257,13 +254,6 @@ class AppSettingsController extends GetxController {
       LocalStorageService.kFollowShowLiveCover,
       false,
     );
-    multiRoomGap.value = _normalizeMultiRoomGap(
-      LocalStorageService.instance.getValue(
-        LocalStorageService.kMultiRoomGap,
-        kMultiRoomDefaultGap,
-      ),
-    );
-
     super.onInit();
 
     // 【音量记忆】启动 2 秒后恢复上次音量, 并开始轮询记录系统音量。
@@ -816,18 +806,4 @@ class AppSettingsController extends GetxController {
     );
   }
 
-  var multiRoomGap = kMultiRoomDefaultGap.obs;
-  int get effectiveMultiRoomGap => _normalizeMultiRoomGap(multiRoomGap.value);
-  void setMultiRoomGap(int value) {
-    final normalized = _normalizeMultiRoomGap(value);
-    multiRoomGap.value = normalized;
-    LocalStorageService.instance.setValue(
-      LocalStorageService.kMultiRoomGap,
-      normalized,
-    );
-  }
-
-  int _normalizeMultiRoomGap(int value) {
-    return value.clamp(kMultiRoomMinGap, kMultiRoomMaxGap).toInt();
-  }
 }
