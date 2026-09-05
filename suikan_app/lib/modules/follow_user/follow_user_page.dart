@@ -648,21 +648,12 @@ class FollowUserPage extends GetView<FollowUserController> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  '设置标签',
-                  style: TextStyle(fontSize: 18),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.check),
-                  onPressed: () {
-                    controller.setItemTag(item, checkTag.value);
-                    Get.back();
-                  },
-                ),
-              ],
+            const Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                '设置标签',
+                style: TextStyle(fontSize: 18),
+              ),
             ),
             const Divider(),
             Obx(
@@ -684,6 +675,10 @@ class FollowUserPage extends GetView<FollowUserController> {
                     groupValue: checkTag.value,
                     onChanged: (value) {
                       checkTag.value = value!;
+                      // 点选即生效：直接打标并关闭，无需再找右上角确认键
+                      // （用户实测反馈：要发现右上 ✓ 才生效，交互不直觉）。
+                      controller.setItemTag(item, value);
+                      Get.back();
                     },
                     child: ListView.builder(
                       controller: scrollController,
