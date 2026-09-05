@@ -3,17 +3,13 @@ import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:file_picker/file_picker.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/get.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:simple_live_app/app/constant.dart';
 import 'package:simple_live_app/app/controller/app_settings_controller.dart';
 import 'package:simple_live_app/app/event_bus.dart';
 import 'package:simple_live_app/app/log.dart';
 import 'package:simple_live_app/app/sites.dart';
-import 'package:simple_live_app/app/utils.dart';
 import 'package:simple_live_app/models/db/follow_user.dart';
 import 'package:simple_live_app/models/db/follow_user_tag.dart';
 import 'package:simple_live_app/services/bulk_data_import_service.dart';
@@ -1355,187 +1351,6 @@ class FollowService extends GetxService {
       sortFollowUsers(followList.where((x) => x.liveStatus.value != 2)),
     );
     _updatedListController.add(0);
-  }
-
-  void exportFile() async {
-    if (followList.isEmpty) {
-      SmartDialog.showToast("列表为空");
-      return;
-    }
-
-    try {
-      var status = await Utils.checkStorgePermission();
-      if (!status) {
-        SmartDialog.showToast("无权限");
-        return;
-      }
-
-      var dir = "";
-      if (Platform.isIOS) {
-        dir = (await getApplicationDocumentsDirectory()).path;
-      } else {
-        dir = await FilePicker.platform.getDirectoryPath() ?? "";
-      }
-
-      if (dir.isEmpty) {
-        return;
-      }
-      var jsonFile = File(
-          '$dir/Suikan_${DateTime.now().millisecondsSinceEpoch ~/ 1000}.json');
-      var jsonText = generateJson();
-      await jsonFile.writeAsString(jsonText);
-      SmartDialog.showToast("已导出关注列表");
-    } catch (e) {
-      Log.logPrint(e);
-      SmartDialog.showToast("导出失败：$e");
-    }
-  }
-
-  void inputFile() async {
-    try {
-      var status = await Utils.checkStorgePermission();
-      if (!status) {
-        SmartDialog.showToast("无权限");
-        return;
-      }
-      var file = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['json'],
-      );
-      if (file == null) {
-        return;
-      }
-      var jsonFile = File(file.files.single.path!);
-      await inputJson(await jsonFile.readAsString());
-      SmartDialog.showToast("导入成功");
-    } catch (e) {
-      Log.logPrint(e);
-      SmartDialog.showToast("导入失败:$e");
-    } finally {
-      loadData(updateStatus: false);
-    }
-  }
-
-  void exportText() {
-    if (followList.isEmpty) {
-      SmartDialog.showToast("列表为空");
-      return;
-    }
-    var content = generateJson();
-    Get.dialog(
-      AlertDialog(
-        title: const Text("导出为文本"),
-        content: TextField(
-          controller: TextEditingController(text: content),
-          decoration: const InputDecoration(
-            border: OutlineInputBorder(),
-          ),
-          minLines: 5,
-          maxLines: 8,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Get.back();
-            },
-            child: const Text("关闭"),
-          ),
-          TextButton(
-            onPressed: () {
-              Utils.copyToClipboard(content);
-              Get.back();
-            },
-            child: const Text("复制"),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void inputText() async {
-    final TextEditingController textController = TextEditingController();
-    await Get.dialog(
-      AlertDialog(
-        title: const Text("从文本导入"),
-        content: TextField(
-          controller: textController,
-          decoration: const InputDecoration(
-            border: OutlineInputBorder(),
-            hintText: "请输入内容",
-          ),
-          minLines: 5,
-          maxLines: 8,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Get.back();
-            },
-            child: const Text("关闭"),
-          ),
-          TextButton(
-            onPressed: () async {
-              var content = await Utils.getClipboard();
-              if (content != null) {
-                textController.text = content;
-              }
-            },
-            child: const Text("粘贴"),
-          ),
-          TextButton(
-            onPressed: () async {
-              if (textController.text.isEmpty) {
-                SmartDialog.showToast("内容为空");
-                return;
-              }
-              try {
-                await inputJson(textController.text);
-                SmartDialog.showToast("导入成功");
-                Get.back();
-                loadData(updateStatus: false);
-              } catch (e) {
-                SmartDialog.showToast("导入失败，请检查内容是否正确");
-              }
-            },
-            child: const Text("导入"),
-          ),
-        ],
-      ),
-    );
-  }
-
-  String generateJson() {
-    var data = followList
-        .map(
-          (item) => {
-            "siteId": item.siteId,
-            "id": item.id,
-            "roomId": item.roomId,
-            "userName": item.userName,
-            "face": item.face,
-            "addTime": item.addTime.toString(),
-            "tag": item.tag,
-            "isSpecialFollow": item.isSpecialFollow
-          },
-        )
-        .toList();
-    return jsonEncode(data);
-  }
-
-  Future inputJson(String content) async {
-    var data = jsonDecode(content);
-    if (data is! List) {
-      throw const FormatException("关注列表格式不是数组");
-    }
-    final stopwatch = Stopwatch()..start();
-    final result = await BulkDataImportService.importFollowUsers(
-      data,
-      syncTagsFromUserField: true,
-    );
-    stopwatch.stop();
-    Log.i(
-      "文本/文件关注导入完成：${result.logSummary} elapsed=${stopwatch.elapsedMilliseconds}ms",
-    );
   }
 
   @override
