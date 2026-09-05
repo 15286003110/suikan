@@ -110,13 +110,7 @@ class DanmuSettingsView extends GetView<AppSettingsController> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Padding(
-          padding: AppStyle.edgeInsetsA12.copyWith(top: 0),
-          child: Text(
-            "弹幕屏蔽",
-            style: Get.textTheme.titleSmall,
-          ),
-        ),
+        AppStyle.vGap12,
         SettingsCard(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -128,7 +122,6 @@ class DanmuSettingsView extends GetView<AppSettingsController> {
                   onChanged: controller.setDanmuShieldEnable,
                 ),
               ),
-              AppStyle.divider,
               Obx(
                 () => SettingsSwitch(
                   title: "启用关键词屏蔽",
@@ -136,7 +129,6 @@ class DanmuSettingsView extends GetView<AppSettingsController> {
                   onChanged: controller.setDanmuKeywordShieldEnable,
                 ),
               ),
-              AppStyle.divider,
               Obx(
                 () => SettingsSwitch(
                   title: "启用用户屏蔽",
@@ -144,7 +136,6 @@ class DanmuSettingsView extends GetView<AppSettingsController> {
                   onChanged: controller.setDanmuUserShieldEnable,
                 ),
               ),
-              AppStyle.divider,
               SettingsAction(
                 title: "打开屏蔽管理",
                 onTap: onTapDanmuShield ??
@@ -153,13 +144,7 @@ class DanmuSettingsView extends GetView<AppSettingsController> {
             ],
           ),
         ),
-        Padding(
-          padding: AppStyle.edgeInsetsA12.copyWith(top: 24),
-          child: Text(
-            "弹幕显示",
-            style: Get.textTheme.titleSmall,
-          ),
-        ),
+        AppStyle.vGap12,
         SettingsCard(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -171,7 +156,6 @@ class DanmuSettingsView extends GetView<AppSettingsController> {
                   onChanged: controller.setDanmuEnable,
                 ),
               ),
-              AppStyle.divider,
               Obx(
                 () => SettingsSwitch(
                   title: "显示弹幕表情",
@@ -182,13 +166,7 @@ class DanmuSettingsView extends GetView<AppSettingsController> {
             ],
           ),
         ),
-        Padding(
-          padding: AppStyle.edgeInsetsA12.copyWith(top: 24),
-          child: Text(
-            "重点动态",
-            style: Get.textTheme.titleSmall,
-          ),
-        ),
+        AppStyle.vGap12,
         SettingsCard(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -200,7 +178,6 @@ class DanmuSettingsView extends GetView<AppSettingsController> {
                   onChanged: controller.setLiveEventFlowEnable,
                 ),
               ),
-              AppStyle.divider,
               Obx(
                 () => SettingsSwitch(
                   title: "全屏显示重点动态",
@@ -208,7 +185,6 @@ class DanmuSettingsView extends GetView<AppSettingsController> {
                   onChanged: controller.setLiveEventFlowOverlayEnable,
                 ),
               ),
-              AppStyle.divider,
               Obx(
                 () => SettingsNumber(
                   title: "动态统计跨度",
@@ -220,7 +196,6 @@ class DanmuSettingsView extends GetView<AppSettingsController> {
                   onChanged: controller.setLiveEventFlowWindowSeconds,
                 ),
               ),
-              AppStyle.divider,
               Obx(
                 () => SettingsNumber(
                   title: "动态展示时间",
@@ -232,7 +207,6 @@ class DanmuSettingsView extends GetView<AppSettingsController> {
                   onChanged: controller.setLiveEventFlowDisplaySeconds,
                 ),
               ),
-              AppStyle.divider,
               Obx(
                 () => SettingsNumber(
                   title: "动态起显次数",
@@ -244,7 +218,6 @@ class DanmuSettingsView extends GetView<AppSettingsController> {
                   onChanged: controller.setLiveEventFlowMinCount,
                 ),
               ),
-              AppStyle.divider,
               Obx(
                 () => SettingsNumber(
                   title: "动态保留数量",
@@ -259,13 +232,7 @@ class DanmuSettingsView extends GetView<AppSettingsController> {
             ],
           ),
         ),
-        Padding(
-          padding: AppStyle.edgeInsetsA12.copyWith(top: 24),
-          child: Text(
-            "过滤",
-            style: Get.textTheme.titleSmall,
-          ),
-        ),
+        AppStyle.vGap12,
         SettingsCard(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -280,7 +247,6 @@ class DanmuSettingsView extends GetView<AppSettingsController> {
                   onChanged: controller.setDanmuDedupeEnable,
                 ),
               ),
-              AppStyle.divider,
               Obx(
                 () => SettingsMenu<int>(
                   title: "过滤模式",
@@ -293,7 +259,6 @@ class DanmuSettingsView extends GetView<AppSettingsController> {
                   onChanged: controller.setDanmuDedupeMode,
                 ),
               ),
-              AppStyle.divider,
               Obx(() {
                 final strictMode = controller.danmuDedupeStrictMode;
                 return SettingsNumber(
@@ -315,7 +280,6 @@ class DanmuSettingsView extends GetView<AppSettingsController> {
                   },
                 );
               }),
-              AppStyle.divider,
               Obx(() {
                 if (controller.danmuDedupeStrictMode) {
                   return const SizedBox.shrink();
@@ -323,7 +287,6 @@ class DanmuSettingsView extends GetView<AppSettingsController> {
                 return Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    AppStyle.divider,
                     SettingsNumber(
                       title: "过滤步长",
                       subtitle: "默认 2；数值越大检查窗口移动越少",
@@ -338,13 +301,7 @@ class DanmuSettingsView extends GetView<AppSettingsController> {
             ],
           ),
         ),
-        Padding(
-          padding: AppStyle.edgeInsetsA12.copyWith(top: 24),
-          child: Text(
-            "样式",
-            style: Get.textTheme.titleSmall,
-          ),
-        ),
+        AppStyle.vGap12,
         SettingsCard(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -372,7 +329,6 @@ class DanmuSettingsView extends GetView<AppSettingsController> {
                   },
                 ),
               ),
-              AppStyle.divider,
               Obx(
                 () => Column(
                   children: [
@@ -405,7 +361,6 @@ class DanmuSettingsView extends GetView<AppSettingsController> {
                   ],
                 ),
               ),
-              AppStyle.divider,
               Obx(
                 () => SettingsNumber(
                   title: "不透明度",
@@ -420,7 +375,6 @@ class DanmuSettingsView extends GetView<AppSettingsController> {
                   },
                 ),
               ),
-              AppStyle.divider,
               Obx(
                 () => SettingsNumber(
                   title: "字体大小",
@@ -442,7 +396,6 @@ class DanmuSettingsView extends GetView<AppSettingsController> {
                   },
                 ),
               ),
-              AppStyle.divider,
               Obx(
                 () => SettingsNumber(
                   title: "字体粗细",
@@ -467,7 +420,6 @@ class DanmuSettingsView extends GetView<AppSettingsController> {
                   },
                 ),
               ),
-              AppStyle.divider,
               Obx(
                 () => SettingsNumber(
                   title: "滚动速度",
@@ -481,7 +433,6 @@ class DanmuSettingsView extends GetView<AppSettingsController> {
                   },
                 ),
               ),
-              AppStyle.divider,
               Obx(
                 () => SettingsNumber(
                   title: siteId == null ? "全局弹幕延迟" : "全局延迟兜底",
@@ -494,9 +445,7 @@ class DanmuSettingsView extends GetView<AppSettingsController> {
                   onChanged: (e) => controller.setDanmuDelayMs(e),
                 ),
               ),
-              AppStyle.divider,
               if (siteId != null) ...[
-                AppStyle.divider,
                 Obx(
                   () => SettingsNumber(
                     title: "${controller.resolveShieldSiteLabel(siteId)} 平台补偿",
@@ -513,7 +462,6 @@ class DanmuSettingsView extends GetView<AppSettingsController> {
                   ),
                 ),
               ],
-              AppStyle.divider,
               Obx(
                 () => SettingsNumber(
                   title: "顶部安全边距",
@@ -527,7 +475,6 @@ class DanmuSettingsView extends GetView<AppSettingsController> {
                   },
                 ),
               ),
-              AppStyle.divider,
               Obx(
                 () => SettingsNumber(
                   title: "底部安全边距",

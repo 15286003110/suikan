@@ -1291,13 +1291,7 @@ class LiveRoomPage extends GetView<LiveRoomController> {
             ),
           ),
         ),
-        Padding(
-          padding: AppStyle.edgeInsetsA12,
-          child: Text(
-            "聊天区",
-            style: Get.textTheme.titleSmall,
-          ),
-        ),
+        AppStyle.vGap12,
         SettingsCard(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -1315,7 +1309,6 @@ class LiveRoomPage extends GetView<LiveRoomController> {
                   },
                 ),
               ),
-              AppStyle.divider,
               Obx(
                 () => SettingsNumber(
                   title: "上下间隔",
@@ -1328,7 +1321,6 @@ class LiveRoomPage extends GetView<LiveRoomController> {
                   },
                 ),
               ),
-              AppStyle.divider,
               Obx(
                 () => SettingsSwitch(
                   title: "气泡样式",
@@ -1338,7 +1330,6 @@ class LiveRoomPage extends GetView<LiveRoomController> {
                   },
                 ),
               ),
-              AppStyle.divider,
               Obx(
                 () => SettingsSwitch(
                   title: "播放器中显示SC",
@@ -1349,7 +1340,6 @@ class LiveRoomPage extends GetView<LiveRoomController> {
                   },
                 ),
               ),
-              AppStyle.divider,
               Obx(
                 () => SettingsMenu<bool>(
                   title: controller.site.id == Constant.kHuya ? "头条排序" : "SC排序",
@@ -1365,7 +1355,6 @@ class LiveRoomPage extends GetView<LiveRoomController> {
                 ),
               ),
               if (controller.supportsContributionRank) ...[
-                AppStyle.divider,
                 Obx(
                   () => SettingsSwitch(
                     title: controller.site.id == Constant.kDouyu
@@ -1386,13 +1375,7 @@ class LiveRoomPage extends GetView<LiveRoomController> {
             ],
           ),
         ),
-        Padding(
-          padding: AppStyle.edgeInsetsA12,
-          child: Text(
-            "重点动态",
-            style: Get.textTheme.titleSmall,
-          ),
-        ),
+        AppStyle.vGap12,
         SettingsCard(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -1410,7 +1393,6 @@ class LiveRoomPage extends GetView<LiveRoomController> {
                   },
                 ),
               ),
-              AppStyle.divider,
               Obx(
                 () => SettingsSwitch(
                   title: "全屏显示重点动态",
@@ -1420,7 +1402,6 @@ class LiveRoomPage extends GetView<LiveRoomController> {
                       .instance.setLiveEventFlowOverlayEnable,
                 ),
               ),
-              AppStyle.divider,
               Obx(
                 () => SettingsNumber(
                   title: "动态统计跨度",
@@ -1434,7 +1415,6 @@ class LiveRoomPage extends GetView<LiveRoomController> {
                       .instance.setLiveEventFlowWindowSeconds,
                 ),
               ),
-              AppStyle.divider,
               Obx(
                 () => SettingsNumber(
                   title: "动态展示时间",
@@ -1448,7 +1428,6 @@ class LiveRoomPage extends GetView<LiveRoomController> {
                       .instance.setLiveEventFlowDisplaySeconds,
                 ),
               ),
-              AppStyle.divider,
               Obx(
                 () => SettingsNumber(
                   title: "动态起显次数",
@@ -1462,7 +1441,6 @@ class LiveRoomPage extends GetView<LiveRoomController> {
                       AppSettingsController.instance.setLiveEventFlowMinCount,
                 ),
               ),
-              AppStyle.divider,
               Obx(
                 () => SettingsNumber(
                   title: "动态保留数量",
@@ -1479,13 +1457,7 @@ class LiveRoomPage extends GetView<LiveRoomController> {
             ],
           ),
         ),
-        Padding(
-          padding: AppStyle.edgeInsetsA12,
-          child: Text(
-            "过滤",
-            style: Get.textTheme.titleSmall,
-          ),
-        ),
+        AppStyle.vGap12,
         SettingsCard(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -1502,7 +1474,6 @@ class LiveRoomPage extends GetView<LiveRoomController> {
                   },
                 ),
               ),
-              AppStyle.divider,
               Obx(
                 () => SettingsMenu<int>(
                   title: "过滤模式",
@@ -1517,7 +1488,6 @@ class LiveRoomPage extends GetView<LiveRoomController> {
                   },
                 ),
               ),
-              AppStyle.divider,
               Obx(() {
                 final strictMode =
                     AppSettingsController.instance.danmuDedupeStrictMode;
@@ -1540,7 +1510,6 @@ class LiveRoomPage extends GetView<LiveRoomController> {
                   },
                 );
               }),
-              AppStyle.divider,
               Obx(() {
                 if (AppSettingsController.instance.danmuDedupeStrictMode) {
                   return const SizedBox.shrink();
@@ -1548,7 +1517,6 @@ class LiveRoomPage extends GetView<LiveRoomController> {
                 return Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    AppStyle.divider,
                     SettingsNumber(
                       title: "过滤步长",
                       subtitle: "默认 2；数值越大检查窗口移动越少",
@@ -1566,13 +1534,7 @@ class LiveRoomPage extends GetView<LiveRoomController> {
             ],
           ),
         ),
-        Padding(
-          padding: AppStyle.edgeInsetsA12,
-          child: Text(
-            "更多设置",
-            style: Get.textTheme.titleSmall,
-          ),
-        ),
+        AppStyle.vGap12,
         SettingsCard(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -1581,22 +1543,18 @@ class LiveRoomPage extends GetView<LiveRoomController> {
                 title: "关键词屏蔽",
                 onTap: controller.showDanmuShield,
               ),
-              AppStyle.divider,
               SettingsAction(
                 title: "弹幕设置",
                 onTap: controller.showDanmuSettingsSheet,
               ),
-              AppStyle.divider,
               SettingsAction(
                 title: "直播设置",
                 onTap: controller.showLiveSettingsSheet,
               ),
-              AppStyle.divider,
               SettingsAction(
                 title: "定时关闭",
                 onTap: controller.showAutoExitSheet,
               ),
-              AppStyle.divider,
               SettingsAction(
                 title: "画面尺寸",
                 onTap: controller.showPlayerSettingsSheet,

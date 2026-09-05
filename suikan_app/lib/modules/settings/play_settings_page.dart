@@ -21,13 +21,7 @@ class PlaySettingsPage extends GetView<AppSettingsController> {
       body: ListView(
         padding: AppStyle.pagePadding(),
         children: [
-          Padding(
-            padding: AppStyle.edgeInsetsA12.copyWith(top: 0),
-            child: Text(
-              "播放器",
-              style: Get.textTheme.titleSmall,
-            ),
-          ),
+        AppStyle.vGap12,
           SettingsCard(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -41,7 +35,6 @@ class PlaySettingsPage extends GetView<AppSettingsController> {
                     },
                   ),
                 ),
-                if (Platform.isIOS) AppStyle.divider,
                 if (Platform.isIOS)
                   Obx(
                     () => SettingsSwitch(
@@ -50,7 +43,6 @@ class PlaySettingsPage extends GetView<AppSettingsController> {
                       onChanged: controller.setIosOriginalQualityPowerSaving,
                     ),
                   ),
-                if (Platform.isAndroid) AppStyle.divider,
                 Obx(
                   () => Visibility(
                     visible: Platform.isAndroid,
@@ -63,7 +55,6 @@ class PlaySettingsPage extends GetView<AppSettingsController> {
                     ),
                   ),
                 ),
-                AppStyle.divider,
                 Obx(
                   () => SettingsSwitch(
                     title: "强制 HTTPS 播放",
@@ -76,13 +67,7 @@ class PlaySettingsPage extends GetView<AppSettingsController> {
               ],
             ),
           ),
-          Padding(
-            padding: AppStyle.edgeInsetsA12.copyWith(top: 24),
-            child: Text(
-              "手势与全屏",
-              style: Get.textTheme.titleSmall,
-            ),
-          ),
+        AppStyle.vGap12,
           SettingsCard(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -96,7 +81,6 @@ class PlaySettingsPage extends GetView<AppSettingsController> {
                     },
                   ),
                 ),
-                AppStyle.divider,
                 Obx(
                   () => SettingsSwitch(
                     title: "进入直播间自动全屏",
@@ -109,13 +93,7 @@ class PlaySettingsPage extends GetView<AppSettingsController> {
               ],
             ),
           ),
-          Padding(
-            padding: AppStyle.edgeInsetsA12.copyWith(top: 24),
-            child: Text(
-              "直播间",
-              style: Get.textTheme.titleSmall,
-            ),
-          ),
+        AppStyle.vGap12,
           SettingsCard(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -129,7 +107,6 @@ class PlaySettingsPage extends GetView<AppSettingsController> {
                     },
                   ),
                 ),
-                AppStyle.divider,
                 Obx(
                   () => SettingsSwitch(
                     title: "播放失败后自动换下一个直播间",
@@ -139,7 +116,6 @@ class PlaySettingsPage extends GetView<AppSettingsController> {
                     },
                   ),
                 ),
-                AppStyle.divider,
                 Obx(
                   () => SettingsSwitch(
                     title: "播放器中显示SC",
@@ -152,13 +128,7 @@ class PlaySettingsPage extends GetView<AppSettingsController> {
               ],
             ),
           ),
-          Padding(
-            padding: AppStyle.edgeInsetsA12.copyWith(top: 24),
-            child: Text(
-              "后台与小窗",
-              style: Get.textTheme.titleSmall,
-            ),
-          ),
+        AppStyle.vGap12,
           SettingsCard(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -172,7 +142,6 @@ class PlaySettingsPage extends GetView<AppSettingsController> {
                     },
                   ),
                 ),
-                if (Platform.isAndroid) AppStyle.divider,
                 if (Platform.isAndroid)
                   Obx(
                     () => SettingsSwitch(
@@ -183,7 +152,6 @@ class PlaySettingsPage extends GetView<AppSettingsController> {
                       },
                     ),
                   ),
-                if (Platform.isAndroid) AppStyle.divider,
                 if (Platform.isAndroid)
                   Obx(
                     () => SettingsSwitch(
@@ -197,13 +165,7 @@ class PlaySettingsPage extends GetView<AppSettingsController> {
               ],
             ),
           ),
-          Padding(
-            padding: AppStyle.edgeInsetsA12.copyWith(top: 24),
-            child: Text(
-              "清晰度与画面",
-              style: Get.textTheme.titleSmall,
-            ),
-          ),
+        AppStyle.vGap12,
           SettingsCard(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -222,7 +184,6 @@ class PlaySettingsPage extends GetView<AppSettingsController> {
                     },
                   ),
                 ),
-                AppStyle.divider,
                 Obx(
                   () => SettingsMenu<int>(
                     title: "数据网络清晰度",
@@ -237,7 +198,6 @@ class PlaySettingsPage extends GetView<AppSettingsController> {
                     },
                   ),
                 ),
-                AppStyle.divider,
                 Obx(
                   () => SettingsMenu<int>(
                     title: "画面尺寸",
@@ -257,13 +217,7 @@ class PlaySettingsPage extends GetView<AppSettingsController> {
               ],
             ),
           ),
-          Padding(
-            padding: AppStyle.edgeInsetsA12.copyWith(top: 24),
-            child: Text(
-              "聊天区",
-              style: Get.textTheme.titleSmall,
-            ),
-          ),
+        AppStyle.vGap12,
           SettingsCard(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -279,7 +233,6 @@ class PlaySettingsPage extends GetView<AppSettingsController> {
                     },
                   ),
                 ),
-                AppStyle.divider,
                 Obx(
                   () => SettingsNumber(
                     title: "上下间隔",
@@ -291,7 +244,6 @@ class PlaySettingsPage extends GetView<AppSettingsController> {
                     },
                   ),
                 ),
-                AppStyle.divider,
                 Obx(
                   () => SettingsSwitch(
                     title: "气泡样式",
