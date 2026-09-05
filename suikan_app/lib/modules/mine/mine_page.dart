@@ -107,6 +107,7 @@ class MinePage extends StatelessWidget {
           children: [
             AppStyle.vGap12,
             ListTile(
+            visualDensity: VisualDensity.compact,
               leading: Image.asset(
                 'assets/images/logo.png',
                 width: 56,
@@ -125,6 +126,7 @@ class MinePage extends StatelessWidget {
               context,
               children: [
                 ListTile(
+                visualDensity: VisualDensity.compact,
                   leading: const Icon(Remix.history_line),
                   title: const Text("观看记录"),
                   trailing: const Icon(
@@ -142,6 +144,7 @@ class MinePage extends StatelessWidget {
               context,
               children: [
                 ListTile(
+                visualDensity: VisualDensity.compact,
                   leading: const Icon(Remix.account_circle_line),
                   title: const Text("账号管理"),
                   trailing: const Icon(
@@ -153,6 +156,7 @@ class MinePage extends StatelessWidget {
                   },
                 ),
                 ListTile(
+                visualDensity: VisualDensity.compact,
                   leading: const Icon(Icons.devices),
                   title: const Text("数据同步"),
                   trailing: const Icon(
@@ -170,6 +174,7 @@ class MinePage extends StatelessWidget {
               context,
               children: [
                 ListTile(
+                visualDensity: VisualDensity.compact,
                   leading: const Icon(Icons.playlist_play),
                   title: const Text("自定义直播源"),
                   trailing: const Icon(
@@ -181,6 +186,7 @@ class MinePage extends StatelessWidget {
                   },
                 ),
                 ListTile(
+                visualDensity: VisualDensity.compact,
                   leading: const Icon(Icons.movie_outlined),
                   title: const Text("NAS影视库"),
                   trailing: const Icon(
@@ -192,6 +198,7 @@ class MinePage extends StatelessWidget {
                   },
                 ),
                 ListTile(
+                visualDensity: VisualDensity.compact,
                   leading: const Icon(Remix.link),
                   title: const Text("链接解析"),
                   trailing: const Icon(
@@ -209,6 +216,7 @@ class MinePage extends StatelessWidget {
               context,
               children: [
                 ListTile(
+                visualDensity: VisualDensity.compact,
                   leading: const Icon(Remix.moon_line),
                   title: const Text("外观设置"),
                   trailing: const Icon(
@@ -220,6 +228,7 @@ class MinePage extends StatelessWidget {
                   },
                 ),
                 ListTile(
+                visualDensity: VisualDensity.compact,
                   leading: const Icon(Remix.home_2_line),
                   title: const Text("主页设置"),
                   trailing: const Icon(
@@ -231,6 +240,7 @@ class MinePage extends StatelessWidget {
                   },
                 ),
                 ListTile(
+                visualDensity: VisualDensity.compact,
                   leading: const Icon(Remix.play_circle_line),
                   title: const Text("直播间设置"),
                   trailing: const Icon(
@@ -242,6 +252,7 @@ class MinePage extends StatelessWidget {
                   },
                 ),
                 ListTile(
+                visualDensity: VisualDensity.compact,
                   leading: const Icon(Icons.tune),
                   title: const Text("播放页设置"),
                   trailing: const Icon(
@@ -254,6 +265,7 @@ class MinePage extends StatelessWidget {
                 ),
                 if (PlatformUtils.supportsInlineMultiRoom)
                   ListTile(
+                  visualDensity: VisualDensity.compact,
                     leading: const Icon(Remix.layout_grid_line),
                     title: const Text("多开设置"),
                     trailing: const Icon(
@@ -264,8 +276,8 @@ class MinePage extends StatelessWidget {
                       Get.toNamed(RoutePath.kSettingsMultiRoom);
                     },
                   ),
-                if (PlatformUtils.supportsInlineMultiRoom)
                 ListTile(
+                visualDensity: VisualDensity.compact,
                   leading: const Icon(Remix.text),
                   title: const Text("弹幕设置"),
                   trailing: const Icon(
@@ -277,6 +289,7 @@ class MinePage extends StatelessWidget {
                   },
                 ),
                 ListTile(
+                visualDensity: VisualDensity.compact,
                   leading: const Icon(Remix.heart_line),
                   title: const Text("关注设置"),
                   trailing: const Icon(
@@ -288,6 +301,7 @@ class MinePage extends StatelessWidget {
                   },
                 ),
                 ListTile(
+                visualDensity: VisualDensity.compact,
                   leading: const Icon(Remix.timer_2_line),
                   title: const Text("定时关闭"),
                   trailing: const Icon(
@@ -299,6 +313,7 @@ class MinePage extends StatelessWidget {
                   },
                 ),
                 ListTile(
+                visualDensity: VisualDensity.compact,
                   leading: const Icon(Remix.apps_line),
                   title: const Text("其他设置"),
                   trailing: const Icon(
