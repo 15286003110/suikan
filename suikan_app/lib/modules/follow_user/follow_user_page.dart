@@ -109,27 +109,11 @@ class FollowUserPage extends GetView<FollowUserController> {
               ),
             ),
           ],
-          PopupMenuButton(
-            itemBuilder: (context) {
-              return const [
-                PopupMenuItem(
-                  value: 0,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Remix.price_tag_line),
-                      AppStyle.hGap12,
-                      Text("标签管理"),
-                    ],
-                  ),
-                ),
-              ];
-            },
-            onSelected: (value) {
-              if (value == 0) {
-                showTagsManager();
-              }
-            },
+          // ⋮ 菜单原只有"标签管理"一项，直接图标化：点标签即进标签管理。
+          IconButton(
+            tooltip: "标签管理",
+            onPressed: showTagsManager,
+            icon: const Icon(Remix.price_tag_line),
           ),
         ],
         leading: Obx(
@@ -193,6 +177,15 @@ class FollowUserPage extends GetView<FollowUserController> {
                             FollowGroupMode.platform,
                         onSelected: (_) {
                           controller.setGroupMode(FollowGroupMode.platform);
+                        },
+                      ),
+                      AppStyle.hGap8,
+                      ChoiceChip(
+                        label: const Text("按标签"),
+                        selected: controller.groupMode.value ==
+                            FollowGroupMode.tag,
+                        onSelected: (_) {
+                          controller.setGroupMode(FollowGroupMode.tag);
                         },
                       ),
                     ],

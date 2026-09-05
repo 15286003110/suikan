@@ -25,6 +25,7 @@ import 'package:simple_live_app/services/follow_service.dart';
 enum FollowGroupMode {
   liveStatus,
   platform,
+  tag,
 }
 
 class FollowGroupOption {
@@ -32,12 +33,14 @@ class FollowGroupOption {
   final String title;
   final String? siteId;
   final int? liveStatus;
+  final String? tagName;
 
   const FollowGroupOption({
     required this.id,
     required this.title,
     this.siteId,
     this.liveStatus,
+    this.tagName,
   });
 }
 
@@ -97,9 +100,11 @@ class FollowUserController extends BasePageController<FollowUser> {
 
   void _restoreGroupSelection() {
     final settings = AppSettingsController.instance;
-    groupMode.value = settings.followGroupMode.value == "platform"
-        ? FollowGroupMode.platform
-        : FollowGroupMode.liveStatus;
+    groupMode.value = switch (settings.followGroupMode.value) {
+      "platform" => FollowGroupMode.platform,
+      "tag" => FollowGroupMode.tag,
+      _ => FollowGroupMode.liveStatus,
+    };
     selectedGroupId.value = settings.followSelectedGroupId.value;
   }
 
@@ -281,6 +286,17 @@ class FollowUserController extends BasePageController<FollowUser> {
         FollowGroupOption(id: "live", title: "直播中", liveStatus: 2),
         FollowGroupOption(id: "not_live", title: "未开播", liveStatus: 1),
       ]);
+    } else if (groupMode.value == FollowGroupMode.tag) {
+      // 按标签：全部 + 用户自定义标签（没有自定义标签时只有"全部"）。
+      options.addAll(
+        userTagList.map(
+          (tag) => FollowGroupOption(
+            id: "tag:${tag.tag}",
+            title: tag.tag,
+            tagName: tag.tag,
+          ),
+        ),
+      );
     } else {
       final siteIds = FollowService.instance.followList
           .map((item) => item.siteId)
@@ -344,6 +360,12 @@ class FollowUserController extends BasePageController<FollowUser> {
     if (siteId != null) {
       return FollowService.instance.sortFollowUsers(
         _distinctFollowUsers(source.where((item) => item.siteId == siteId)),
+      );
+    }
+    final tagName = selected.tagName;
+    if (tagName != null) {
+      return FollowService.instance.sortFollowUsers(
+        _distinctFollowUsers(source.where((item) => item.tag == tagName)),
       );
     }
     return FollowService.instance.sortFollowUsers(
@@ -423,9 +445,11 @@ class FollowUserController extends BasePageController<FollowUser> {
 
   void _saveGroupSelection() {
     AppSettingsController.instance.setFollowGroupSelection(
-      mode: groupMode.value == FollowGroupMode.platform
-          ? "platform"
-          : "liveStatus",
+      mode: switch (groupMode.value) {
+        FollowGroupMode.platform => "platform",
+        FollowGroupMode.tag => "tag",
+        FollowGroupMode.liveStatus => "liveStatus",
+      },
       groupId: selectedGroupId.value,
     );
   }
