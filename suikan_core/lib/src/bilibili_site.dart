@@ -396,17 +396,18 @@ class BiliBiliSite implements LiveSite {
         "https://api.live.bilibili.com/xlive/web-interface/v1/second/getListByArea";
     var url = "$baseUrl?platform=web&sort=online&page_size=30&page=$page";
 
-    var queryParams = await getWbiSign(url);
-
-    var result = await HttpClient.instance.getJson(
-      baseUrl,
-      queryParameters: queryParams,
-      header: await getHeader(),
+    var result = await getWbiJson(
+      url,
+      headers: getHeader,
     );
+    final data = result is Map ? result["data"] : null;
+    if (data is! Map) {
+      return LiveCategoryResult(hasMore: false, items: []);
+    }
 
-    var hasMore = (result["data"]["list"] as List).isNotEmpty;
+    var hasMore = ((data["list"] as List?) ?? []).isNotEmpty;
     var items = <LiveRoomItem>[];
-    for (var item in result["data"]["list"]) {
+    for (var item in (data["list"] as List?) ?? []) {
       var roomItem = LiveRoomItem(
         roomId: item["roomid"].toString(),
         title: item["title"].toString(),
@@ -427,18 +428,26 @@ class BiliBiliSite implements LiveSite {
     const danmuInfoBaseUrl =
         "https://api.live.bilibili.com/xlive/web-room/v1/index/getDanmuInfo";
     var danmuInfoUrl = "$danmuInfoBaseUrl?id=$realRoomId&type=0&web_location=444.8";
-    var queryParams = await getWbiSign(danmuInfoUrl);
     Map? danmuData;
     List<String> serverHosts = [];
     try {
-      var roomDanmakuResult = await HttpClient.instance.getJson(
-        danmuInfoBaseUrl,
-        queryParameters: queryParams,
-        header: await getHeader(),
+      var roomDanmakuResult = await getWbiJson(
+        danmuInfoUrl,
+        headers: getHeader,
+        onRisk: () async {
+          // 风控常因 buvid 指纹过期触发：重试前刷新 buvid3/buvid4。
+          try {
+            final fresh = await getBuvid(forceRefresh: true);
+            buvid3 = fresh["b_3"] ?? buvid3;
+            buvid4 = fresh["b_4"] ?? buvid4;
+          } catch (_) {}
+        },
       );
 
       // B站可能只拦截弹幕信息接口。此接口失败不应阻止进入直播间。
-      final data = roomDanmakuResult["data"];
+      final data = roomDanmakuResult is Map
+          ? roomDanmakuResult["data"]
+          : null;
       if (data is Map) {
         danmuData = data;
         final hostListRaw = data["host_list"];
@@ -450,8 +459,8 @@ class BiliBiliSite implements LiveSite {
         }
       } else {
         CoreLog.w(
-          "B站弹幕信息为空：roomId=$realRoomId code=${roomDanmakuResult["code"]} "
-          "message=${roomDanmakuResult["message"]}",
+          "B站弹幕信息为空：roomId=$realRoomId code=${roomDanmakuResult is Map ? roomDanmakuResult["code"] : "?"} "
+          "message=${roomDanmakuResult is Map ? roomDanmakuResult["message"] : "?"}",
         );
       }
     } catch (e) {
@@ -494,13 +503,20 @@ class BiliBiliSite implements LiveSite {
   Future<Map<String, dynamic>> getRoomInfo({required String roomId}) async {
     var url =
         "https://api.live.bilibili.com/xlive/web-room/v1/index/getInfoByRoom?room_id=$roomId";
-    var queryParams = await getWbiSign(url);
-    var result = await HttpClient.instance.getJson(
-      "https://api.live.bilibili.com/xlive/web-room/v1/index/getInfoByRoom",
-      queryParameters: queryParams,
-      header: await getHeader(),
+    var result = await getWbiJson(
+      url,
+      headers: getHeader,
     );
-    return result["data"];
+    final data = result is Map ? result["data"] : null;
+    if (data is Map) {
+      return data as Map<String, dynamic>;
+    }
+    throw CoreError(
+      "B站房间信息响应异常：${result is Map ? result["message"] : "非JSON响应"}",
+      statusCode: result is Map && result["code"] is int
+          ? result["code"] as int
+          : 0,
+    );
   }
 
   @override
@@ -690,9 +706,9 @@ class BiliBiliSite implements LiveSite {
   ///   "b_4": "buvid4",
   /// }
   /// ```
-  Future<Map> getBuvid() async {
+  Future<Map> getBuvid({bool forceRefresh = false}) async {
     try {
-      if (cookie.contains("buvid3")) {
+      if (!forceRefresh && cookie.contains("buvid3")) {
         return {
           "b_3": RegExp(r"buvid3=(.*?);").firstMatch(cookie)?.group(1) ?? "",
           "b_4": RegExp(r"buvid4=(.*?);").firstMatch(cookie)?.group(1) ?? "",
@@ -708,7 +724,11 @@ class BiliBiliSite implements LiveSite {
           "cookie": cookie,
         },
       );
-      return result["data"];
+      final data = result is Map ? result["data"] : null;
+      return {
+        "b_3": data is Map ? data["b_3"]?.toString() ?? "" : "",
+        "b_4": data is Map ? data["b_4"]?.toString() ?? "" : "",
+      };
     } catch (e) {
       return {"b_3": "", "b_4": ""};
     }
@@ -796,6 +816,12 @@ class BiliBiliSite implements LiveSite {
   ///
   /// [forceRefresh] 用于"签名疑似失效"时强制重取一次再重试请求
   /// （比如接口返回 -352 风控校验失败，可能就是口令过期导致签名不对）。
+  ///
+  /// 容错（2026-09-05 用户反馈"去网页验证后弹幕才恢复"的根因之一）：
+  /// nav 接口被风控/限频时 data.wbi_img 可能缺失或结构异常，此时若把坏 key
+  /// 写进缓存，之后 12 小时内所有 wbi 签名全错、永久 -352。
+  /// 因此：取 key 失败时**保留旧 key**、不推进计时，并抛可重试异常；
+  /// 仅当结构校验通过才更新缓存。
   Future<(String, String)> getWbiKeys({bool forceRefresh = false}) async {
     final withinTtl =
         DateTime.now().difference(_wbiKeysFetchedAt) < _wbiKeysTtl;
@@ -810,11 +836,31 @@ class BiliBiliSite implements LiveSite {
       'https://api.bilibili.com/x/web-interface/nav',
       header: await getHeader(),
     );
-
-    var imgUrl = resp["data"]["wbi_img"]["img_url"].toString();
-    var subUrl = resp["data"]["wbi_img"]["sub_url"].toString();
+    final data = resp is Map ? resp["data"] : null;
+    final wbiImg =
+        data is Map && data["wbi_img"] is Map ? data["wbi_img"] : null;
+    final imgUrl = wbiImg is Map ? wbiImg["img_url"]?.toString() : null;
+    final subUrl = wbiImg is Map ? wbiImg["sub_url"]?.toString() : null;
+    if (imgUrl == null ||
+        subUrl == null ||
+        !imgUrl.contains('/') ||
+        !subUrl.contains('/')) {
+      // 旧 key 仍可用则保留并抛出（调用方决定是否降级重试）；无旧 key 直接抛。
+      if (kImgKey.isNotEmpty && kSubKey.isNotEmpty) {
+        CoreLog.w("B站WBI密钥获取异常，保留旧 key 等待重试");
+        throw CoreError("B站WBI密钥获取异常", statusCode: -352);
+      }
+      throw CoreError("B站WBI密钥获取失败：nav 响应结构异常");
+    }
     var imgKey = imgUrl.substring(imgUrl.lastIndexOf('/') + 1).split('.').first;
     var subKey = subUrl.substring(subUrl.lastIndexOf('/') + 1).split('.').first;
+    if (imgKey.isEmpty || subKey.isEmpty) {
+      if (kImgKey.isNotEmpty && kSubKey.isNotEmpty) {
+        CoreLog.w("B站WBI密钥为空，保留旧 key 等待重试");
+        throw CoreError("B站WBI密钥为空", statusCode: -352);
+      }
+      throw CoreError("B站WBI密钥为空");
+    }
 
     kImgKey = imgKey;
     kSubKey = subKey;
@@ -858,6 +904,62 @@ class BiliBiliSite implements LiveSite {
     var wbiSign = md5.convert(utf8.encode("$query$mixinKey")).toString();
     queryParams["w_rid"] = wbiSign;
     return queryParams;
+  }
+
+  /// 风控/限频类错误码（请求被拦 ≠ 登录失效）。
+  static bool isBiliRiskCode(int? code) =>
+      code == -352 || code == -412 || code == -509 || code == -799;
+
+  /// 带 WBI 签名的 GET 请求 + 自愈重试。
+  ///
+  /// 2026-09-05 修复（用户反馈"去 B 站网页验证后弹幕才恢复"）：
+  /// 之前 getWbiSign 只做一次签名请求，遇 -352（签名失效/被风控）没有
+  /// forceRefresh 接线 → 一直用坏 key 重试 → 永久失败，只能靠外部网页验证
+  /// 改变风控状态才恢复。这里统一：首次遇风控码 → 强制刷新 WBI 密钥并
+  /// 重试一次；仍失败则按原逻辑返回（弹幕接口失败不阻断进房）。
+  ///
+  /// [onRisk] 供调用方决定"风控后是否继续"（如弹幕接口失败仅告警不抛错）。
+  Future<dynamic> getWbiJson(
+    String url, {
+    required Future<Map<String, String>> Function() headers,
+    bool Function(dynamic result)? isRisk,
+    Future<void> Function()? onRisk,
+  }) async {
+    var queryParams = await getWbiSign(url);
+    var result = await HttpClient.instance.getJson(
+      url.split('?').first,
+      queryParameters: queryParams,
+      header: await headers(),
+    );
+
+    final risk = isRisk?.call(result) ??
+        (result is Map && isBiliRiskCode(result["code"] is int
+            ? result["code"] as int
+            : result["code"] is String
+                ? int.tryParse(result["code"] as String)
+                : null));
+    if (risk) {
+      CoreLog.w(
+        "B站WBI请求遇风控码，强制刷新密钥重试一次：${url.split('?').first}",
+      );
+      try {
+        // 强制重取密钥（绕过 12h TTL）
+        await getWbiKeys(forceRefresh: true);
+      } catch (e) {
+        CoreLog.w("B站WBI密钥强制刷新失败：$e");
+      }
+      final retryParams = await getWbiSign(url);
+      var retryResult = await HttpClient.instance.getJson(
+        url.split('?').first,
+        queryParameters: retryParams,
+        header: await headers(),
+      );
+      if (onRisk != null) {
+        await onRisk();
+      }
+      return retryResult;
+    }
+    return result;
   }
 
   Future<String> getAccessId() async {
