@@ -2064,6 +2064,8 @@ class PlayerController extends BaseController
   Timer? _iosVideoOutputSyncTimer;
   Worker? _iosOriginalQualityPowerSavingWorker;
   Worker? _iosRenderCapWorker;
+  Worker? _allowBackgroundWorker;
+  Worker? _audioOnlyWorker;
   IosVideoOutputSize? _iosVideoOutputSize;
   int? _iosVideoSourceWidth;
   int? _iosVideoSourceHeight;
@@ -2433,6 +2435,21 @@ class PlayerController extends BaseController
         (_) => refreshIosVideoOutputLimit(),
       );
     }
+    if (Platform.isAndroid) {
+      // 设置开关变化 → 按「当前是否在播 × 开关」重算前台服务启停。
+      // 播放中打开后台播放/纯音频：服务即刻就位，退后台时不会因没有
+      // 前台服务被系统回收；关闭开关即停、撤通知。服务启停的唯一裁决
+      // 仍收敛在 _syncBackgroundPlaybackService，这里只做"重算触发"。
+      final settings = AppSettingsController.instance;
+      _allowBackgroundWorker = ever<bool>(
+        settings.allowBackgroundPlayback,
+        (_) => _resyncBackgroundPlaybackService(settings),
+      );
+      _audioOnlyWorker = ever<bool>(
+        settings.audioOnlyBackground,
+        (_) => _resyncBackgroundPlaybackService(settings),
+      );
+    }
     _errorSubscription = player.stream.error.listen((event) {
       if (PlayerErrorClassifier.isRecoverableAudioDiagnostic(event)) {
         final now = DateTime.now();
@@ -2500,6 +2517,10 @@ class PlayerController extends BaseController
         // 缓冲（core-idle / paused-for-cache）走的是 buffering 流，不会把
         // playing 打成 false。所以网络卡顿期间屏幕不会突然变暗。
         unawaited(WakelockPlus.disable());
+        // 停止播放事件（含手动暂停/停播/退房/异常触发的 playing=false）：
+        // 立刻停前台服务、撤通知——与 true 分支对称，构成服务启停的唯一
+        // 裁决闭环，杜绝"已不播但通知残留"的任何旁路。
+        unawaited(_syncBackgroundPlaybackService(false));
       }
     });
 
@@ -2623,6 +2644,10 @@ class PlayerController extends BaseController
     _iosOriginalQualityPowerSavingWorker = null;
     _iosRenderCapWorker?.dispose();
     _iosRenderCapWorker = null;
+    _allowBackgroundWorker?.dispose();
+    _allowBackgroundWorker = null;
+    _audioOnlyWorker?.dispose();
+    _audioOnlyWorker = null;
     _iosVideoOutputSyncTimer = null;
     _audioOnlyProbeTimer?.cancel();
     _audioOnlyProbeTimer = null;
@@ -3177,6 +3202,13 @@ class PlayerController extends BaseController
     unawaited(stopBackgroundPlaybackService());
   }
 
+  /// Android 前台服务（通知栏"随看-正在后台播放"）的【唯一】启停裁决点。
+  ///
+  /// 通知存在 ⟺ 正在播放 且（后台播放开关 或 纯音频开关）；其余一律停。
+  /// 手动暂停也撤通知（暂停后后台保活无意义；恢复播放再拉起）。
+  /// playing 订阅 true/false 两分支都会调本方法；退房/关播放器另有 stop
+  /// 兜底（幂等，多调无害）。原生不得反向拉起服务（见
+  /// BackgroundPlaybackService.kt 类注释的决策表）。
   Future<void> _syncBackgroundPlaybackService(bool playing) async {
     if (!Platform.isAndroid) {
       return;
@@ -3185,11 +3217,24 @@ class PlayerController extends BaseController
         (AppSettingsController.instance.allowBackgroundPlayback.value ||
             AppSettingsController.instance.audioOnlyBackground.value)) {
       await BackgroundPlaybackService.instance.start();
-    } else if (!playing ||
-        (!AppSettingsController.instance.allowBackgroundPlayback.value &&
-            !AppSettingsController.instance.audioOnlyBackground.value)) {
+    } else {
       await BackgroundPlaybackService.instance.stop();
     }
+  }
+
+  /// 设置开关变化时，按当前播放状态重算服务启停
+  /// （见 _syncBackgroundPlaybackService 的决策表）。
+  Future<void> _resyncBackgroundPlaybackService(
+    AppSettingsController settings,
+  ) async {
+    if (!Platform.isAndroid) {
+      return;
+    }
+    final playing = player.state.playing;
+    final want = playing &&
+        (settings.allowBackgroundPlayback.value ||
+            settings.audioOnlyBackground.value);
+    await _syncBackgroundPlaybackService(want);
   }
 
   Future<void> stopBackgroundPlaybackService() {

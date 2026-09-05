@@ -16,6 +16,12 @@ object SuikanMediaActions {
     @Volatile
     private var isPlaying: Boolean = false
 
+    /** 前台服务（通知）是否在跑。由 BackgroundPlaybackService 自身维护：
+     *  onStartCommand 置 true、onDestroy 置 false。用于 MainActivity 判断
+     *  "服务在跑才需要重建通知兜底"，杜绝在服务未启动时反向拉起服务。 */
+    @Volatile
+    private var serviceActive: Boolean = false
+
     /** 由 MainActivity 注入：把命令转发给 Dart（play/pause/toggle/next/prev） */
     @Volatile
     var commandSink: ((String) -> Unit)? = null
@@ -31,6 +37,14 @@ object SuikanMediaActions {
 
     @Synchronized
     fun isPlaying(): Boolean = isPlaying
+
+    @Synchronized
+    fun setServiceActive(active: Boolean) {
+        serviceActive = active
+    }
+
+    @Synchronized
+    fun isServiceActive(): Boolean = serviceActive
 
     fun dispatch(command: String) {
         commandSink?.invoke(command)

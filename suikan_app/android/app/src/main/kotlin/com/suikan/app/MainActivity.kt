@@ -367,8 +367,12 @@ class MainActivity : FlutterActivity() {
                         playing,
                         call.argument<Double>("position"),
                     )
-                    // 状态变化时重建通知（MediaSession 会自动更新，这里兜底刷新）
-                    if (changed) {
+                    // MediaStyle 通知绑定 MediaSession 后，系统会随
+                    // playbackState/metadata 自动刷新，无需重建服务。
+                    // 仅当服务确实在跑时才兜底重建一次通知（老 Android
+                    // 个别机型不自动刷）；服务没跑时【绝不能】反向拉起——
+                    // 服务该不该存在由 Dart 独家裁决（两开关都关=永不起）。
+                    if (changed && SuikanMediaActions.isServiceActive()) {
                         val intent = Intent(this, BackgroundPlaybackService::class.java)
                         startService(intent)
                     }
