@@ -645,29 +645,35 @@ class MyApp extends StatelessWidget {
       _desktopShortcutHandlerBound = true;
     }
     unawaited(_syncDesktopShortcutCaptureState());
-    bool isDynamicColor = AppSettingsController.instance.isDynamic.value;
-    Color styleColor = Color(AppSettingsController.instance.styleColor.value);
-    return DynamicColorBuilder(
-        builder: ((ColorScheme? lightDynamic, ColorScheme? darkDynamic) {
-      ColorScheme? lightColorScheme;
-      ColorScheme? darkColorScheme;
-      if (lightDynamic != null && darkDynamic != null && isDynamicColor) {
-        lightColorScheme = lightDynamic;
-        darkColorScheme = darkDynamic;
-      } else {
-        lightColorScheme = ColorScheme.fromSeed(
-          seedColor: styleColor,
-          brightness: Brightness.light,
-        );
-        darkColorScheme = ColorScheme.fromSeed(
-            seedColor: styleColor, brightness: Brightness.dark);
-      }
-      return GetMaterialApp(
-        title: "随看",
-        theme: AppStyle.lightTheme.copyWith(colorScheme: lightColorScheme),
-        darkTheme: AppStyle.darkTheme.copyWith(colorScheme: darkColorScheme),
-        themeMode:
-            ThemeMode.values[Get.find<AppSettingsController>().themeMode.value],
+    // 主题三件套(isDynamic/styleColor/themeMode)必须放进 Obx：
+    // 顶层此前无任何响应式依赖，设置页改完值不会触发 MyApp 重建，
+    // 导致“外观设置→显示主题/动态取色/主题色”改了不生效（2026-09-05 用户反馈）。
+    return Obx(() {
+      bool isDynamicColor = AppSettingsController.instance.isDynamic.value;
+      Color styleColor =
+          Color(AppSettingsController.instance.styleColor.value);
+      final themeMode =
+          ThemeMode.values[AppSettingsController.instance.themeMode.value];
+      return DynamicColorBuilder(
+          builder: ((ColorScheme? lightDynamic, ColorScheme? darkDynamic) {
+        ColorScheme? lightColorScheme;
+        ColorScheme? darkColorScheme;
+        if (lightDynamic != null && darkDynamic != null && isDynamicColor) {
+          lightColorScheme = lightDynamic;
+          darkColorScheme = darkDynamic;
+        } else {
+          lightColorScheme = ColorScheme.fromSeed(
+            seedColor: styleColor,
+            brightness: Brightness.light,
+          );
+          darkColorScheme = ColorScheme.fromSeed(
+              seedColor: styleColor, brightness: Brightness.dark);
+        }
+        return GetMaterialApp(
+          title: "随看",
+          theme: AppStyle.lightTheme.copyWith(colorScheme: lightColorScheme),
+          darkTheme: AppStyle.darkTheme.copyWith(colorScheme: darkColorScheme),
+          themeMode: themeMode,
         initialRoute: RoutePath.kIndex,
         getPages: AppPages.routes,
         routingCallback: (_) {
@@ -777,6 +783,7 @@ class MyApp extends StatelessWidget {
         ),
       );
     }));
+    });
   }
 
   static bool get _isDesktopPlatform =>

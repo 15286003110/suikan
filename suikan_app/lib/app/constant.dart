@@ -44,7 +44,6 @@ class Constant {
     "contribution_rank": LiveRoomTabItem(
       iconData: Remix.bar_chart_grouped_line,
       title: "贡献榜/亲密榜",
-      subtitle: "虎牙暂无贡献榜，直播间内会自动跳过",
     ),
     "event_flow": LiveRoomTabItem(
       iconData: Remix.pulse_line,
@@ -72,7 +71,6 @@ class Constant {
     "contribution_rank": LiveRoomQuickAccessItem(
       iconData: Remix.bar_chart_grouped_line,
       title: "贡献榜/亲密榜",
-      subtitle: "虎牙暂无贡献榜，直播间内会自动跳过",
     ),
   };
 

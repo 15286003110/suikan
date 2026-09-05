@@ -22,7 +22,8 @@ class SettingsMenu<T> extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListTile(
-      visualDensity: VisualDensity.compact,
+      dense: true,
+      visualDensity: const VisualDensity(horizontal: -4, vertical: -2),
       title: Text(
         title,
         style: Theme.of(context).textTheme.bodyLarge,
@@ -30,7 +31,7 @@ class SettingsMenu<T> extends StatelessWidget {
       shape: RoundedRectangleBorder(
         borderRadius: AppStyle.radius8,
       ),
-      contentPadding: AppStyle.edgeInsetsL16.copyWith(right: 8),
+      contentPadding: AppStyle.edgeInsetsL16.copyWith(right: 12),
       subtitle: subtitle == null
           ? null
           : Text(

@@ -3216,10 +3216,7 @@ class LiveRoomController extends PlayerController
       return currentRecommendationSubtitle;
     }
     if (key == "contribution_rank") {
-      if (!supportsContributionRank) {
-        return "当前平台暂无贡献榜";
-      }
-      return site.id == Constant.kDouyu ? "打开当前直播间亲密榜" : "打开当前直播间贡献榜";
+      return "";
     }
     return Constant.allLiveRoomQuickAccess[key]?.subtitle ?? "";
   }
@@ -3608,10 +3605,11 @@ class LiveRoomController extends PlayerController
         children: keys.map((key) {
           final item = Constant.allLiveRoomQuickAccess[key]!;
           final enabled = key != "recommendation" || hasCategoryRecommendation;
+          final sub = quickAccessSubtitle(key);
           return ListTile(
             leading: Icon(item.iconData),
             title: Text(quickAccessTitle(key)),
-            subtitle: Text(quickAccessSubtitle(key)),
+            subtitle: sub.isEmpty ? null : Text(sub),
             enabled: enabled,
             onTap: !enabled
                 ? null

@@ -29,7 +29,8 @@ class SettingsNumber extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListTile(
-      visualDensity: VisualDensity.compact,
+      dense: true,
+      visualDensity: const VisualDensity(horizontal: -4, vertical: -2),
       title: Text(
         title,
         style: Get.textTheme.bodyLarge,

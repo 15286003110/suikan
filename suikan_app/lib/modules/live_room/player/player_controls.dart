@@ -1166,10 +1166,11 @@ Widget _buildQuickAccessTile(LiveRoomController controller, String key) {
   final item = Constant.allLiveRoomQuickAccess[key]!;
   final enabled =
       key != "recommendation" || controller.hasCategoryRecommendation;
+  final sub = controller.quickAccessSubtitle(key);
   return ListTile(
     leading: Icon(item.iconData),
     title: Text(controller.quickAccessTitle(key)),
-    subtitle: Text(controller.quickAccessSubtitle(key)),
+    subtitle: sub.isEmpty ? null : Text(sub),
     enabled: enabled,
     onTap: !enabled
         ? null
